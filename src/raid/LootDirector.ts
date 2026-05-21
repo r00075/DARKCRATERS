@@ -213,7 +213,7 @@ export class LootDirector {
     this.spawnContainers();
   }
 
-  public tryInteract(playerPosition: Vector3, inventory: RaidInventory): LootDirectorResult | null {
+  public tryInteract(playerPosition: Vector3, _inventory: RaidInventory): LootDirectorResult | null {
   const container = this.findNearbyOpenableContainer(playerPosition);
 
   if (!container) {

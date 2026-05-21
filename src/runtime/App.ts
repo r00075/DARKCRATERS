@@ -11,6 +11,7 @@ import "@babylonjs/core/Collisions/collisionCoordinator";
 import { EnemyDirector } from "../ai/EnemyDirector";
 import type { EnemyType } from "../ai/EnemyTypes";
 import { PlaceholderWeaponAudio } from "../audio/PlaceholderWeaponAudio";
+import { playMenuMusic, playTychoStarMusic } from "../audio/darkCratersAudio";
 import { AimAssistSystem } from "../combat/AimAssistSystem";
 import type { DamageResult } from "../combat/Damageable";
 import { PlayerHealth } from "../combat/PlayerHealth";
@@ -1800,6 +1801,7 @@ export class App {
     this.loadout.clampToStash(this.persistentStash.items);
     this.activeLoadout = this.loadout.snapshot;
     this.raidScreen = "raid";
+    void playTychoStarMusic();
     this.menu.classList.add("hidden");
     this.activeRaidPrepScrapSpent = this.prepScrapSpentSinceLastRaid;
     this.prepScrapSpentSinceLastRaid = 0;
@@ -2079,6 +2081,7 @@ export class App {
 
   private showMainMenu(): void {
     this.raidScreen = "menu";
+    void playMenuMusic();
     this.menu.classList.remove("hidden");
     const hqState = this.hqManager.snapshot;
     const credits = this.vendorManager.snapshot.credits;
