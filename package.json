@@ -1,0 +1,26 @@
+{
+  "name": "dark-craters",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "server": "tsx server/index.ts",
+    "dev:server": "npm run server",
+    "dev:all": "node scripts/dev-all.mjs",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@babylonjs/core": "^9.7.0",
+    "@babylonjs/loaders": "^9.7.0",
+    "@colyseus/ws-transport": "^0.16.5",
+    "colyseus": "^0.16.5",
+    "colyseus.js": "^0.16.19",
+    "vite": "^8.0.10"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.6",
+    "typescript": "^6.0.3"
+  }
+}
