@@ -735,6 +735,7 @@ body.input-mode-ui #app {
 
 .visibility-tools,
 .stealth-status,
+.ship-status,
 .shoulder-status {
   position: fixed;
   right: 18px;
@@ -757,8 +758,31 @@ body.input-mode-ui #app {
   font-weight: 800;
 }
 
+.ship-status {
+  bottom: 214px;
+  color: rgba(174, 230, 255, 0.94);
+  max-width: 210px;
+}
+
+.ship-status.in-range {
+  color: rgba(114, 255, 157, 0.96);
+}
+
+.ship-status small {
+  display: block;
+  color: #72ff9d;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.shoulder-status {
+  bottom: 286px;
+}
+
 .visibility-tools.hidden,
 .stealth-status.hidden,
+.ship-status.hidden,
 .shoulder-status.hidden {
   display: none;
 }
@@ -767,6 +791,9 @@ body.input-mode-ui #app {
 .visibility-tools span,
 .stealth-status strong,
 .stealth-status span,
+.ship-status strong,
+.ship-status span,
+.ship-status em,
 .shoulder-status strong,
 .shoulder-status span {
   display: block;
@@ -774,6 +801,7 @@ body.input-mode-ui #app {
 
 .visibility-tools strong,
 .stealth-status strong,
+.ship-status strong,
 .shoulder-status strong {
   color: #f8fafc;
   font-size: 12px;
@@ -2830,6 +2858,7 @@ body.input-mode-ui #app {
 }
 
 .raid-outcome.active {
+  z-index: 80;
   opacity: 1;
   pointer-events: auto;
   cursor: default;

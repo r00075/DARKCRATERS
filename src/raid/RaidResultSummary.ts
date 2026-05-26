@@ -15,6 +15,8 @@ export type RaidResultSummary = Readonly<{
   enemiesEliminated: number;
   lootExtracted: LootStack[];
   lootLost: LootStack[];
+  shipCargoSecured: LootStack[];
+  shipStatus: string;
   scrapGained: number;
   scrapSpent: number;
   creditsGained: number;
@@ -35,6 +37,8 @@ export const emptyRaidResultSummary: RaidResultSummary = {
   enemiesEliminated: 0,
   lootExtracted: [],
   lootLost: [],
+  shipCargoSecured: [],
+  shipStatus: "No ship cargo secured",
   scrapGained: 0,
   scrapSpent: 0,
   creditsGained: 0,

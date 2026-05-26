@@ -85,6 +85,7 @@ import {
   type KeyboardAction,
   type SettingsTab,
 } from "../settings/SettingsManager";
+import { ShipManager, type ShipState } from "../ship/ShipManager";
 import { NoiseSystem, type NoiseSystemState } from "../stealth/NoiseSystem";
 import { TacticalToolManager, type TacticalToolState } from "../tactical/TacticalToolManager";
 import { colorToCss, themeConfig } from "../theme/ThemeConfig";
@@ -205,6 +206,7 @@ export class App {
   private readonly hqManager = new HQManager();
   private readonly contractManager = new ContractManager();
   private readonly reputation = new Reputation();
+  private readonly shipManager = new ShipManager();
   private readonly settingsManager = new SettingsManager();
   private readonly loadout = new Loadout();
   private readonly loadoutManager = new LoadoutManager();
@@ -284,6 +286,8 @@ export class App {
   private selectedRaidDefinition: RaidDefinition = defaultRaidDefinition;
   private oxygenPercent = 100;
   private oxygenWarningState: "normal" | "half" | "low" | "critical" | "depleted" = "normal";
+  private shipState: ShipState = this.shipManager.state;
+  private shipInRange = false;
   private raidBagOpen = false;
   private selectedRaidBagIndex = 0;
   private selectedLootIndex = 0;
@@ -573,6 +577,8 @@ export class App {
           traversal: this.traversalState,
           shoulderSide: this.cameraRig.shoulderSide,
           returnToHqProgress: Math.min(1, this.returnToHqHoldSeconds / 2),
+          ship: this.shipState,
+          shipInRange: this.shipInRange,
         },
       );
       this.updateDebugOverlay();
@@ -670,8 +676,8 @@ export class App {
       : buttons[0];
     const currentIndex = Math.max(0, buttons.indexOf(activeButton));
 
-    if (document.activeElement !== activeButton) {
-      activeButton.focus();
+    if (document.activeElement !== activeButton && this.gameplayInput.activeInputMethod === "controller") {
+      activeButton.focus({ preventScroll: true });
     }
 
     if (this.gameplayInput.jumpPressed) {
@@ -723,7 +729,7 @@ export class App {
 
     if (direction !== 0) {
       const nextIndex = (currentIndex + direction + buttons.length) % buttons.length;
-      buttons[nextIndex]?.focus();
+      buttons[nextIndex]?.focus({ preventScroll: true });
       this.menuNavigationCooldown = 0.18;
       return;
     }
@@ -754,6 +760,7 @@ export class App {
         this.setInputMode("ui", "raid-bag");
       } else {
         this.setInputMode("gameplay", "gameplay");
+        this.input.captureGameplayPointer();
       }
       this.combatHud.showLootNotification(this.raidBagOpen ? "EVA Pack open" : "EVA Pack closed");
     }
@@ -784,6 +791,7 @@ export class App {
       if (this.gameplayInput.uiBackPressed) {
         this.raidBagOpen = false;
         this.setInputMode("gameplay", "gameplay");
+        this.input.captureGameplayPointer();
         this.combatHud.showLootNotification("EVA Pack closed");
       } else if (this.gameplayInput.uiDropPressed) {
         this.dropSelectedRaidBagItem();
@@ -925,29 +933,47 @@ export class App {
       return;
     }
 
-    const action = target.dataset.lootAction;
-    const containerId = target.dataset.containerId;
+    const handled = this.handleLootAction(
+      target.dataset.lootAction,
+      target.dataset.slotId,
+      target.dataset.containerId,
+      target.dataset.itemIndex,
+    );
+
+    if (handled) {
+      return;
+    }
+  };
+
+  private handleLootAction(
+    action: string | undefined,
+    slotId: string | undefined,
+    containerId: string | undefined,
+    itemIndex: string | undefined,
+  ): boolean {
+    if (!action || this.raidScreen !== "raid" || this.raidOutcome !== "active" || (!this.raidBagOpen && this.inventoryManager.snapshot.activeContainer === null)) {
+      return false;
+    }
 
     if (action === "close-bag") {
       this.inventoryManager.setActiveContainer(null);
       this.inventoryManager.clearWarning();
       this.raidBagOpen = false;
       this.setInputMode("gameplay", "gameplay");
+      this.input.captureGameplayPointer();
       this.combatHud.showLootNotification("EVA Pack closed");
-      return;
+      return true;
     }
 
     if (action === "drop") {
-      const slotId = target.dataset.slotId;
-
       if (!slotId) {
-        return;
+        return false;
       }
 
       const slot = this.raidInventory.inventorySlots.find((item) => item.id === slotId);
 
       if (slot && this.requiresDropConfirmation(slot.type) && !window.confirm(`Drop ${slot.label}?`)) {
-        return;
+        return false;
       }
 
       const dropped = this.inventoryManager.dropSlot(slotId);
@@ -955,15 +981,14 @@ export class App {
         this.lootDirector.spawnDroppedLoot(dropped, this.player.state.position);
       }
       this.combatHud.showLootNotification(dropped ? `Dropped ${dropped.label}` : "Nothing to drop");
-      return;
+      return true;
     }
 
     if (action === "select" || action === "inspect" || action === "mark" || action === "use") {
-      const slotId = target.dataset.slotId;
       const slotIndex = this.raidInventory.inventorySlots.findIndex((item) => item.id === slotId);
 
       if (slotIndex < 0) {
-        return;
+        return false;
       }
 
       this.selectedRaidBagIndex = slotIndex;
@@ -976,30 +1001,45 @@ export class App {
       } else {
         this.showSelectedRaidBagItemDetails();
       }
-      return;
+      return true;
     }
 
     if (!containerId) {
-      return;
+      return false;
     }
 
     if (action === "close") {
       this.closeLootPanel(containerId);
-      return;
+      return true;
     }
 
     if (action === "take") {
-      const itemIndex = Number(target.dataset.itemIndex);
-      this.takeLootItem(containerId, itemIndex);
-      return;
+      this.takeLootItem(containerId, Number(itemIndex));
+      return true;
     }
 
     if (action === "take-all") {
       this.takeAllLoot(containerId);
+      return true;
     }
-  };
+
+    return false;
+  }
 
   private handleRaidHudAction(action: string | undefined): void {
+    if (action?.startsWith("loot:")) {
+      const fields = action
+        .slice("loot:".length)
+        .split("|")
+        .filter(Boolean);
+      const lootAction = fields[0];
+      const slotId = fields.find((field) => field.startsWith("slot:"))?.slice("slot:".length);
+      const containerId = fields.find((field) => field.startsWith("container:"))?.slice("container:".length);
+      const itemIndex = fields.find((field) => field.startsWith("index:"))?.slice("index:".length);
+      this.handleLootAction(lootAction, slotId, containerId, itemIndex);
+      return;
+    }
+
     if (action === "return-hq") {
       const reason = this.raidOutcome === "active"
         ? this.playerHealth.snapshot.alive ? "abandoned" : "downed_abandon"
@@ -1199,6 +1239,8 @@ export class App {
       return;
     }
 
+    this.shipInRange = this.isNearShipZone();
+
     if (this.gameplayInput.useMedkitPressed) {
       this.useMedkit();
     }
@@ -1227,6 +1269,16 @@ export class App {
 
     if (
       this.gameplayInput.interactPressed &&
+      this.shipInRange &&
+      !this.extractionState.insideZone &&
+      !this.poiObjectiveManager.hasInteractTarget(this.player.state.position)
+    ) {
+      this.depositCargoToShip();
+      return;
+    }
+
+    if (
+      this.gameplayInput.interactPressed &&
       !this.extractionState.insideZone &&
       !this.poiObjectiveManager.hasInteractTarget(this.player.state.position)
     ) {
@@ -1243,7 +1295,7 @@ export class App {
     }
 
     if (this.extractionState.completed) {
-      this.outcomeItems = [...this.raidInventory.items, ...this.survivedLoadoutItems];
+      this.outcomeItems = [...this.raidInventory.items, ...this.shipManager.cargoItems, ...this.survivedLoadoutItems];
       this.lootLostItems = [];
       this.contractManager.handleExtraction(this.outcomeItems);
       this.flushContractMessages();
@@ -1277,8 +1329,11 @@ export class App {
 
     this.contractManager.record({ type: "player-death" });
     this.weaponController.applyDeathWear();
-    this.outcomeItems = [];
+    this.outcomeItems = this.shipManager.cargoItems;
     this.lootLostItems = [...this.raidInventory.items, ...this.lostLoadoutItems];
+    if (this.outcomeItems.length > 0) {
+      this.persistentStash.addItems(this.outcomeItems);
+    }
     this.finalizeRaidResult("lost", this.getLostRaidResultKind(reason));
     this.inventoryManager.clearRaid();
     this.raidInventory.setBonusSlots(this.calculateRaidBagBonusSlots());
@@ -1343,7 +1398,18 @@ export class App {
     this.raidBagOpen = false;
     if (this.raidScreen === "raid" && this.raidOutcome === "active" && this.playerHealth.snapshot.alive) {
       this.setInputMode("gameplay", "gameplay");
+      this.input.captureGameplayPointer();
     }
+  }
+
+  private isNearShipZone(): boolean {
+    return Vector3.Distance(this.player.state.position, this.playerSpawn) <= 5.5;
+  }
+
+  private depositCargoToShip(): void {
+    const result = this.shipManager.depositFromRaidInventory(this.raidInventory);
+    this.shipState = this.shipManager.state;
+    this.combatHud.showLootNotification(result.message);
   }
 
   private applyLootRewards(events: ReadonlyArray<{ type: LootType; quantity: number }>): void {
@@ -1432,6 +1498,7 @@ export class App {
 
   private finalizeRaidResult(outcome: Exclude<RaidOutcome, "active">, resultKind: RaidResultKind): void {
     const securedItems = outcome === "extracted" ? this.outcomeItems : [];
+    const shipCargoSecured = this.shipManager.cargoItems;
     const lostItems = outcome === "lost" ? this.lootLostItems : [];
     const valueSource = securedItems.length > 0 ? securedItems : lostItems;
     const lootValue = this.calculateLootValue(valueSource);
@@ -1492,6 +1559,8 @@ export class App {
       enemiesEliminated: this.enemiesEliminatedThisRaid,
       lootExtracted: securedItems,
       lootLost: lostItems,
+      shipCargoSecured,
+      shipStatus: this.getShipResultStatus(),
       xpGained,
       creditsGained,
       scrapGained: outcome === "extracted" ? this.countLootQuantity(securedItems, "scrap") + contractScrap : 0,
@@ -1519,6 +1588,14 @@ export class App {
       default:
         return "Eliminated. Carried EVA Pack lost.";
     }
+  }
+
+  private getShipResultStatus(): string {
+    const cargo = this.shipManager.cargoItems;
+    const heavyCargo = this.shipManager.canStoreSpecialCargo() ? "Heavy cargo route stable." : "Heavy cargo route unavailable.";
+    return cargo.length > 0
+      ? `${this.shipState.statusLabel}. Ship cargo secured. ${heavyCargo}`
+      : `${this.shipState.statusLabel}. No ship cargo transferred. ${heavyCargo}`;
   }
 
   private getResultContractsCompleted(contractRewardLabels: readonly string[]): string[] {
@@ -1845,6 +1922,8 @@ export class App {
     this.selectedLootIndex = 0;
     this.environmentState = this.environmentManager.randomizeForRaid(this.selectedRaidDefinition.tier);
     this.lootDirector.setRareLootChanceMultiplier(this.environmentState.gameplay.rareLootChanceMultiplier);
+    this.shipState = this.shipManager.initializeForRaid();
+    this.shipInRange = true;
     this.raidTimer.reset(this.selectedRaidDefinition.lengthSeconds);
     this.raidTimerState = this.raidTimer.state;
     this.oxygenPercent = 100;
@@ -1883,7 +1962,7 @@ export class App {
     this.lootDirector.setRareLootChanceMultiplier(
       this.environmentState.gameplay.rareLootChanceMultiplier * this.selectedRaidDefinition.rareLootMultiplier,
     );
-    this.combatHud.showLootNotification(`Crater conditions: ${this.environmentState.label}`);
+    this.combatHud.showLootNotification(`Landing ${this.shipState.landingQuality} | ${this.shipState.statusLabel}`);
     this.objectiveDirector.reset();
     this.objectiveState = this.objectiveDirector.state;
     this.poiObjectiveManager.reset(this.getActiveContractPoiObjectiveTarget());

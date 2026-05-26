@@ -17,6 +17,7 @@ import type { InventorySlot, LootEvent, LootStack } from "../raid/RaidInventory"
 import type { RaidResultSummary } from "../raid/RaidResultSummary";
 import type { RaidTimerState } from "../raid/RaidTimer";
 import type { SettingsManager } from "../settings/SettingsManager";
+import type { ShipState } from "../ship/ShipManager";
 import type { NoiseSystemState } from "../stealth/NoiseSystem";
 import type { TacticalToolState } from "../tactical/TacticalToolManager";
 import { colorToCss, themeConfig } from "../theme/ThemeConfig";
@@ -68,6 +69,8 @@ export type RaidHudState = Readonly<{
   traversal: TraversalState;
   shoulderSide: ShoulderSide;
   returnToHqProgress: number;
+  ship: ShipState;
+  shipInRange: boolean;
 }>;
 
 export class CombatHud {
@@ -94,6 +97,7 @@ export class CombatHud {
   private readonly condition = document.createElement("div");
   private readonly visibilityTools = document.createElement("div");
   private readonly stealth = document.createElement("div");
+  private readonly ship = document.createElement("div");
   private readonly shoulder = document.createElement("div");
   private readonly objective = document.createElement("div");
   private readonly poiObjectives = document.createElement("div");
@@ -116,40 +120,18 @@ export class CombatHud {
   private previousCompleted = false;
   private killFeedEntries: Array<{ text: string; ttl: number; hostile: boolean }> = [];
   private raidActionHandler: ((action: string) => void) | null = null;
+  private previousInventoryMarkup = "";
+  private previousOutcomeMarkup = "";
+  private suppressNextRaidActionClick = false;
+  private suppressNextLootActionClick = false;
 
   public constructor(private readonly settingsManager: SettingsManager) {
     this.root.className = "combat-hud";
-    this.root.addEventListener("mousedown", (event) => event.stopPropagation());
-    this.root.addEventListener("mouseup", (event) => event.stopPropagation());
-    this.root.addEventListener("click", (event) => {
-  const target = event.target instanceof HTMLElement
-    ? event.target.closest<HTMLElement>("[data-raid-action], [data-loot-action]")
-    : null;
-
-  if (target?.dataset.raidAction) {
-    this.raidActionHandler?.(target.dataset.raidAction);
-    event.stopPropagation();
-    return;
-  }
-
-  if (target?.dataset.lootAction) {
-    const action = target.dataset.lootAction;
-    const slotId = target.dataset.slotId;
-    const containerId = target.dataset.containerId;
-    const itemIndex = target.dataset.itemIndex;
-
-    const payload = [
-      action,
-      slotId ? `slot:${slotId}` : "",
-      containerId ? `container:${containerId}` : "",
-      itemIndex !== undefined ? `index:${itemIndex}` : "",
-    ].filter(Boolean).join("|");
-
-    this.raidActionHandler?.(`loot:${payload}`);
-    event.stopPropagation();
-  }
-});
-    this.root.addEventListener("wheel", (event) => event.stopPropagation(), { passive: true });
+    this.root.addEventListener("mousedown", this.stopInteractiveHudEvent);
+    this.root.addEventListener("mouseup", this.stopInteractiveHudEvent);
+    this.root.addEventListener("pointerup", this.handleInteractivePointerUp);
+    this.root.addEventListener("click", this.handleHudClick);
+    this.root.addEventListener("wheel", this.stopInteractiveHudEvent, { passive: true });
     this.crosshair.className = "crosshair";
     this.hitMarker.className = "hit-marker";
     this.hitFlash.className = "hit-flash";
@@ -174,6 +156,7 @@ export class CombatHud {
     this.condition.className = "condition-chip";
     this.visibilityTools.className = "visibility-tools";
     this.stealth.className = "stealth-status";
+    this.ship.className = "ship-status";
     this.shoulder.className = "shoulder-status";
     this.objective.className = "objective-panel";
     this.poiObjectives.className = "poi-objectives-panel";
@@ -183,17 +166,8 @@ export class CombatHud {
     this.traversalPrompt.className = "traversal-prompt";
     this.killFeed.className = "kill-feed";
     this.outcome.className = "raid-outcome";
+    this.outcome.addEventListener("pointerup", this.handleOutcomePointerUp);
     this.sniperScope.className = "sniper-scope";
-    this.outcome.addEventListener("click", (event) => {
-      const target = event.target instanceof HTMLElement
-        ? event.target.closest<HTMLElement>("[data-raid-action]")
-        : null;
-
-      if (target?.dataset.raidAction) {
-        this.raidActionHandler?.(target.dataset.raidAction);
-        event.stopPropagation();
-      }
-    });
 
     for (let i = 0; i < 4; i += 1) {
       this.crosshair.append(document.createElement("span"));
@@ -224,6 +198,7 @@ export class CombatHud {
       this.condition,
       this.visibilityTools,
       this.stealth,
+      this.ship,
       this.shoulder,
       this.objective,
       this.poiObjectives,
@@ -237,6 +212,16 @@ export class CombatHud {
     );
     document.body.append(this.root);
   }
+
+  private readonly stopInteractiveHudEvent = (event: Event): void => {
+    const target = event.target instanceof HTMLElement
+      ? event.target.closest<HTMLElement>(".raid-inventory, .loot-container-panel, .raid-outcome.active, [data-raid-action], [data-loot-action]")
+      : null;
+
+    if (target) {
+      event.stopPropagation();
+    }
+  };
 
   public setRaidActionHandler(handler: (action: string) => void): void {
     this.raidActionHandler = handler;
@@ -311,7 +296,7 @@ export class CombatHud {
     this.playStateAudio(playerHealth, raid.extraction, raid.outcome);
     this.notificationTimer = Math.max(0, this.notificationTimer - dt);
     this.notification.classList.toggle("active", this.notificationTimer > 0);
-    this.inventory.innerHTML = this.formatInventory(raid);
+    this.updateInventoryMarkup(raid);
     this.inventory.classList.toggle("hidden", !showRaidHud || (!raid.raidBagOpen && raid.lootContainer === null));
     this.extraction.innerHTML = this.formatExtraction(raid.extraction);
     this.raidTimer.innerHTML = this.formatRaidTimer(raid.raidTimer);
@@ -328,6 +313,9 @@ export class CombatHud {
     this.stealth.classList.toggle("hidden", !showRaidHud);
     this.stealth.classList.toggle("quiet", raid.noise.quiet);
     this.stealth.classList.toggle("loud", raid.noise.stealthLabel === "Loud");
+    this.ship.innerHTML = this.formatShipStatus(raid.ship, raid.shipInRange);
+    this.ship.classList.toggle("hidden", !showRaidHud);
+    this.ship.classList.toggle("in-range", raid.shipInRange);
     this.shoulder.textContent = `Shoulder: ${raid.shoulderSide === "right" ? "R" : "L"}`;
     this.shoulder.classList.toggle("hidden", !showRaidHud);
     this.objective.innerHTML = this.formatObjective(raid.objective);
@@ -355,7 +343,7 @@ export class CombatHud {
       "active",
       showRaidHud && raid.extraction.insideZone && raid.outcome === "active",
     );
-    this.outcome.innerHTML = this.formatOutcome(raid, playerHealth);
+    this.updateOutcomeMarkup(raid, playerHealth);
     this.outcome.classList.toggle("active", showRaidHud && (raid.outcome !== "active" || !playerHealth.alive));
     this.outcome.classList.toggle("lost", raid.outcome === "lost");
     this.updateKillFeed(dt);
@@ -407,6 +395,94 @@ export class CombatHud {
     this.root.remove();
   }
 
+  private readonly handleHudClick = (event: MouseEvent): void => {
+    const target = event.target instanceof HTMLElement
+      ? event.target.closest<HTMLElement>("[data-raid-action], [data-loot-action]")
+      : null;
+
+    if (target?.dataset.raidAction) {
+      if (this.suppressNextRaidActionClick) {
+        this.suppressNextRaidActionClick = false;
+        event.stopPropagation();
+        return;
+      }
+
+      this.raidActionHandler?.(target.dataset.raidAction);
+      event.stopPropagation();
+      return;
+    }
+
+    if (target?.dataset.lootAction) {
+      if (this.suppressNextLootActionClick) {
+        this.suppressNextLootActionClick = false;
+        event.stopPropagation();
+        return;
+      }
+
+      this.dispatchLootAction(target);
+      event.stopPropagation();
+    }
+  };
+
+  private readonly handleInteractivePointerUp = (event: Event): void => {
+    const target = event.target instanceof HTMLElement
+      ? event.target.closest<HTMLElement>("[data-raid-action], [data-loot-action]")
+      : null;
+
+    if (target?.dataset.raidAction) {
+      this.raidActionHandler?.(target.dataset.raidAction);
+      this.suppressNextRaidActionClick = true;
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    if (target?.dataset.lootAction && this.isCloseLootAction(target.dataset.lootAction)) {
+      this.dispatchLootAction(target);
+      this.suppressNextLootActionClick = true;
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    this.stopInteractiveHudEvent(event);
+  };
+
+  private readonly handleOutcomePointerUp = (event: PointerEvent): void => {
+    const target = event.target instanceof HTMLElement
+      ? event.target.closest<HTMLElement>("[data-raid-action]")
+      : null;
+
+    if (!target?.dataset.raidAction) {
+      return;
+    }
+
+    this.raidActionHandler?.(target.dataset.raidAction);
+    this.suppressNextRaidActionClick = true;
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  private dispatchLootAction(target: HTMLElement): void {
+    const action = target.dataset.lootAction;
+    const slotId = target.dataset.slotId;
+    const containerId = target.dataset.containerId;
+    const itemIndex = target.dataset.itemIndex;
+
+    const payload = [
+      action,
+      slotId ? `slot:${slotId}` : "",
+      containerId ? `container:${containerId}` : "",
+      itemIndex !== undefined ? `index:${itemIndex}` : "",
+    ].filter(Boolean).join("|");
+
+    this.raidActionHandler?.(`loot:${payload}`);
+  }
+
+  private isCloseLootAction(action: string | undefined): boolean {
+    return action === "close" || action === "close-bag";
+  }
+
   private formatInventory(raid: RaidHudState): string {
     const slots = raid.inventorySlotsList.length > 0
       ? raid.inventorySlotsList.map((item) => this.formatInventorySlot(item, raid.selectedInventorySlotId)).join("")
@@ -424,6 +500,31 @@ export class CombatHud {
       ${this.formatLootContainer(raid)}
       ${warning}
     `;
+  }
+
+  private updateInventoryMarkup(raid: RaidHudState): void {
+    const markup = this.formatInventory(raid);
+
+    if (markup === this.previousInventoryMarkup) {
+      return;
+    }
+
+    const inventoryGridScrollTop = this.inventory.querySelector<HTMLElement>(".inventory-grid")?.scrollTop ?? 0;
+    const lootPanelScrollTop = this.inventory.querySelector<HTMLElement>(".loot-container-panel")?.scrollTop ?? 0;
+
+    this.inventory.innerHTML = markup;
+    this.previousInventoryMarkup = markup;
+
+    const inventoryGrid = this.inventory.querySelector<HTMLElement>(".inventory-grid");
+    const lootPanel = this.inventory.querySelector<HTMLElement>(".loot-container-panel");
+
+    if (inventoryGrid) {
+      inventoryGrid.scrollTop = inventoryGridScrollTop;
+    }
+
+    if (lootPanel) {
+      lootPanel.scrollTop = lootPanelScrollTop;
+    }
   }
 
   private formatInventorySlot(item: InventorySlot, selectedSlotId: string | null): string {
@@ -615,6 +716,17 @@ export class CombatHud {
     `;
   }
 
+  private formatShipStatus(ship: ShipState, inRange: boolean): string {
+    const landing = ship.landingQuality.charAt(0).toUpperCase() + ship.landingQuality.slice(1);
+    return `
+      <strong>Ship Integrity ${Math.round(ship.integrity)}%</strong>
+      <span>Cargo ${ship.cargoUsed}/${ship.cargoCapacity}</span>
+      <span>Landing ${landing}</span>
+      <em>${ship.specialCargoEligible ? "Heavy Cargo eligible" : "Heavy Cargo unavailable"}</em>
+      ${inRange ? "<small>E: transfer cargo</small>" : ""}
+    `;
+  }
+
   private hasDynamicEventHud(event: DynamicEventState): boolean {
     return event.announcement !== null
       || event.markerDistance !== null
@@ -742,6 +854,7 @@ export class CombatHud {
     const summary = raid.resultSummary;
     const gained = this.formatLootList(summary.lootExtracted, "No loot extracted");
     const lost = this.formatLootList(summary.lootLost, "No carried loot lost");
+    const shipCargo = this.formatLootList(summary.shipCargoSecured, "No ship cargo secured");
     const contractsCompleted = summary.contractsCompleted.length > 0
       ? summary.contractsCompleted.join("<br>")
       : "None";
@@ -766,6 +879,7 @@ export class CombatHud {
         <div><b>Run Duration</b><span>${this.formatDuration(summary.raidDurationSeconds)}</span></div>
         <div><b>Enemies Eliminated</b><span>${summary.enemiesEliminated}</span></div>
         <div><b>Loot Extracted</b><span>${gained}</span></div>
+        <div><b>Ship Cargo</b><span>${shipCargo}<br>${summary.shipStatus}</span></div>
         <div><b>Loot Lost</b><span>${lost}</span></div>
         <div><b>Rewards</b><span>+${summary.xpGained} XP<br>+${summary.creditsGained} credits<br>+${summary.scrapGained} regolith scrap<br>${summary.scrapSpent} scrap spent</span></div>
         <div><b>Contracts Completed</b><span>${contractsCompleted}</span></div>
@@ -787,6 +901,26 @@ export class CombatHud {
     return items
       .map((item) => `${item.label}${item.quantity > 1 ? ` x${item.quantity}` : ""}`)
       .join("<br>");
+  }
+
+  private updateOutcomeMarkup(raid: RaidHudState, playerHealth: PlayerHealthSnapshot): void {
+    const markup = this.formatOutcome(raid, playerHealth);
+
+    if (markup === this.previousOutcomeMarkup) {
+      return;
+    }
+
+    const scrollTop = this.outcome.scrollTop;
+    const summaryScrollTop = this.outcome.querySelector<HTMLElement>("section")?.scrollTop ?? 0;
+
+    this.outcome.innerHTML = markup;
+    this.previousOutcomeMarkup = markup;
+    this.outcome.scrollTop = scrollTop;
+
+    const summary = this.outcome.querySelector<HTMLElement>("section");
+    if (summary) {
+      summary.scrollTop = summaryScrollTop;
+    }
   }
 
   private formatDuration(seconds: number): string {
