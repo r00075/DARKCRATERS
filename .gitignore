@@ -4,3 +4,8 @@ dist/
 *.log
 .vite/
 .cache/
+
+# Local-only development files
+.npm-cache/
+audio/
+start-dark-craters.local.bat
