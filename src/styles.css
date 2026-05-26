@@ -761,11 +761,37 @@ body.input-mode-ui #app {
 .ship-status {
   bottom: 214px;
   color: rgba(174, 230, 255, 0.94);
-  max-width: 210px;
+  width: 220px;
+  max-width: 220px;
+  padding: 10px 12px;
+  border: 1px solid rgba(65, 217, 255, 0.24);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(65, 217, 255, 0.1), rgba(122, 77, 255, 0.06)),
+    rgba(5, 7, 10, 0.72);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.24), inset 0 0 18px rgba(65, 217, 255, 0.06);
 }
 
 .ship-status.in-range {
   color: rgba(114, 255, 157, 0.96);
+  border-color: rgba(114, 255, 157, 0.34);
+}
+
+.ship-status.readiness-offline {
+  border-color: rgba(111, 118, 128, 0.34);
+}
+
+.ship-status.readiness-warming {
+  border-color: rgba(255, 176, 46, 0.42);
+}
+
+.ship-status.readiness-ready {
+  border-color: rgba(65, 217, 255, 0.5);
+}
+
+.ship-status.readiness-compromised {
+  border-color: rgba(255, 51, 71, 0.44);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.24), inset 0 0 18px rgba(122, 77, 255, 0.1);
 }
 
 .ship-status small {
@@ -805,6 +831,23 @@ body.input-mode-ui #app {
 .shoulder-status strong {
   color: #f8fafc;
   font-size: 12px;
+}
+
+.ship-status span,
+.ship-status em {
+  color: rgba(230, 237, 243, 0.86);
+  font-style: normal;
+}
+
+.ship-status em {
+  color: rgba(255, 176, 46, 0.88);
+}
+
+.ship-status .ship-manifest {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(174, 230, 255, 0.16);
+  color: rgba(174, 230, 255, 0.88);
 }
 
 .stealth-status.quiet strong {

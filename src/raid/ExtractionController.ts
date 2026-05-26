@@ -13,6 +13,8 @@ export type ExtractionState = Readonly<{
   secondsRemaining: number;
   completed: boolean;
   activeZoneIds: string[];
+  currentZoneId: string | null;
+  currentZoneName: string | null;
   cancelReason: "moved-away" | "took-damage" | "released" | null;
 }>;
 
@@ -34,6 +36,8 @@ export class ExtractionController {
       secondsRemaining: extractionConfig.duration,
       completed: this.completed,
       activeZoneIds: this.activeZoneIds,
+      currentZoneId: null,
+      currentZoneName: null,
       cancelReason: this.cancelReason,
     };
   }
@@ -62,11 +66,14 @@ export class ExtractionController {
       secondsRemaining: 0,
       completed: true,
       activeZoneIds: this.activeZoneIds,
+      currentZoneId: null,
+      currentZoneName: null,
       cancelReason: null,
     };
-    }
+  }
 
-    const insideZone = this.isInsideZone(playerPosition);
+    const activeZone = this.getInsideZone(playerPosition);
+    const insideZone = activeZone !== null;
     const extracting = insideZone && input.interactHeld && !tookDamage;
 
     if (extracting) {
@@ -94,6 +101,8 @@ export class ExtractionController {
       secondsRemaining: Math.max(0, extractionConfig.duration - this.progressSeconds),
       completed: this.completed,
       activeZoneIds: this.activeZoneIds,
+      currentZoneId: activeZone?.id ?? null,
+      currentZoneName: activeZone?.name ?? null,
       cancelReason: this.cancelReason,
     };
   }
@@ -113,16 +122,20 @@ export class ExtractionController {
     this.activeZones = zones.length > 0 ? zones : [];
   }
 
-  private isInsideZone(playerPosition: Vector3): boolean {
+  public setActiveZones(zones: readonly ExtractionZoneDefinition[]): void {
+    this.activeZones = zones.map((zone) => ({ ...zone, center: zone.center.clone() }));
+  }
+
+  private getInsideZone(playerPosition: Vector3): ExtractionZoneDefinition | null {
     for (const zone of this.activeZones) {
       const distance = Math.hypot(playerPosition.x - zone.center.x, playerPosition.z - zone.center.z);
 
       if (distance <= zone.radius) {
-        return true;
+        return zone;
       }
     }
 
-    return false;
+    return null;
   }
 
   private chooseActiveZones(): ExtractionZoneDefinition[] {

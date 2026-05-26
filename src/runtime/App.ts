@@ -85,7 +85,8 @@ import {
   type KeyboardAction,
   type SettingsTab,
 } from "../settings/SettingsManager";
-import { ShipManager, type ShipState } from "../ship/ShipManager";
+import { LandedShip } from "../ship/LandedShip";
+import { ShipManager, type LandingQuality, type ShipDepositResult, type ShipState } from "../ship/ShipManager";
 import { NoiseSystem, type NoiseSystemState } from "../stealth/NoiseSystem";
 import { TacticalToolManager, type TacticalToolState } from "../tactical/TacticalToolManager";
 import { colorToCss, themeConfig } from "../theme/ThemeConfig";
@@ -95,7 +96,7 @@ import { PlayerCharacter } from "../world/PlayerCharacter";
 import { ThirdPersonCameraRig } from "../camera/ThirdPersonCameraRig";
 import { InputController, type InputMode, type InputSnapshot } from "../input/InputController";
 import { createWorld, type WorldMap } from "../world/createWorld";
-import { extractionZoneDefinitions, poiDefinitions } from "../world/MapLayout";
+import { extractionZoneDefinitions, poiDefinitions, type ExtractionZoneDefinition } from "../world/MapLayout";
 import { CombatHud, type RaidOutcome, type RaidScreen } from "../ui/CombatHud";
 import { LoadingScreenManager } from "../ui/LoadingScreenManager";
 import { VisibilityToolManager, type VisibilityToolState } from "../visibility/VisibilityToolManager";
@@ -207,6 +208,7 @@ export class App {
   private readonly contractManager = new ContractManager();
   private readonly reputation = new Reputation();
   private readonly shipManager = new ShipManager();
+  private readonly landedShip: LandedShip;
   private readonly settingsManager = new SettingsManager();
   private readonly loadout = new Loadout();
   private readonly loadoutManager = new LoadoutManager();
@@ -332,6 +334,8 @@ export class App {
     this.gameplayInput = this.input.snapshot;
     this.player = new PlayerCharacter(this.scene, this.playerSpawn);
     this.player.applyCosmeticPalette(this.cosmeticManager.getPalette());
+    this.landedShip = new LandedShip(this.scene, this.playerSpawn.add(new Vector3(0, -1.05, -7.5)));
+    this.landedShip.setEnabled(false);
     this.coverController = new CoverController(this.scene);
     this.traversalController = new TraversalController(this.scene);
 
@@ -534,6 +538,7 @@ export class App {
         this.craftingManager.snapshot.armorDurability,
         this.weaponController.snapshot.equippedId,
       );
+      this.landedShip.update(dt);
 
       this.targetDummy.update(dt);
       this.combatHud.update(
@@ -579,6 +584,10 @@ export class App {
           returnToHqProgress: Math.min(1, this.returnToHqHoldSeconds / 2),
           ship: this.shipState,
           shipInRange: this.shipInRange,
+          shipPrompt: this.getShipPrompt(),
+          shipRepairPrompt: this.getShipRepairPrompt(),
+          shipWarning: this.getShipWarning(),
+          shipCargoItems: this.shipManager.cargoItems,
         },
       );
       this.updateDebugOverlay();
@@ -600,6 +609,7 @@ export class App {
     this.combatHud.dispose();
     this.loadingScreen.dispose();
     this.environmentManager.dispose();
+    this.landedShip.dispose();
     this.visibilityToolManager.dispose();
     this.noiseSystem.dispose();
     this.targetDummy.dispose();
@@ -635,6 +645,7 @@ export class App {
     if (event.code === "F3") {
       this.debugOverlayVisible = !this.debugOverlayVisible;
       this.debugOverlay.classList.toggle("active", this.debugOverlayVisible);
+      this.landedShip.setCargoAccessDebugVisible(this.debugOverlayVisible);
       event.preventDefault();
     } else if (event.code === "F4") {
       this.debugCompleteNearestPoiObjective();
@@ -1148,6 +1159,8 @@ export class App {
       <span>O2: ${Math.ceil(this.oxygenPercent)}% | Mind: ${Math.ceil(this.playerStatus.snapshot.mentalStability)}% ${this.playerStatus.snapshot.lunarInfection ? "| Lunar Infection" : ""}</span>
       <span>Crater Run: timer ${Math.ceil(this.raidTimerState.timeRemaining)}s | extract ${this.raidTimerState.extractionUnlocked ? "active" : "locked"}</span>
       <span>EVA Pack: ${this.raidInventory.usedSlots} / ${this.raidInventory.capacity}</span>
+      <span>Ship: landing ${this.shipState.landingQuality} | readiness ${this.shipState.readiness} | risk ${this.shipState.cargoRisk} | repaired ${this.shipState.repaired ? "true" : "false"}</span>
+      <span>Ship Cargo: ${this.shipState.cargoUsed}/${this.shipState.cargoCapacity} | access ${this.landedShip.cargoAccessRadius.toFixed(1)}m | manifest ${this.shipManager.cargoItems.length} stack${this.shipManager.cargoItems.length === 1 ? "" : "s"}</span>
       <span>Habitat Regolith Scrap: ${this.getStashQuantity("scrap")} | Credits: ${this.vendorManager.snapshot.credits}</span>
       <span>Input: ${input.activeInputMethod}${input.controllerConnected ? ` | ${input.controllerName ?? "controller"}` : ""}</span>
       <span>Multiplayer: ${this.renderMultiplayerStatusLine()} | Mode: ${this.multiplayerMode ? "dedicated" : "solo"}</span>
@@ -1245,13 +1258,15 @@ export class App {
       this.useMedkit();
     }
 
+    const extractionAvailable = this.raidTimerState.extractionUnlocked || this.objectiveWasCompleted;
     this.extractionState = this.extractionController.update(
       dt,
       this.gameplayInput,
       this.player.state.position,
       this.playerHealth.snapshot.recentDamage,
-      this.raidTimerState.extractionUnlocked,
+      extractionAvailable,
     );
+    this.shipState = this.shipManager.updateExtractionReadiness(extractionAvailable);
     if (this.extractionState.extracting && !this.previousExtractionStarted) {
       this.contractManager.record({
         type: "extraction-started",
@@ -1264,6 +1279,11 @@ export class App {
 
     if (activeContainer) {
       this.handleLootPanelInput(activeContainer.id);
+      return;
+    }
+
+    if (this.shipInRange && this.canRepairShip() && (this.gameplayInput.reloadPressed || this.gameplayInput.uiDropPressed)) {
+      this.repairShip();
       return;
     }
 
@@ -1331,6 +1351,8 @@ export class App {
     this.weaponController.applyDeathWear();
     this.outcomeItems = this.shipManager.cargoItems;
     this.lootLostItems = [...this.raidInventory.items, ...this.lostLoadoutItems];
+    // TODO: Future ship theft, ship damage, and alternate extraction states should decide
+    // whether deposited ship cargo stays secured after a player loss.
     if (this.outcomeItems.length > 0) {
       this.persistentStash.addItems(this.outcomeItems);
     }
@@ -1403,13 +1425,84 @@ export class App {
   }
 
   private isNearShipZone(): boolean {
-    return Vector3.Distance(this.player.state.position, this.playerSpawn) <= 5.5;
+    return Vector3.Distance(this.player.state.position, this.landedShip.cargoAccessPosition) <= this.landedShip.cargoAccessRadius;
+  }
+
+  private getShipPrompt(): string {
+    if (!this.shipInRange) {
+      return "";
+    }
+
+    if (this.raidInventory.usedSlots <= 0) {
+      return "Cargo hold available";
+    }
+
+    if (this.shipState.cargoUsed >= this.shipState.cargoCapacity) {
+      return "Cargo capacity reached";
+    }
+
+    return "E: Transfer Cargo";
+  }
+
+  private getShipRepairPrompt(): string {
+    return this.shipInRange && this.canRepairShip() ? "R / X: Repair Ship" : "";
+  }
+
+  private getShipWarning(): string {
+    if (!this.shipInRange) {
+      return "";
+    }
+
+    if (this.shipState.landingQuality === "rough") {
+      return "Rough landing: cargo handling degraded";
+    }
+
+    if (this.shipState.landingQuality === "damaged") {
+      return "Damaged landing: cargo bay compromised";
+    }
+
+    return "Ship systems stable";
   }
 
   private depositCargoToShip(): void {
     const result = this.shipManager.depositFromRaidInventory(this.raidInventory);
     this.shipState = this.shipManager.state;
-    this.combatHud.showLootNotification(result.message);
+    this.combatHud.showLootNotification(this.formatShipDepositMessage(result));
+  }
+
+  private formatShipDepositMessage(result: ShipDepositResult): string {
+    const hold = `Cargo Hold: ${this.shipState.cargoUsed} / ${this.shipState.cargoCapacity}`;
+
+    if (result.deposited.length === 0) {
+      return `${result.message} | ${hold}`;
+    }
+
+    if (result.deposited.length === 1) {
+      const item = result.deposited[0];
+      const slots = result.transferredSlots === 1 ? "1 slot" : `${result.transferredSlots} slots`;
+      return `Cargo transferred: ${item.label} x${item.quantity} (${slots}) | ${hold}`;
+    }
+
+    const itemCount = result.deposited.reduce((total, item) => total + item.quantity, 0);
+    return `Cargo transferred: ${itemCount} items | ${hold}`;
+  }
+
+  private canRepairShip(): boolean {
+    return this.shipState.landingQuality !== "clean" && this.shipState.repairStatus !== "repaired";
+  }
+
+  private repairShip(): void {
+    const result = this.shipManager.repair((quantity) => this.raidInventory.consume("scrap", quantity));
+    this.shipState = this.shipManager.state;
+
+    if (result.repaired) {
+      this.activeRaidPrepScrapSpent += result.scrapCost;
+      this.landedShip.applyShipState(this.shipState);
+    }
+
+    this.combatHud.showLootNotification(result.repaired
+      ? `${result.message} | -${result.scrapCost} scrap`
+      : result.message);
   }
 
   private applyLootRewards(events: ReadonlyArray<{ type: LootType; quantity: number }>): void {
@@ -1561,6 +1654,12 @@ export class App {
       lootLost: lostItems,
       shipCargoSecured,
       shipStatus: this.getShipResultStatus(),
+      shipCargoUsed: this.shipState.cargoUsed,
+      shipCargoCapacity: this.shipState.cargoCapacity,
+      shipLandingQuality: this.formatLandingQuality(this.shipState.landingQuality),
+      shipCargoRisk: this.formatShipCargoRisk(),
+      shipRepairStatus: this.formatShipRepairStatus(),
+      evaPackItemsLeft: this.countLootItems(this.raidInventory.items),
       xpGained,
       creditsGained,
       scrapGained: outcome === "extracted" ? this.countLootQuantity(securedItems, "scrap") + contractScrap : 0,
@@ -1593,9 +1692,10 @@ export class App {
   private getShipResultStatus(): string {
     const cargo = this.shipManager.cargoItems;
     const heavyCargo = this.shipManager.canStoreSpecialCargo() ? "Heavy cargo route stable." : "Heavy cargo route unavailable.";
+    const risk = `Cargo risk ${this.formatShipCargoRisk().toLowerCase()}. Repair ${this.formatShipRepairStatus().toLowerCase()}.`;
     return cargo.length > 0
-      ? `${this.shipState.statusLabel}. Ship cargo secured. ${heavyCargo}`
-      : `${this.shipState.statusLabel}. No ship cargo transferred. ${heavyCargo}`;
+      ? `${this.shipState.statusLabel}. Ship cargo secured. ${risk} ${heavyCargo}`
+      : `${this.shipState.statusLabel}. No ship cargo transferred. ${risk} ${heavyCargo}`;
   }
 
   private getResultContractsCompleted(contractRewardLabels: readonly string[]): string[] {
@@ -1668,6 +1768,30 @@ export class App {
       const definition = getItemDefinition(item.type);
       return total + definition.value * item.quantity;
     }, 0);
+  }
+
+  private countLootItems(items: readonly LootStack[]): number {
+    return items.reduce((total, item) => total + item.quantity, 0);
+  }
+
+  private formatLandingQuality(quality: LandingQuality): string {
+    return quality.charAt(0).toUpperCase() + quality.slice(1);
+  }
+
+  private formatShipCargoRisk(): string {
+    if (this.shipState.cargoRisk === "secure") {
+      return "Secure";
+    }
+
+    return this.shipState.cargoRisk === "unstable" ? "Unstable" : "Compromised";
+  }
+
+  private formatShipRepairStatus(): string {
+    if (this.shipState.repairStatus === "stable") {
+      return "Stable";
+    }
+
+    return this.shipState.repairStatus === "repaired" ? "Repaired" : "Unrepaired";
   }
 
   private countLootQuantity(items: readonly LootStack[], type: LootType): number {
@@ -1763,7 +1887,7 @@ export class App {
           this.player.state.position.z - zone.center.z,
         );
         return distance <= zone.radius;
-      })?.id ?? null;
+      })?.id ?? this.extractionState.currentZoneId;
   }
 
   private recordPrepScrapSpend(previousScrapSpent: number): void {
@@ -1923,6 +2047,8 @@ export class App {
     this.environmentState = this.environmentManager.randomizeForRaid(this.selectedRaidDefinition.tier);
     this.lootDirector.setRareLootChanceMultiplier(this.environmentState.gameplay.rareLootChanceMultiplier);
     this.shipState = this.shipManager.initializeForRaid();
+    this.landedShip.applyShipState(this.shipState);
+    this.landedShip.setEnabled(true);
     this.shipInRange = true;
     this.raidTimer.reset(this.selectedRaidDefinition.lengthSeconds);
     this.raidTimerState = this.raidTimer.state;
@@ -1982,12 +2108,26 @@ export class App {
   }
 
   private updateActiveExtractionZones(): void {
-    const activeZoneIds = this.raidTimerState.extractionUnlocked
+    const extractionAvailable = this.raidTimerState.extractionUnlocked || this.objectiveWasCompleted;
+    const activeZoneIds = extractionAvailable
       ? [...this.baseExtractionZoneIds, ...this.dynamicEventDirector.activeTemporaryExtractionZoneIds]
       : [];
+    const fallbackZones = activeZoneIds
+      .map((id) => extractionZoneDefinitions.find((zone) => zone.id === id))
+      .filter((zone): zone is ExtractionZoneDefinition => zone !== undefined);
+    const shipZones = extractionAvailable ? [this.getShipExtractionZone()] : [];
 
-    this.extractionController.setActiveZoneIds(activeZoneIds);
+    this.extractionController.setActiveZones([...fallbackZones, ...shipZones]);
     this.worldMap.setActiveExtractionZones(activeZoneIds);
+  }
+
+  private getShipExtractionZone(): ExtractionZoneDefinition {
+    return {
+      id: "personal-ship-return",
+      name: "Personal Ship Return",
+      center: this.landedShip.launchAccessPosition,
+      radius: this.landedShip.launchAccessRadius,
+    };
   }
 
   private getActiveContractPoiObjectiveTarget(): ContractPOIObjectiveTarget | null {
@@ -2160,6 +2300,7 @@ export class App {
 
   private showMainMenu(): void {
     this.raidScreen = "menu";
+    this.landedShip.setEnabled(false);
     void playMenuMusic();
     this.menu.classList.remove("hidden");
     const hqState = this.hqManager.snapshot;

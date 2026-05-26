@@ -340,6 +340,14 @@ export class InputController {
     }
   }
 
+  public captureGameplayPointer(): void {
+    if (this.inputMode === "ui") {
+      return;
+    }
+
+    this.requestPointerLock();
+  }
+
   public setInputMode(mode: "gameplay" | "ui"): void {
     this.inputMode = mode;
     document.body.classList.toggle("input-mode-ui", mode === "ui");

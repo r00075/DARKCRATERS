@@ -71,6 +71,10 @@ export type RaidHudState = Readonly<{
   returnToHqProgress: number;
   ship: ShipState;
   shipInRange: boolean;
+  shipPrompt: string;
+  shipRepairPrompt: string;
+  shipWarning: string;
+  shipCargoItems: LootStack[];
 }>;
 
 export class CombatHud {
@@ -313,9 +317,19 @@ export class CombatHud {
     this.stealth.classList.toggle("hidden", !showRaidHud);
     this.stealth.classList.toggle("quiet", raid.noise.quiet);
     this.stealth.classList.toggle("loud", raid.noise.stealthLabel === "Loud");
-    this.ship.innerHTML = this.formatShipStatus(raid.ship, raid.shipInRange);
-    this.ship.classList.toggle("hidden", !showRaidHud);
+    this.ship.innerHTML = this.formatShipStatus(
+      raid.ship,
+      raid.shipPrompt,
+      raid.shipRepairPrompt,
+      raid.shipWarning,
+      raid.shipCargoItems,
+    );
+    this.ship.classList.toggle("hidden", !showRaidHud || !raid.shipInRange);
     this.ship.classList.toggle("in-range", raid.shipInRange);
+    this.ship.classList.toggle("readiness-offline", raid.ship.readiness === "offline");
+    this.ship.classList.toggle("readiness-warming", raid.ship.readiness === "warming");
+    this.ship.classList.toggle("readiness-ready", raid.ship.readiness === "ready");
+    this.ship.classList.toggle("readiness-compromised", raid.ship.readiness === "compromised");
     this.shoulder.textContent = `Shoulder: ${raid.shoulderSide === "right" ? "R" : "L"}`;
     this.shoulder.classList.toggle("hidden", !showRaidHud);
     this.objective.innerHTML = this.formatObjective(raid.objective);
@@ -601,15 +615,26 @@ export class CombatHud {
     }
 
     const progress = Math.round(extraction.progress * 100);
+    const shipReturn = extraction.currentZoneId === "personal-ship-return";
     const label = extraction.extracting
-      ? `Lunar Ascender locking ${extraction.secondsRemaining.toFixed(1)}s`
+      ? shipReturn
+        ? `Launch sequence ${extraction.secondsRemaining.toFixed(1)}s`
+        : `Lunar Ascender locking ${extraction.secondsRemaining.toFixed(1)}s`
       : extraction.cancelReason
         ? this.formatExtractionCancel(extraction.cancelReason)
-        : "Hold E for Lunar Ascender";
+        : shipReturn
+          ? "Hold E to Initiate Return"
+          : "Hold E for Lunar Ascender";
 
     return `
       <strong>${label}</strong>
-      <small>${extraction.extracting ? "Stay in the ascender beam. Taking damage cancels extraction." : "Hold interact to extract."}</small>
+      <small>${extraction.extracting
+        ? shipReturn
+          ? "Stay at the launch access. Taking damage cancels return."
+          : "Stay in the ascender beam. Taking damage cancels extraction."
+        : shipReturn
+          ? "Hold interact to launch."
+          : "Hold interact to extract."}</small>
       <div><span style="width: ${progress}%"></span></div>
     `;
   }
@@ -716,15 +741,60 @@ export class CombatHud {
     `;
   }
 
-  private formatShipStatus(ship: ShipState, inRange: boolean): string {
+  private formatShipStatus(
+    ship: ShipState,
+    prompt: string,
+    repairPrompt: string,
+    warning: string,
+    cargoItems: readonly LootStack[],
+  ): string {
     const landing = ship.landingQuality.charAt(0).toUpperCase() + ship.landingQuality.slice(1);
     return `
-      <strong>Ship Integrity ${Math.round(ship.integrity)}%</strong>
-      <span>Cargo ${ship.cargoUsed}/${ship.cargoCapacity}</span>
+      <strong>Ship status</strong>
+      <span>${ship.statusLabel}</span>
       <span>Landing ${landing}</span>
+      <span>Cargo hold ${ship.cargoUsed}/${ship.cargoCapacity}</span>
+      <span>${this.formatShipReadiness(ship.readiness)}</span>
+      <span>Ship Cargo Risk: ${this.formatShipCargoRisk(ship.cargoRisk)}</span>
+      <span>Repair Status: ${this.formatShipRepairStatus(ship.repairStatus)}</span>
+      ${this.formatShipManifest(cargoItems)}
       <em>${ship.specialCargoEligible ? "Heavy Cargo eligible" : "Heavy Cargo unavailable"}</em>
-      ${inRange ? "<small>E: transfer cargo</small>" : ""}
+      ${warning ? `<em>${warning}</em>` : ""}
+      ${prompt ? `<small>${prompt}</small>` : ""}
+      ${repairPrompt ? `<small>${repairPrompt}</small>` : ""}
     `;
+  }
+
+  private formatShipReadiness(readiness: ShipState["readiness"]): string {
+    if (readiness === "offline") return "Systems Offline";
+    if (readiness === "warming") return "Launch Warming";
+    if (readiness === "ready") return "Launch Ready";
+    return "Systems Compromised";
+  }
+
+  private formatShipCargoRisk(risk: ShipState["cargoRisk"]): string {
+    if (risk === "secure") return "Secure";
+    if (risk === "unstable") return "Unstable";
+    return "Compromised";
+  }
+
+  private formatShipRepairStatus(status: ShipState["repairStatus"]): string {
+    if (status === "stable") return "Stable";
+    if (status === "repaired") return "Repaired";
+    return "Unrepaired";
+  }
+
+  private formatShipManifest(cargoItems: readonly LootStack[]): string {
+    if (cargoItems.length === 0) {
+      return `<span class="ship-manifest">Manifest: Cargo hold empty</span>`;
+    }
+
+    const preview = cargoItems
+      .slice(0, 3)
+      .map((item) => `${item.label} x${item.quantity}`)
+      .join("<br>");
+    const remaining = cargoItems.length > 3 ? `<br>+${cargoItems.length - 3} more` : "";
+    return `<span class="ship-manifest">Manifest:<br>${preview}${remaining}<br>${cargoItems.length} stack${cargoItems.length === 1 ? "" : "s"} total</span>`;
   }
 
   private hasDynamicEventHud(event: DynamicEventState): boolean {
@@ -879,7 +949,7 @@ export class CombatHud {
         <div><b>Run Duration</b><span>${this.formatDuration(summary.raidDurationSeconds)}</span></div>
         <div><b>Enemies Eliminated</b><span>${summary.enemiesEliminated}</span></div>
         <div><b>Loot Extracted</b><span>${gained}</span></div>
-        <div><b>Ship Cargo</b><span>${shipCargo}<br>${summary.shipStatus}</span></div>
+        <div><b>Ship Cargo</b><span>${shipCargo}<br>Ship Cargo Secured: ${summary.shipCargoUsed} / ${summary.shipCargoCapacity}<br>Landing Quality: ${summary.shipLandingQuality}<br>Ship Cargo Risk: ${summary.shipCargoRisk}<br>Repair Status: ${summary.shipRepairStatus}<br>EVA Pack Left: ${summary.evaPackItemsLeft} item${summary.evaPackItemsLeft === 1 ? "" : "s"}<br>${summary.shipStatus}</span></div>
         <div><b>Loot Lost</b><span>${lost}</span></div>
         <div><b>Rewards</b><span>+${summary.xpGained} XP<br>+${summary.creditsGained} credits<br>+${summary.scrapGained} regolith scrap<br>${summary.scrapSpent} scrap spent</span></div>
         <div><b>Contracts Completed</b><span>${contractsCompleted}</span></div>
