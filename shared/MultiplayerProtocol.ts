@@ -1,6 +1,9 @@
 export type NetworkPlayerStatus = "active" | "downed" | "dead" | "extracted" | "disconnected";
 export type NetworkRoomLifecycle = "waiting" | "active" | "ended";
 export type NetworkPvpState = "neutral" | "hostile";
+export type NetworkEnemyType = "grunt" | "charger" | "spitter" | "guard" | "elite";
+export type NetworkEnemyAiState = "idle" | "patrol" | "alert" | "chase" | "attack" | "dead";
+export type NetworkLandingQuality = "clean" | "rough" | "damaged";
 
 export type NetworkVec3 = Readonly<{
   x: number;
@@ -43,6 +46,54 @@ export type NetworkShot = Readonly<{
   range: number;
 }>;
 
+export type NetworkEnemyState = Readonly<{
+  id: string;
+  type: NetworkEnemyType;
+  x: number;
+  y: number;
+  z: number;
+  yaw: number;
+  health: number;
+  maxHealth: number;
+  state: NetworkEnemyAiState;
+  targetPlayerId: string | null;
+  active: boolean;
+}>;
+
+export type NetworkEnemySnapshot = Readonly<{
+  enemies: NetworkEnemyState[];
+  activeCount: number;
+  dormantCount: number;
+  serverTickRate: number;
+  snapshotRate: number;
+  snapshotId: number;
+  serverTime: number;
+}>;
+
+export type NetworkEnemyEvent = Readonly<{
+  id: string;
+  type: NetworkEnemyType;
+  attackerId: string | null;
+  damage: number;
+  healthRemaining: number;
+  maxHealth: number;
+  hitZone: "body" | "head" | "legs";
+  killed: boolean;
+}>;
+
+export type NetworkEnemyAttackEvent = Readonly<{
+  enemyId: string;
+  enemyType: NetworkEnemyType;
+  targetPlayerId: string;
+  damage: number;
+  healthRemaining: number;
+}>;
+
+export type NetworkEnemyDespawnEvent = Readonly<{
+  id: string;
+  reason: "dead" | "room-reset" | "out-of-scope";
+}>;
+
 export type NetworkPvpEvent = Readonly<{
   type: "damage" | "kill";
   attackerId: string;
@@ -59,6 +110,7 @@ export type NetworkRoomStatus = Readonly<{
   lifecycle: NetworkRoomLifecycle;
   playerCount: number;
   maxPlayers: number;
+  landingQuality: NetworkLandingQuality | null;
 }>;
 
 export type NetworkPing = Readonly<{

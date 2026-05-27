@@ -1,5 +1,13 @@
 export type {
   LocalNetworkState,
+  NetworkEnemyAiState,
+  NetworkEnemyAttackEvent,
+  NetworkEnemyDespawnEvent,
+  NetworkEnemyEvent,
+  NetworkEnemySnapshot,
+  NetworkEnemyState,
+  NetworkEnemyType,
+  NetworkLandingQuality,
   NetworkPing,
   NetworkPlayerState,
   NetworkPlayerStatus,

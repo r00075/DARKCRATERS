@@ -113,9 +113,9 @@ export const defaultSettings: GameSettings = {
     cameraShake: true,
   },
   audio: {
-    masterVolume: 1,
-    sfxVolume: 1,
-    musicVolume: 0.6,
+    masterVolume: 0.8,
+    sfxVolume: 0.65,
+    musicVolume: 0.45,
     muted: false,
   },
   controls: {
@@ -199,7 +199,9 @@ export class SettingsManager {
         cursor = cursor[part] as Record<string, unknown>;
       }
 
-      cursor[parts[parts.length - 1]] = value;
+      cursor[parts[parts.length - 1]] = path.startsWith("audio.") && typeof value === "number"
+        ? this.clamp01(value)
+        : value;
       return next as unknown as GameSettings;
     });
   }
@@ -265,7 +267,7 @@ export class SettingsManager {
     return {
       settingsVersion,
       graphics: { ...defaults.graphics, ...stored.graphics },
-      audio: { ...defaults.audio, ...stored.audio },
+      audio: this.mergeAudioSettings(defaults.audio, stored.audio),
       controls: {
         ...defaults.controls,
         ...stored.controls,
@@ -280,5 +282,21 @@ export class SettingsManager {
       },
       gameplay: { ...defaults.gameplay, ...stored.gameplay },
     };
+  }
+
+  private mergeAudioSettings(
+    defaults: GameSettings["audio"],
+    stored: Partial<GameSettings["audio"]> | undefined,
+  ): GameSettings["audio"] {
+    return {
+      masterVolume: this.clamp01(stored?.masterVolume ?? defaults.masterVolume),
+      sfxVolume: this.clamp01(stored?.sfxVolume ?? defaults.sfxVolume),
+      musicVolume: this.clamp01(stored?.musicVolume ?? defaults.musicVolume),
+      muted: Boolean(stored?.muted ?? defaults.muted),
+    };
+  }
+
+  private clamp01(value: number): number {
+    return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
   }
 }

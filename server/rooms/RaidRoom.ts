@@ -2,6 +2,8 @@ import { Room, Client } from "colyseus";
 import type {
   LocalNetworkState,
   NetworkPing,
+  NetworkEnemyAttackEvent,
+  NetworkLandingQuality,
   NetworkPlayerState,
   NetworkPlayerStatus,
   NetworkPong,
@@ -11,6 +13,7 @@ import type {
   NetworkShot,
   NetworkVec3,
 } from "../../shared/MultiplayerProtocol";
+import { NetworkEnemyManager, type ServerEnemyPlayer } from "./NetworkEnemyManager";
 
 type ServerPlayerState = NetworkPlayerState & Readonly<{
   squadId: string;
@@ -21,17 +24,27 @@ const maxPlayers = 8;
 const minShotIntervalMs = 80;
 const playerRadius = 0.72;
 const playerHitCenterYOffset = 1.05;
+const enemySimulationRate = 12;
 
 export class RaidRoom extends Room {
   public maxClients = maxPlayers;
   private readonly players = new Map<string, ServerPlayerState>();
+  private readonly enemies = new NetworkEnemyManager();
+  private readonly landingQuality: NetworkLandingQuality = this.rollLandingQuality();
   private lifecycle: NetworkRoomLifecycle = "waiting";
 
   public onCreate(): void {
     this.setSimulationInterval(() => {
+      this.updateEnemies(1 / enemySimulationRate);
+      for (const event of this.enemies.consumeDespawnEvents()) {
+        this.broadcast("enemyDespawned", event);
+      }
       this.broadcastPlayers();
+      if (this.enemies.shouldBroadcastSnapshot(1 / enemySimulationRate)) {
+        this.broadcast("enemySnapshot", this.enemies.snapshot);
+      }
       this.broadcastRoomStatus();
-    }, 1000 / 15);
+    }, 1000 / enemySimulationRate);
 
     this.onMessage("state", (client, message: LocalNetworkState) => {
       const player = this.players.get(client.sessionId);
@@ -97,6 +110,7 @@ export class RaidRoom extends Room {
     this.players.set(client.sessionId, player);
     this.refreshLifecycle();
     console.log(`[RaidRoom] join ${player.name} (${client.sessionId}) players=${this.players.size}`);
+    client.send("enemySnapshot", this.enemies.snapshot);
     this.broadcastRoomStatus();
   }
 
@@ -143,6 +157,19 @@ export class RaidRoom extends Room {
       return;
     }
 
+    const currentShooter = this.players.get(shooter.id) ?? shooter;
+    const enemyHit = this.enemies.applyShot(currentShooter.id, origin, direction, range, damage);
+    if (enemyHit) {
+      if (enemyHit.killed) {
+        this.broadcast("enemyKilled", enemyHit);
+        console.log(`[RaidRoom] enemy killed id=${enemyHit.id} attacker=${currentShooter.name}`);
+      } else {
+        this.broadcast("enemyDamaged", enemyHit);
+      }
+      this.broadcast("enemySnapshot", this.enemies.snapshot);
+      return;
+    }
+
     let bestHit: { player: ServerPlayerState; distance: number } | null = null;
 
     for (const player of this.players.values()) {
@@ -170,7 +197,6 @@ export class RaidRoom extends Room {
       return;
     }
 
-    const currentShooter = this.players.get(shooter.id) ?? shooter;
     const victimWasHostile = bestHit.player.pvpState === "hostile";
     const armorAbsorb = Math.min(bestHit.player.armor, damage * 0.45);
     const healthDamage = Math.max(1, damage - armorAbsorb);
@@ -227,12 +253,60 @@ export class RaidRoom extends Room {
     );
   }
 
+  private updateEnemies(dt: number): void {
+    const attacks = this.enemies.update(dt, this.enemyPlayers);
+
+    for (const attack of attacks) {
+      this.applyEnemyAttack(attack);
+    }
+  }
+
+  private applyEnemyAttack(attack: NetworkEnemyAttackEvent): void {
+    const player = this.players.get(attack.targetPlayerId);
+
+    if (!player || player.status !== "active") {
+      return;
+    }
+
+    const nextHealth = Math.max(0, player.health - attack.damage);
+    const nextStatus: NetworkPlayerStatus = nextHealth === 0 ? "dead" : player.status;
+    const nextPlayer = {
+      ...player,
+      health: nextHealth,
+      status: nextStatus,
+    };
+    this.players.set(player.id, nextPlayer);
+    const event: NetworkEnemyAttackEvent = {
+      ...attack,
+      healthRemaining: Math.round(nextHealth),
+    };
+    this.clients.find((candidate) => candidate.sessionId === player.id)?.send("health", { health: nextHealth });
+    this.broadcast("enemyAttack", event);
+
+    if (nextStatus === "dead") {
+      console.log(`[RaidRoom] enemy downed player=${player.name} enemy=${attack.enemyId}`);
+      this.checkRaidEnd();
+    }
+  }
+
+  private get enemyPlayers(): ServerEnemyPlayer[] {
+    return Array.from(this.players.values()).map((player) => ({
+      id: player.id,
+      x: player.x,
+      y: player.y,
+      z: player.z,
+      health: player.health,
+      status: player.status,
+    }));
+  }
+
   private broadcastRoomStatus(): void {
     this.broadcast("roomStatus", {
       roomId: this.roomId,
       lifecycle: this.lifecycle,
       playerCount: this.players.size,
       maxPlayers,
+      landingQuality: this.landingQuality,
     } satisfies NetworkRoomStatus);
   }
 
@@ -321,5 +395,12 @@ export class RaidRoom extends Room {
 
   private clamp(value: number, min: number, max: number): number {
     return Math.min(max, Math.max(min, value));
+  }
+
+  private rollLandingQuality(): NetworkLandingQuality {
+    const roll = Math.random();
+    if (roll < 0.58) return "clean";
+    if (roll < 0.9) return "rough";
+    return "damaged";
   }
 }
