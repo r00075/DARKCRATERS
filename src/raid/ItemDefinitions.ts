@@ -14,6 +14,7 @@ export type LootType =
   | "electronics"
   | "weapon-parts"
   | "alien-chitin"
+  | "lumen-essence"
   | "acid-gland"
   | "crater-tissue"
   | "horror-core"
@@ -45,7 +46,12 @@ export type LootType =
   | "advanced-medkit"
   | "weapon-repair-kit"
   | "rare-upgrade-kit"
-  | "elite-backpack";
+  | "elite-backpack"
+  | "helium-drill-core"
+  | "lumen-relic-mass"
+  | "reactor-spindle"
+  | "black-box-survey-crate"
+  | "sealed-mining-cache";
 
 export type ItemCategory = "material" | "gear" | "consumable" | "objective";
 
@@ -92,7 +98,7 @@ export const itemDefinitions: Record<LootType, ItemDefinition> = {
     stackable: true,
     slots: 1,
     value: 1,
-    description: "Flexible Umbra shell fiber scraped from alien remains.",
+    description: "Flexible Lumen shell fiber scraped from alien remains.",
     use: "Fabrication material for suit patches, bandages, and utility gear.",
   },
   medkit: {
@@ -136,7 +142,7 @@ export const itemDefinitions: Record<LootType, ItemDefinition> = {
     stackable: false,
     slots: 1,
     value: 10,
-    description: "Reinforced composite plate rated for Umbra claws and rig shrapnel.",
+    description: "Reinforced composite plate rated for Lumen claws and rig shrapnel.",
     use: "Higher-tier armor consumable for future armor tuning.",
   },
   "anti-toxin": {
@@ -202,8 +208,19 @@ export const itemDefinitions: Record<LootType, ItemDefinition> = {
     stackable: true,
     slots: 1,
     value: 4,
-    description: "Hard Umbra shell fragments. Still warm when freshly cut loose.",
+    description: "Hard Lumen shell fragments. Still warm when freshly cut loose.",
     use: "Future alien-material fabrication and Anti-Toxin refinement.",
+  },
+  "lumen-essence": {
+    type: "lumen-essence",
+    label: "Lumen Essence",
+    rarity: "rare",
+    category: "material",
+    stackable: true,
+    slots: 1,
+    value: 12,
+    description: "Bioluminescent residue that reacts to nearby Lumen movement. Valuable to researchers and useful for crude tracking.",
+    use: "Research material and future scanner reagent. TODO: enhance scanner pings, track Lumen nests, and support anti-infection research.",
   },
   "acid-gland": {
     type: "acid-gland",
@@ -224,7 +241,7 @@ export const itemDefinitions: Record<LootType, ItemDefinition> = {
     stackable: true,
     slots: 1,
     value: 18,
-    description: "Dense alien tissue that pulses with faint Umbra signal.",
+    description: "Dense alien tissue that pulses with faint Lumen signal.",
     use: "Future high-tier suit, scanner, and Quiet Order research upgrades.",
   },
   "horror-core": {
@@ -556,6 +573,61 @@ export const itemDefinitions: Record<LootType, ItemDefinition> = {
     value: 34,
     description: "Flashy high-capacity loot rig for greedy extracts.",
     use: "Elite backpack placeholder for future loadout capacity.",
+  },
+  "helium-drill-core": {
+    type: "helium-drill-core",
+    label: "Helium-3 Drill Core",
+    rarity: "legendary",
+    category: "objective",
+    stackable: false,
+    slots: 5,
+    value: 140,
+    description: "Oversized drill heart from a Helium-3 rig. Too heavy for ordinary EVA handling.",
+    use: "Heavy ship cargo prototype. High Broker value.",
+  },
+  "lumen-relic-mass": {
+    type: "lumen-relic-mass",
+    label: "Lumen Relic Mass",
+    rarity: "legendary",
+    category: "objective",
+    stackable: false,
+    slots: 5,
+    value: 155,
+    description: "Dense luminous matter pulled from a crater structure. It reacts when Lumen move nearby.",
+    use: "Heavy ship cargo prototype. High research value.",
+  },
+  "reactor-spindle": {
+    type: "reactor-spindle",
+    label: "Reactor Spindle",
+    rarity: "epic",
+    category: "objective",
+    stackable: false,
+    slots: 4,
+    value: 115,
+    description: "Industrial spindle from a lunar fusion support rig.",
+    use: "Heavy ship cargo prototype. Strong Mechanic value.",
+  },
+  "black-box-survey-crate": {
+    type: "black-box-survey-crate",
+    label: "Black Box Survey Crate",
+    rarity: "epic",
+    category: "objective",
+    stackable: false,
+    slots: 4,
+    value: 105,
+    description: "Sealed crate of restricted survey telemetry.",
+    use: "Heavy ship cargo prototype. Contract and intel value.",
+  },
+  "sealed-mining-cache": {
+    type: "sealed-mining-cache",
+    label: "Sealed Mining Cache",
+    rarity: "rare",
+    category: "objective",
+    stackable: false,
+    slots: 4,
+    value: 85,
+    description: "Heavy mining lockbox with mixed material returns.",
+    use: "Heavy ship cargo prototype. Mixed material value.",
   },
 };
 

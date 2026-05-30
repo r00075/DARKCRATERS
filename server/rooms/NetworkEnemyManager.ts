@@ -229,6 +229,63 @@ export class NetworkEnemyManager {
     return events;
   }
 
+  public triggerHeavyCargoPressure(origin: NetworkVec3, targetPlayerId: string): number {
+    const spawns: EnemySpawn[] = [
+      {
+        id: "net-heavy-core-pressure-rusher",
+        type: "grunt",
+        position: { x: origin.x + 14, y: origin.y, z: origin.z + 8 },
+        patrolPoints: [
+          { x: origin.x + 14, y: origin.y, z: origin.z + 8 },
+          { x: origin.x + 4, y: origin.y, z: origin.z + 1 },
+          { x: origin.x - 8, y: origin.y, z: origin.z - 6 },
+        ],
+      },
+      {
+        id: "net-heavy-core-pressure-spitter",
+        type: "spitter",
+        position: { x: origin.x - 16, y: origin.y, z: origin.z + 10 },
+        patrolPoints: [
+          { x: origin.x - 16, y: origin.y, z: origin.z + 10 },
+          { x: origin.x - 4, y: origin.y, z: origin.z + 4 },
+          { x: origin.x + 8, y: origin.y, z: origin.z - 7 },
+        ],
+      },
+    ];
+
+    let spawned = 0;
+    for (const spawn of spawns) {
+      if (this.enemies.has(spawn.id)) {
+        continue;
+      }
+      const definition = enemyDefinitions[spawn.type];
+      this.enemies.set(spawn.id, {
+        id: spawn.id,
+        type: spawn.type,
+        x: spawn.position.x,
+        y: spawn.position.y,
+        z: spawn.position.z,
+        yaw: 0,
+        health: definition.maxHealth,
+        maxHealth: definition.maxHealth,
+        state: "alert",
+        targetPlayerId,
+        active: true,
+        patrolIndex: 0,
+        patrolPoints: spawn.patrolPoints,
+        attackCooldown: 0,
+        recentlyDamagedTimer: recentCombatAwakeSeconds,
+        dormantTimer: 0,
+        deadTimer: 0,
+      });
+      spawned += 1;
+    }
+    if (spawned > 0) {
+      this.lastSnapshot = this.createSnapshot();
+    }
+    return spawned;
+  }
+
   public applyShot(
     attackerId: string,
     origin: NetworkVec3,

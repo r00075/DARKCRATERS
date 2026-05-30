@@ -9,6 +9,7 @@ import type { PlayerStatusSnapshot } from "../combat/PlayerStatus";
 import type { DynamicEventState } from "../raid/DynamicEventDirector";
 import type { EnvironmentState } from "../environment/EnvironmentManager";
 import type { ExtractionState } from "../raid/ExtractionController";
+import type { HeavyCargoViewState } from "../raid/HeavyCargoManager";
 import type { ObjectiveState } from "../raid/ObjectiveDirector";
 import { getItemDefinition } from "../raid/ItemDefinitions";
 import type { LootContainerView } from "../raid/LootDirector";
@@ -17,6 +18,7 @@ import type { InventorySlot, LootEvent, LootStack } from "../raid/RaidInventory"
 import type { RaidResultSummary } from "../raid/RaidResultSummary";
 import type { RaidTimerState } from "../raid/RaidTimer";
 import type { SettingsManager } from "../settings/SettingsManager";
+import type { OrbitalDeploymentSequenceState } from "../ship/OrbitalDeploymentSequence";
 import type { ShipState } from "../ship/ShipManager";
 import type { NoiseSystemState } from "../stealth/NoiseSystem";
 import type { TacticalToolState } from "../tactical/TacticalToolManager";
@@ -33,7 +35,52 @@ export type DamageNumber = Readonly<{
 }>;
 
 export type RaidOutcome = "active" | "extracted" | "lost";
-export type RaidScreen = "menu" | "stash" | "loadout" | "inspect" | "workbench" | "settings" | "raid" | "raid-select";
+export type RaidScreen =
+  | "menu"
+  | "stash"
+  | "loadout"
+  | "inspect"
+  | "workbench"
+  | "settings"
+  | "raid"
+  | "raid-select"
+  | "ship-systems"
+  | "class-assignment"
+  | "skill-matrix"
+  | "arsenal";
+export type HudNavigationMarker = Readonly<{
+  id: string;
+  label: string;
+  distance: number;
+  kind: "ship" | "contract" | "objective" | "extraction" | "danger" | "poi";
+}>;
+export type TacticalMapPoiMarker = Readonly<{
+  id: string;
+  name: string;
+  x: number;
+  z: number;
+  danger: string;
+  lootProfile: string;
+  distance: number;
+  activeContract: boolean;
+  highRisk: boolean;
+}>;
+export type TacticalMapPointMarker = Readonly<{
+  id: string;
+  label: string;
+  x: number;
+  z: number;
+  kind: "ship" | "cargo" | "launch" | "objective" | "poiObjective" | "extraction" | "contract" | "breadcrumb";
+  active?: boolean;
+}>;
+export type TacticalMapData = Readonly<{
+  open: boolean;
+  mapSize: number;
+  player: { x: number; z: number; yaw: number };
+  selectedPoiId: string | null;
+  pois: TacticalMapPoiMarker[];
+  points: TacticalMapPointMarker[];
+}>;
 
 export type RaidHudState = Readonly<{
   screen: RaidScreen;
@@ -74,7 +121,13 @@ export type RaidHudState = Readonly<{
   shipPrompt: string;
   shipRepairPrompt: string;
   shipWarning: string;
+  shipRepairChoices: string;
+  shipModuleSummary: string;
   shipCargoItems: LootStack[];
+  heavyCargo: HeavyCargoViewState;
+  landingSequence: OrbitalDeploymentSequenceState;
+  navigationMarkers: HudNavigationMarker[];
+  tacticalMap: TacticalMapData;
 }>;
 
 export class CombatHud {
@@ -99,6 +152,9 @@ export class CombatHud {
   private readonly raidTimer = document.createElement("div");
   private readonly eventBanner = document.createElement("div");
   private readonly condition = document.createElement("div");
+  private readonly navigation = document.createElement("div");
+  private readonly landingSequence = document.createElement("div");
+  private readonly tacticalMap = document.createElement("div");
   private readonly visibilityTools = document.createElement("div");
   private readonly stealth = document.createElement("div");
   private readonly ship = document.createElement("div");
@@ -158,6 +214,9 @@ export class CombatHud {
     this.raidTimer.className = "raid-timer";
     this.eventBanner.className = "event-banner";
     this.condition.className = "condition-chip";
+    this.navigation.className = "navigation-markers";
+    this.landingSequence.className = "landing-sequence-hud";
+    this.tacticalMap.className = "tactical-map-overlay";
     this.visibilityTools.className = "visibility-tools";
     this.stealth.className = "stealth-status";
     this.ship.className = "ship-status";
@@ -200,6 +259,9 @@ export class CombatHud {
       this.raidTimer,
       this.eventBanner,
       this.condition,
+      this.navigation,
+      this.landingSequence,
+      this.tacticalMap,
       this.visibilityTools,
       this.stealth,
       this.ship,
@@ -219,7 +281,7 @@ export class CombatHud {
 
   private readonly stopInteractiveHudEvent = (event: Event): void => {
     const target = event.target instanceof HTMLElement
-      ? event.target.closest<HTMLElement>(".raid-inventory, .loot-container-panel, .raid-outcome.active, [data-raid-action], [data-loot-action]")
+      ? event.target.closest<HTMLElement>(".raid-inventory, .loot-container-panel, .raid-outcome.active, .tactical-map-overlay.active, [data-raid-action], [data-loot-action]")
       : null;
 
     if (target) {
@@ -244,10 +306,12 @@ export class CombatHud {
     const sprinting = input.sprintHeld && input.moveZ > 0 && !input.adsHeld && !input.crouchHeld;
     const recoilBloom = weapon.recoilBloom * (input.adsHeld ? 2 : 6);
     const showRaidHud = raid.screen === "raid";
+    const landingActive = showRaidHud && raid.landingSequence.active;
     const settings = this.settingsManager.snapshot;
 
     this.crosshair.style.setProperty("--crosshair-bloom", `${recoilBloom}px`);
     this.crosshair.style.opacity = String(settings.gameplay.crosshairOpacity);
+    this.crosshair.classList.toggle("hidden", landingActive || !showRaidHud);
     this.crosshair.classList.toggle("moving", moving);
     this.crosshair.classList.toggle("sprinting", sprinting);
     this.crosshair.classList.toggle("ads", input.adsHeld);
@@ -261,6 +325,7 @@ export class CombatHud {
     this.sniperScope.classList.toggle("active", sniperScoped);
 
     this.ammo.textContent = `${weapon.ammoInMagazine} / ${weapon.reserveAmmo}`;
+    this.ammo.classList.toggle("hidden", landingActive || !showRaidHud);
     this.health.textContent = playerHealth.alive
       ? `Health ${Math.ceil(playerHealth.current)} / ${playerHealth.max}`
       : "Downed - regrouping";
@@ -271,10 +336,13 @@ export class CombatHud {
     this.controllerDebug.innerHTML = this.formatControllerDebug(input);
     this.controllerDebug.classList.toggle("active", input.controllerConnected);
     this.status.textContent = this.formatWeaponStatus(weapon);
+    this.status.classList.toggle("hidden", landingActive || !showRaidHud);
     this.weaponDurability.innerHTML = this.formatWeaponDurability(weapon);
     this.weaponDurability.classList.toggle("warning", weapon.jamWarning);
     this.weaponDurability.classList.toggle("jammed", weapon.jammed);
+    this.weaponDurability.classList.toggle("hidden", landingActive || !showRaidHud);
     this.movementDebug.textContent = `Hop ${motor.consecutiveHopCount} | Momentum ${motor.bunnyhopMomentumMultiplier.toFixed(2)}x | Speed ${motor.horizontalSpeed.toFixed(1)}`;
+    this.movementDebug.classList.toggle("hidden", landingActive || !showRaidHud);
     this.aiDebug.textContent = enemies
       .map((enemy) => {
         const marker = enemy.elite ? "ELITE " : "";
@@ -283,6 +351,7 @@ export class CombatHud {
         return `${faction}: ${marker}${enemy.role.toUpperCase()} ${enemy.state.toUpperCase()} ${enemy.tactic}${cover} ${Math.ceil(enemy.health)}hp`;
       })
       .join("\n");
+    this.aiDebug.classList.toggle("hidden", landingActive || !showRaidHud);
     this.damageFlash.classList.toggle("active", playerHealth.recentDamage);
     this.damageFlash.classList.toggle("dead", !playerHealth.alive);
     this.damageDirection.classList.toggle("active", playerHealth.recentDamage && playerHealth.recentDamageAngle !== null);
@@ -291,12 +360,14 @@ export class CombatHud {
     this.health.classList.toggle("low", playerHealth.lowHealth);
     this.health.textContent += raid.armorDurability <= 20 ? " | ARMOR BREAK" : "";
     this.health.classList.toggle("armor-break", raid.armorDurability <= 20);
+    this.health.classList.toggle("hidden", landingActive || !showRaidHud);
+    this.controllerStatus.classList.toggle("hidden", landingActive || !showRaidHud);
     this.oxygen.innerHTML = this.formatOxygen(raid.oxygenPercent);
     this.oxygen.className = `oxygen-status ${raid.oxygenState}`;
-    this.oxygen.classList.toggle("hidden", !showRaidHud);
+    this.oxygen.classList.toggle("hidden", !showRaidHud || landingActive);
     this.mental.innerHTML = this.formatMentalStatus(raid.playerStatus);
     this.mental.className = `mental-status ${raid.playerStatus.mentalState}${raid.playerStatus.lunarInfection ? " infected" : ""}`;
-    this.mental.classList.toggle("hidden", !showRaidHud);
+    this.mental.classList.toggle("hidden", !showRaidHud || landingActive);
     this.playStateAudio(playerHealth, raid.extraction, raid.outcome);
     this.notificationTimer = Math.max(0, this.notificationTimer - dt);
     this.notification.classList.toggle("active", this.notificationTimer > 0);
@@ -310,11 +381,17 @@ export class CombatHud {
     this.eventBanner.classList.toggle("active", showRaidHud && this.hasDynamicEventHud(raid.dynamicEvent));
     this.eventBanner.classList.toggle("power", raid.dynamicEvent.powerOutageActive);
     this.condition.innerHTML = this.formatEnvironment(raid.environment);
-    this.condition.classList.toggle("hidden", !showRaidHud);
+    this.condition.classList.toggle("hidden", !showRaidHud || landingActive);
+    this.navigation.innerHTML = this.formatNavigationMarkers(raid.navigationMarkers);
+    this.navigation.classList.toggle("hidden", !showRaidHud || landingActive || raid.navigationMarkers.length === 0);
+    this.landingSequence.innerHTML = this.formatLandingSequence(raid.landingSequence);
+    this.landingSequence.classList.toggle("active", landingActive);
+    this.tacticalMap.innerHTML = this.formatTacticalMap(raid.tacticalMap);
+    this.tacticalMap.classList.toggle("active", showRaidHud && !landingActive && raid.tacticalMap.open);
     this.visibilityTools.innerHTML = this.formatVisibilityTools(raid.visibilityTools, raid.tacticalTool);
-    this.visibilityTools.classList.toggle("hidden", !showRaidHud);
+    this.visibilityTools.classList.toggle("hidden", !showRaidHud || landingActive);
     this.stealth.innerHTML = this.formatStealth(raid.noise);
-    this.stealth.classList.toggle("hidden", !showRaidHud);
+    this.stealth.classList.toggle("hidden", !showRaidHud || landingActive);
     this.stealth.classList.toggle("quiet", raid.noise.quiet);
     this.stealth.classList.toggle("loud", raid.noise.stealthLabel === "Loud");
     this.ship.innerHTML = this.formatShipStatus(
@@ -322,40 +399,42 @@ export class CombatHud {
       raid.shipPrompt,
       raid.shipRepairPrompt,
       raid.shipWarning,
+      raid.shipRepairChoices,
+      raid.shipModuleSummary,
       raid.shipCargoItems,
     );
-    this.ship.classList.toggle("hidden", !showRaidHud || !raid.shipInRange);
+    this.ship.classList.toggle("hidden", !showRaidHud || landingActive || !raid.shipInRange);
     this.ship.classList.toggle("in-range", raid.shipInRange);
     this.ship.classList.toggle("readiness-offline", raid.ship.readiness === "offline");
     this.ship.classList.toggle("readiness-warming", raid.ship.readiness === "warming");
     this.ship.classList.toggle("readiness-ready", raid.ship.readiness === "ready");
     this.ship.classList.toggle("readiness-compromised", raid.ship.readiness === "compromised");
     this.shoulder.textContent = `Shoulder: ${raid.shoulderSide === "right" ? "R" : "L"}`;
-    this.shoulder.classList.toggle("hidden", !showRaidHud);
-    this.objective.innerHTML = this.formatObjective(raid.objective);
-    this.objective.classList.toggle("hidden", !showRaidHud);
+    this.shoulder.classList.toggle("hidden", !showRaidHud || landingActive);
+    this.objective.innerHTML = this.formatObjective(raid.objective, raid.heavyCargo);
+    this.objective.classList.toggle("hidden", !showRaidHud || landingActive);
     this.poiObjectives.innerHTML = this.formatPoiObjectives(raid.poiObjectives);
-    this.poiObjectives.classList.toggle("hidden", !showRaidHud || !raid.poiObjectives.active);
+    this.poiObjectives.classList.toggle("hidden", !showRaidHud || landingActive || !raid.poiObjectives.active);
     this.contractTracker.innerHTML = this.formatActiveContract(raid.activeContract, raid.poiObjectives);
-    this.contractTracker.classList.toggle("hidden", !showRaidHud || raid.activeContract === null);
+    this.contractTracker.classList.toggle("hidden", !showRaidHud || landingActive || raid.activeContract === null);
     this.poi.textContent = raid.poiName ?? "";
-    this.poi.classList.toggle("active", showRaidHud && raid.poiName !== null);
+    this.poi.classList.toggle("active", showRaidHud && !landingActive && raid.poiName !== null);
     this.coverPrompt.textContent = raid.cover.prompt;
     this.coverPrompt.classList.toggle(
       "active",
-      showRaidHud && raid.outcome === "active" && (raid.cover.available || raid.cover.inCover),
+      showRaidHud && !landingActive && raid.outcome === "active" && (raid.cover.available || raid.cover.inCover),
     );
     this.coverPrompt.classList.toggle("in-cover", raid.cover.inCover);
     this.coverPrompt.classList.toggle("peeking", raid.cover.peek !== 0);
     this.traversalPrompt.textContent = raid.traversal.prompt;
     this.traversalPrompt.classList.toggle(
       "active",
-      showRaidHud && raid.outcome === "active" && raid.traversal.prompt.length > 0,
+      showRaidHud && !landingActive && raid.outcome === "active" && raid.traversal.prompt.length > 0,
     );
     this.traversalPrompt.classList.toggle("moving", raid.traversal.active);
     this.extraction.classList.toggle(
       "active",
-      showRaidHud && raid.extraction.insideZone && raid.outcome === "active",
+      showRaidHud && !landingActive && raid.extraction.insideZone && raid.outcome === "active",
     );
     this.updateOutcomeMarkup(raid, playerHealth);
     this.outcome.classList.toggle("active", showRaidHud && (raid.outcome !== "active" || !playerHealth.alive));
@@ -623,14 +702,14 @@ export class CombatHud {
       : extraction.cancelReason
         ? this.formatExtractionCancel(extraction.cancelReason)
         : shipReturn
-          ? "Hold E to Initiate Return"
+          ? extraction.currentZonePrompt ?? "Hold E to Initiate Return"
           : "Hold E for Lunar Ascender";
 
     return `
       <strong>${label}</strong>
       <small>${extraction.extracting
         ? shipReturn
-          ? "Stay at the launch access. Taking damage cancels return."
+          ? "Seal suit. Strap in. Lift imminent."
           : "Stay in the ascender beam. Taking damage cancels extraction."
         : shipReturn
           ? "Hold interact to launch."
@@ -709,6 +788,96 @@ export class CombatHud {
     `;
   }
 
+  private formatNavigationMarkers(markers: readonly HudNavigationMarker[]): string {
+    if (markers.length === 0) {
+      return "";
+    }
+
+    return `
+      <strong>Nav</strong>
+      ${markers.slice(0, 6).map((marker) => {
+        const distance = Math.max(0, Math.round(marker.distance));
+        const opacity = Math.max(0.46, Math.min(1, 1.08 - distance / 260));
+        return `<span class="nav-marker ${marker.kind}" style="--marker-opacity: ${opacity.toFixed(2)}">
+          <b>${marker.label}</b><em>${distance}m</em>
+        </span>`;
+      }).join("")}
+    `;
+  }
+
+  private formatTacticalMap(map: TacticalMapData): string {
+    if (!map.open) {
+      return "";
+    }
+
+    const toPercent = (value: number): number => ((value + map.mapSize / 2) / map.mapSize) * 100;
+    const selectedPoi = map.pois.find((poi) => poi.id === map.selectedPoiId) ?? map.pois.find((poi) => poi.activeContract) ?? map.pois[0] ?? null;
+    const playerX = toPercent(map.player.x);
+    const playerY = toPercent(map.player.z);
+    const poiMarkers = map.pois.map((poi) => {
+      const x = toPercent(poi.x);
+      const y = toPercent(poi.z);
+      return `<button type="button" class="tactical-map-marker poi ${poi.highRisk ? "high-risk" : ""} ${poi.activeContract ? "contract" : ""} ${poi.id === selectedPoi?.id ? "selected" : ""}"
+        style="left: ${x}%; top: ${y}%"
+        title="${poi.name} | ${poi.danger} | ${poi.lootProfile}"
+        data-raid-action="map-select-poi-${poi.id}">
+        <span>${poi.name}</span>
+      </button>`;
+    }).join("");
+    const pointMarkers = map.points.map((point) => {
+      const x = toPercent(point.x);
+      const y = toPercent(point.z);
+      return `<span class="tactical-map-marker point ${point.kind} ${point.active ? "active" : ""}"
+        style="left: ${x}%; top: ${y}%"
+        title="${point.label}">
+        ${point.kind === "breadcrumb" ? "" : `<b>${point.label}</b>`}
+      </span>`;
+    }).join("");
+    const routeDots = map.points.filter((point) => point.kind === "breadcrumb");
+    const routeHint = routeDots.length > 0
+      ? `<small>Contract route hint active: ${routeDots.length} low-power pings</small>`
+      : `<small>No contract route pings active</small>`;
+
+    return `
+      <section class="tactical-map-panel">
+        <header>
+          <div>
+            <span>DARK CRATERS Tactical Map</span>
+            <strong>Tycho Scar Field</strong>
+          </div>
+          <nav>
+            <button type="button" data-raid-action="map-center-player">Center on Player</button>
+            <button type="button" data-raid-action="close-tactical-map">Close</button>
+          </nav>
+        </header>
+        <div class="tactical-map-body">
+          <div class="tactical-map-grid">
+            <div class="tactical-map-risk core"></div>
+            <div class="tactical-map-risk alien"></div>
+            ${poiMarkers}
+            ${pointMarkers}
+            <span class="tactical-map-player" style="left: ${playerX}%; top: ${playerY}%; transform: translate(-50%, -50%) rotate(${map.player.yaw}rad)"></span>
+          </div>
+          <aside>
+            <span>Selected POI</span>
+            <strong>${selectedPoi?.name ?? "No POI selected"}</strong>
+            <p>${selectedPoi ? `${selectedPoi.danger}. ${selectedPoi.lootProfile}. ${Math.round(selectedPoi.distance)}m from current position.` : "Select a marker for details."}</p>
+            ${selectedPoi?.activeContract ? `<em>Active contract destination</em>` : ""}
+            ${routeHint}
+            <div class="tactical-map-legend">
+              <span class="you">You</span>
+              <span class="ship">Ship</span>
+              <span class="contract">Contract</span>
+              <span class="objective">Objective</span>
+              <span class="extract">Extraction</span>
+              <span class="risk">High Risk</span>
+            </div>
+          </aside>
+        </div>
+      </section>
+    `;
+  }
+
   private formatVisibilityTools(tools: VisibilityToolState, tacticalTool: TacticalToolState): string {
     const activeTools = [
       tools.flashlightOn ? "Flashlight ON" : "Flashlight OFF",
@@ -741,11 +910,60 @@ export class CombatHud {
     `;
   }
 
+  private formatLandingSequence(sequence: OrbitalDeploymentSequenceState): string {
+    if (!sequence.active) {
+      return "";
+    }
+
+    const stability = Math.round(sequence.approachStability * 100);
+    const score = Math.round(sequence.stabilizationScore * 100);
+    const altitude = Math.max(0, Math.round((1 - sequence.descentProgress) * 240));
+    const alignment = Math.round((1 - Math.min(1, Math.abs(sequence.alignmentOffset - sequence.targetOffset))) * 100);
+    const quality = sequence.resolvedLandingQuality
+      ? sequence.resolvedLandingQuality.toUpperCase()
+      : sequence.phase === "stabilization-window"
+        ? "PENDING"
+        : "APPROACH";
+    const phaseClass = sequence.phase.replace(/[^a-z0-9-]/gi, "");
+
+    return `
+      <section class="landing-phase-${phaseClass}">
+        <small>TYCHO SCAR | ${sequence.hudPhaseLabel}</small>
+        <strong>${sequence.prompt}</strong>
+        <div class="landing-bars">
+          <label>
+            <span>ROUTE ${Math.round(sequence.totalProgress * 100)}%</span>
+            <b><i style="width: ${Math.round(sequence.totalProgress * 100)}%"></i></b>
+          </label>
+          <label>
+            <span>ALIGN ${alignment}%</span>
+            <b><i style="width: ${alignment}%"></i></b>
+          </label>
+          <label>
+            <span>ALT ${altitude}m</span>
+            <b><i style="width: ${Math.round(sequence.descentProgress * 100)}%"></i></b>
+          </label>
+          <label>
+            <span>STABILITY ${stability}%</span>
+            <b><i style="width: ${stability}%"></i></b>
+          </label>
+          <label>
+            <span>INPUT ${score}%</span>
+            <b><i style="width: ${score}%"></i></b>
+          </label>
+        </div>
+        <em>${sequence.signalInterferenceActive ? "APPROACH VECTOR UNSTABLE" : sequence.routeReacquisitionTriggered && sequence.phase === "route-reacquisition" ? "LANDING LOCK RESTORING" : quality} | MOUSE ORBIT | WHEEL ZOOM | K: SKIP</em>
+      </section>
+    `;
+  }
+
   private formatShipStatus(
     ship: ShipState,
     prompt: string,
     repairPrompt: string,
     warning: string,
+    repairChoices: string,
+    moduleSummary: string,
     cargoItems: readonly LootStack[],
   ): string {
     const landing = ship.landingQuality.charAt(0).toUpperCase() + ship.landingQuality.slice(1);
@@ -757,11 +975,14 @@ export class CombatHud {
       <span>${this.formatShipReadiness(ship.readiness)}</span>
       <span>Ship Cargo Risk: ${this.formatShipCargoRisk(ship.cargoRisk)}</span>
       <span>Repair Status: ${this.formatShipRepairStatus(ship.repairStatus)}</span>
+      <span>${moduleSummary}</span>
+      ${ship.heavyCargoSecured ? `<span class="ship-manifest">Heavy Cargo Secured:<br>${ship.heavyCargoLabel}</span>` : ""}
       ${this.formatShipManifest(cargoItems)}
       <em>${ship.specialCargoEligible ? "Heavy Cargo eligible" : "Heavy Cargo unavailable"}</em>
       ${warning ? `<em>${warning}</em>` : ""}
       ${prompt ? `<small>${prompt}</small>` : ""}
       ${repairPrompt ? `<small>${repairPrompt}</small>` : ""}
+      ${repairChoices ? `<div class="ship-repair-choices">${repairChoices}</div>` : ""}
     `;
   }
 
@@ -780,6 +1001,7 @@ export class CombatHud {
 
   private formatShipRepairStatus(status: ShipState["repairStatus"]): string {
     if (status === "stable") return "Stable";
+    if (status === "patched") return "Patched";
     if (status === "repaired") return "Repaired";
     return "Unrepaired";
   }
@@ -827,19 +1049,51 @@ export class CombatHud {
     return "Crater event";
   }
 
-  private formatObjective(objective: ObjectiveState): string {
+  private formatObjective(objective: ObjectiveState, heavyCargo: HeavyCargoViewState): string {
     const distance = Math.max(0, Math.round(objective.distance));
     const progress = Math.round(objective.progress * 100);
     const progressBar = objective.progress > 0 && !objective.completed
       ? `<div><span style="width: ${progress}%"></span></div>`
       : "";
+    const heavyCargoLine = this.formatHeavyCargoObjectiveLine(heavyCargo);
 
     return `
       <strong>${objective.completed ? "Objective Complete" : objective.title}</strong>
       <span>${objective.description}</span>
+      ${heavyCargoLine}
       <em>${distance}m</em>
       ${progressBar}
     `;
+  }
+
+  private formatHeavyCargoObjectiveLine(heavyCargo: HeavyCargoViewState): string {
+    if (heavyCargo.shipSecured) {
+      return `<span class="heavy-cargo-hud secured">HEAVY CARGO SECURED<br>HELIUM-3 DRILL CORE<br>EXTRACTION AVAILABLE<br>RETURN TO SHIP</span>`;
+    }
+
+    if (heavyCargo.carriedByLocalPlayer) {
+      const shipPrompt = heavyCargo.distanceToShipCargo <= 4
+        ? "E: SECURE HELIUM-3 CORE IN SHIP HOLD"
+        : "RETURN TO SHIP CARGO BAY";
+      const shipDistance = Math.max(0, Math.round(heavyCargo.distanceToShipCargo));
+      return `<span class="heavy-cargo-hud warning">HEAVY CARGO CARRIER<br>HELIUM-3 DRILL CORE<br>WEAPONS LOCKED | CORE SIGNATURE EXPOSED<br>${shipPrompt} - ${shipDistance}m<br>X: DROP CORE</span>`;
+    }
+
+    if (heavyCargo.status === "carried") {
+      const carrier = heavyCargo.carrierPlayerId ? `RUNNER-${heavyCargo.carrierPlayerId.slice(0, 4)}` : "TEAMMATE";
+      const shipDistance = Math.max(0, Math.round(heavyCargo.distanceToShipCargo));
+      return `<span class="heavy-cargo-hud">${carrier} CARRYING HELIUM-3 CORE<br>ESCORT CORE CARRIER TO SHIP CARGO BAY - ${shipDistance}m<br>CARRIER WEAPON-LOCKED</span>`;
+    }
+
+    if (heavyCargo.status === "dropped") {
+      return `<span class="heavy-cargo-hud warning">HELIUM-3 CORE DROPPED<br>E: RECOVER HELIUM-3 DRILL CORE<br>RECOVER CORE OR REVIVE TEAMMATE</span>`;
+    }
+
+    if (heavyCargo.status === "available") {
+      return `<span class="heavy-cargo-hud warning">E: CARRY HELIUM-3 DRILL CORE<br>HEAVY CARGO DISABLES SPRINT AND WEAPONS</span>`;
+    }
+
+    return `<span class="heavy-cargo-hud">LOCATE MINING RIG<br>E: RELEASE HELIUM-3 DRILL CORE<br>EXTRACTION LOCKED UNTIL SECURED</span>`;
   }
 
   private formatPoiObjectives(state: POIObjectiveState): string {
@@ -913,8 +1167,8 @@ export class CombatHud {
 
     if (waitingForRevive) {
       return `
-        <strong>Waiting for revive</strong>
-        <span>Hold N / B to abandon the Crater Run and return to the habitat.</span>
+        <strong>DOWNED</strong>
+        <span>Wait for revive or hold N / B to return to the habitat.</span>
         <button type="button" data-raid-action="return-hq">Return to Habitat</button>
         <em>Leaving now counts as LEFT DOWNED and loses carried EVA Pack loot.</em>
         <div class="return-hq-progress"><span style="width: ${Math.round(raid.returnToHqProgress * 100)}%"></span></div>
@@ -922,6 +1176,9 @@ export class CombatHud {
     }
 
     const summary = raid.resultSummary;
+    const primaryRecovery = summary.lootExtracted.some((item) => item.type === "helium-drill-core")
+      ? `<div class="primary-recovery"><b>Primary Recovery Secured</b><span>HELIUM-3 DRILL CORE<br>Heavy Objective Reward Confirmed</span></div>`
+      : "";
     const gained = this.formatLootList(summary.lootExtracted, "No loot extracted");
     const lost = this.formatLootList(summary.lootLost, "No carried loot lost");
     const shipCargo = this.formatLootList(summary.shipCargoSecured, "No ship cargo secured");
@@ -945,6 +1202,7 @@ export class CombatHud {
       <strong>${summary.title}</strong>
       <span>${summary.survivalStatus}</span>
       <section>
+        ${primaryRecovery}
         <div><b>Survival</b><span>${summary.survivalStatus}</span></div>
         <div><b>Run Duration</b><span>${this.formatDuration(summary.raidDurationSeconds)}</span></div>
         <div><b>Enemies Eliminated</b><span>${summary.enemiesEliminated}</span></div>

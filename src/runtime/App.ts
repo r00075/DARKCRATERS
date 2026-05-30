@@ -48,14 +48,16 @@ import {
   type CraftingUpgradeId,
 } from "../crafting/CraftingManager";
 import { EnvironmentManager, type EnvironmentState } from "../environment/EnvironmentManager";
-import { HQManager, hqStations, type HQStationId } from "../hq/HQManager";
+import { HQManager, type HQStationId } from "../hq/HQManager";
+import { HabitatRunnerPreview } from "../hq/HabitatRunnerPreview";
 import type { DynamicEventState } from "../raid/DynamicEventDirector";
 import { DynamicEventDirector } from "../raid/DynamicEventDirector";
 import type { ExtractionState } from "../raid/ExtractionController";
 import { ExtractionController } from "../raid/ExtractionController";
-import { getItemDefinition, type LootType } from "../raid/ItemDefinitions";
+import { getItemDefinition, itemDefinitions, type LootType } from "../raid/ItemDefinitions";
 import { Loadout, loadoutConfig, type RaidLoadout } from "../raid/Loadout";
 import { InventoryManager } from "../raid/InventoryManager";
+import { HeavyCargoManager, heliumDrillCoreHeavyCargoId, type HeavyCargoViewState } from "../raid/HeavyCargoManager";
 import {
   equipmentSlotLabels,
   loadoutFilters,
@@ -96,7 +98,8 @@ import {
   type SettingsTab,
 } from "../settings/SettingsManager";
 import { LandedShip } from "../ship/LandedShip";
-import { ShipLandingSequence, type ShipLandingSequenceState } from "../ship/ShipLandingSequence";
+import { OrbitalDeploymentScene } from "../ship/OrbitalDeploymentScene";
+import { OrbitalDeploymentSequence, type OrbitalDeploymentSequenceState } from "../ship/OrbitalDeploymentSequence";
 import { ShipManager, type LandingQuality, type ShipDepositResult, type ShipRepairChoice, type ShipState } from "../ship/ShipManager";
 import { ShipModuleManager } from "../ship/ShipModuleManager";
 import { NoiseSystem, type NoiseSystemState } from "../stealth/NoiseSystem";
@@ -107,6 +110,7 @@ import { TraversalController, type TraversalState } from "../traversal/Traversal
 import { PlayerCharacter } from "../world/PlayerCharacter";
 import { ThirdPersonCameraRig } from "../camera/ThirdPersonCameraRig";
 import { InputController, type InputMode, type InputSnapshot } from "../input/InputController";
+import { clamp, yawToBasis } from "../math/angles";
 import { createWorld, type WorldMap } from "../world/createWorld";
 import { extractionZoneDefinitions, mapLayoutConfig, poiDefinitions, type ExtractionZoneDefinition } from "../world/MapLayout";
 import { CombatHud, type HudNavigationMarker, type RaidOutcome, type RaidScreen, type TacticalMapData } from "../ui/CombatHud";
@@ -123,8 +127,19 @@ import { WeaponController } from "../weapons/WeaponController";
 import { WeaponDurabilitySystem } from "../weapons/WeaponDurabilitySystem";
 import { buildRuntimeWeaponDefinition } from "../weapons/WeaponStatModifiers";
 import { weaponDefinitions, weaponIdFromLootType, weaponLootTypes, type RuntimeWeaponDefinition, type WeaponId } from "../weapons/WeaponDefinitions";
-import { MultiplayerClient } from "../multiplayer/MultiplayerClient";
-import type { NetworkEnemyAttackEvent, NetworkEnemyEvent, NetworkPvpEvent } from "../multiplayer/MultiplayerTypes";
+import { MultiplayerClient, type MultiplayerConnectionSnapshot } from "../multiplayer/MultiplayerClient";
+import type {
+  NetworkContainerClaimResult,
+  NetworkContainerState,
+  NetworkEnemyAttackEvent,
+  NetworkEnemyEvent,
+  NetworkHeavyCargoActionResult,
+  NetworkHeavyCargoState,
+  NetworkObjectiveState,
+  NetworkPlayerState,
+  NetworkPvpEvent,
+  NetworkReviveResult,
+} from "../multiplayer/MultiplayerTypes";
 import { skillBranches, skillNodes, type SkillBranchId, type SkillNodeId } from "../skills/SkillDefinitions";
 import { SkillManager } from "../skills/SkillManager";
 
@@ -228,7 +243,11 @@ export class App {
   private readonly shipManager = new ShipManager();
   private readonly shipModuleManager = new ShipModuleManager();
   private readonly shipAudio = new ShipAudioManager();
-  private readonly shipLandingSequence = new ShipLandingSequence();
+  private readonly sfxAudio = new PlaceholderWeaponAudio();
+  private readonly habitatPreview = new HabitatRunnerPreview();
+  private preDeploymentMode: "assignment" | "solo" | "multiplayer" = "assignment";
+  private readonly shipLandingSequence = new OrbitalDeploymentSequence();
+  private readonly orbitalDeploymentScene: OrbitalDeploymentScene;
   private readonly landedShip: LandedShip;
   private readonly settingsManager = new SettingsManager();
   private readonly loadout = new Loadout();
@@ -236,6 +255,7 @@ export class App {
   private readonly extractionController = new ExtractionController();
   private readonly raidTimer = new RaidTimer();
   private readonly lootDirector: LootDirector;
+  private readonly heavyCargoManager: HeavyCargoManager;
   private readonly dynamicEventDirector: DynamicEventDirector;
   private readonly objectiveDirector: ObjectiveDirector;
   private readonly poiObjectiveManager: POIObjectiveManager;
@@ -261,6 +281,7 @@ export class App {
   private dynamicEventState: DynamicEventState;
   private objectiveState: ObjectiveState;
   private poiObjectiveState: POIObjectiveState;
+  private heavyCargoState: HeavyCargoViewState;
   private environmentState: EnvironmentState;
   private visibilityToolState: VisibilityToolState;
   private tacticalToolState: TacticalToolState = this.tacticalToolManager.state;
@@ -271,6 +292,11 @@ export class App {
     quiet: false,
   };
   private objectiveWasCompleted = false;
+  private heavyCargoPressureSpawned = false;
+  private heavyCargoBlockedFeedbackCooldown = 0;
+  private pendingHeavyCargoRequest: "none" | "release" | "pickup" | "drop" | "secure" = "none";
+  private activeHeavyCoreNavMarkerCount = 0;
+  private lastHeavyCargoRoomId: string | null = null;
   private currentPoiName: string | null = null;
   private gameplayInput: InputSnapshot;
   private coverState: CoverState = {
@@ -288,10 +314,15 @@ export class App {
   };
   private multiplayerExtractSent = false;
   private multiplayerDeathSent = false;
+  private multiplayerDownedSent = false;
   private multiplayerMode = false;
+  private reviveTargetId: string | null = null;
+  private reviveProgressSeconds = 0;
+  private reviveFeedbackCooldown = 0;
   private pvpKillsThisRaid = 0;
   private enemiesEliminatedThisRaid = 0;
   private poiObjectiveOutcomesThisRaid: string[] = [];
+  private networkAppliedPoiObjectiveIds = new Set<string>();
   private contractObjectiveCompletedThisRaid = false;
   private raidTimedOutHandled = false;
   private contractAlertRecorded = false;
@@ -311,11 +342,22 @@ export class App {
   private oxygenPercent = 100;
   private oxygenWarningState: "normal" | "half" | "low" | "critical" | "depleted" = "normal";
   private shipState: ShipState = this.shipManager.state;
-  private shipLandingState: ShipLandingSequenceState = this.shipLandingSequence.state;
+  private shipLandingState: OrbitalDeploymentSequenceState = this.shipLandingSequence.state;
+  private shipLandingAudioPhase = "inactive";
+  private deploymentCameraYaw = 0;
+  private deploymentCameraPitch = 0.34;
+  private deploymentCameraDistance = 15;
+  private deploymentCameraDistanceTarget = 15;
+  private deploymentCameraInitialized = false;
   private landingQualitySource: "local" | "server" | "fallback" = "local";
   private previewModelStatus: PreviewModelStatus = "fallback";
   private shipInRange = false;
   private raidBagOpen = false;
+  private pendingSharedContainerOpenId: string | null = null;
+  private lastSharedContainerPanelId: string | null = null;
+  private lastSharedContainerPanelItemCount: number | null = null;
+  private lastSharedContainerClaimRefresh = "none";
+  private lastInteractConsumedBy = "none";
   private selectedRaidBagIndex = 0;
   private selectedLootIndex = 0;
   private raidUiNavigationCooldown = 0;
@@ -326,6 +368,7 @@ export class App {
   private lastTravelEvent = "none";
   private boundaryWarningCooldown = 0;
   private inspectedWeaponId: WeaponId | null = null;
+  private inspectWeaponContext: "inspect" | "arsenal" | "habitat" = "inspect";
   private stashFilter: StashFilter = "all";
   private stashSort: StashSort = "rarity";
   private stashSearch = "";
@@ -371,6 +414,7 @@ export class App {
     this.player.applyCosmeticPalette(this.cosmeticManager.getPalette());
     this.landedShip = new LandedShip(this.scene, mapLayoutConfig.shipLandingSitePosition.clone());
     this.landedShip.setEnabled(false);
+    this.orbitalDeploymentScene = new OrbitalDeploymentScene(this.scene);
     this.coverController = new CoverController(this.scene);
     this.traversalController = new TraversalController(this.scene);
 
@@ -396,9 +440,20 @@ export class App {
       this.handleNetworkRaidEnded,
       this.handleNetworkEnemyEvent,
       this.handleNetworkEnemyAttack,
+      this.handleNetworkContainerState,
+      this.handleNetworkContainerClaimResult,
+      this.handleNetworkObjectiveState,
+      this.handleNetworkHeavyCargoState,
+      this.handleNetworkHeavyCargoActionResult,
+      this.handleNetworkReviveResult,
     );
     this.targetDummy = new TargetDummy(this.scene, new Vector3(-92, 0, -78));
     this.lootDirector = new LootDirector(this.scene);
+    this.heavyCargoManager = new HeavyCargoManager(
+      this.scene,
+      (poiDefinitions.find((poi) => poi.id === "core-pit")?.center.clone() ?? Vector3.Zero()).add(new Vector3(-5, 0.35, 2)),
+    );
+    this.heavyCargoState = this.heavyCargoManager.state;
     this.dynamicEventDirector = new DynamicEventDirector(this.scene, this.lootDirector);
     this.dynamicEventState = this.dynamicEventDirector.state;
     this.enemyDirector = new EnemyDirector(this.scene, this.player.root, this.playerHealth, this.enemyDirectorOptions);
@@ -435,7 +490,7 @@ export class App {
     this.menuContent = this.menu.querySelector(".main-menu-content") as HTMLDivElement;
     this.loadoutManager.initialize(this.loadout, this.persistentStash.items);
     this.showMainMenu();
-    this.loadingScreen.show("Loading HQ", 1700);
+    this.loadingScreen.show("Loading HQ", 4700);
   }
 
   public start(): void {
@@ -446,9 +501,13 @@ export class App {
       this.setInputMode(this.getInputMode(), this.getActiveInputPanel());
       this.input.update(dt);
       this.gameplayInput = this.input.snapshot;
+    this.heavyCargoBlockedFeedbackCooldown = Math.max(0, this.heavyCargoBlockedFeedbackCooldown - dt);
+    this.reviveFeedbackCooldown = Math.max(0, this.reviveFeedbackCooldown - dt);
       if (this.tacticalMapOpen) {
         this.gameplayInput = this.suppressGameplayControls(this.gameplayInput);
       }
+      this.heavyCargoState = this.heavyCargoManager.update(this.player.state, this.landedShip.cargoAccessPosition);
+      this.gameplayInput = this.applyHeavyCargoInputModifiers(this.gameplayInput);
       this.updateMenuNavigation(dt);
       this.updateRaidInventoryNavigation(dt);
       this.playerHealth.update(dt);
@@ -457,6 +516,7 @@ export class App {
       this.updateReturnToMenu();
       this.releasePointerLockForRaidResult();
       this.updateShipLandingSequence(dt);
+      this.hud.classList.toggle("deployment-hidden", this.shipLandingState.active);
 
       if (this.isRaidActive && !this.shipLandingState.active) {
         this.coverState = this.coverController.update(this.gameplayInput, this.player.state);
@@ -473,6 +533,7 @@ export class App {
         if (!this.traversalState.active) {
           this.player.update(dt, this.gameplayInput, this.coverController.getMovementYaw(cameraYaw));
         }
+        this.heavyCargoState = this.heavyCargoManager.update(this.player.state, this.landedShip.cargoAccessPosition);
 
         this.noiseState = this.noiseSystem.update(
           dt,
@@ -504,9 +565,10 @@ export class App {
         this.cameraRig.setTraversalLocked(false);
       }
 
-      this.cameraRig.update(dt);
       if (this.shipLandingState.active) {
-        this.applyShipLandingCamera();
+        this.applyShipLandingCamera(dt);
+      } else {
+        this.cameraRig.update(dt);
       }
       this.player.updateAimFade(dt, this.camera);
 
@@ -592,6 +654,7 @@ export class App {
         this.craftingManager.snapshot.armorDurability,
         this.weaponController.snapshot.equippedId,
       );
+      this.syncMultiplayerDownedState();
       this.landedShip.update(dt);
 
       this.targetDummy.update(dt);
@@ -644,6 +707,7 @@ export class App {
           shipRepairChoices: this.getShipRepairChoices(),
           shipModuleSummary: this.getShipModuleSummary(),
           shipCargoItems: this.shipManager.cargoItems,
+          heavyCargo: this.heavyCargoState,
           landingSequence: this.shipLandingState,
           navigationMarkers: this.getNavigationMarkers(),
           tacticalMap: this.getTacticalMapData(),
@@ -667,8 +731,11 @@ export class App {
     this.debugOverlay.remove();
     this.combatHud.dispose();
     this.loadingScreen.dispose();
+    this.habitatPreview.dispose();
     this.environmentManager.dispose();
     this.landedShip.dispose();
+    this.orbitalDeploymentScene.dispose();
+    this.heavyCargoManager.dispose();
     this.visibilityToolManager.dispose();
     this.noiseSystem.dispose();
     this.targetDummy.dispose();
@@ -871,6 +938,7 @@ export class App {
     this.raidUiNavigationCooldown = Math.max(0, this.raidUiNavigationCooldown - dt);
 
     if (this.gameplayInput.raidBagTogglePressed) {
+      this.lastInteractConsumedBy = "EVA-Pack";
       this.raidBagOpen = !this.raidBagOpen;
       this.clampRaidBagSelection();
       if (this.raidBagOpen) {
@@ -1285,6 +1353,7 @@ export class App {
     const input = this.gameplayInput;
     const encounter = this.enemyDirector.encounterDebug;
     const multiplayer = this.multiplayerClient.snapshot;
+    const shipAudioDebug = this.shipAudio.debugState;
     const mouse = this.input.mouseDebug;
     const nearestPoi = this.getNearestPoiDebugLabel();
     const activeContractPoi = this.contractManager.snapshot.active?.definition.targetPoi ?? "none";
@@ -1295,11 +1364,16 @@ export class App {
       <span>Map: ${mapLayoutConfig.size}m x ${mapLayoutConfig.size}m | Player ${this.player.state.position.x.toFixed(1)}, ${this.player.state.position.z.toFixed(1)} | Nearest POI ${nearestPoi}</span>
       <span>Ship Distance: ${Math.round(this.distanceTo(mapLayoutConfig.shipLandingSitePosition))}m | Contract POI: ${activeContractPoi} | Nav Markers: ${markerCount}</span>
       <span>Tactical Map: ${this.tacticalMapOpen ? "open" : "closed"} | Travel Event: ${this.lastTravelEvent} | Event Cooldown ${Math.ceil(this.travelEventCooldown)}s | Boundary ${Math.round(this.distanceToBoundary())}m</span>
-      <span>Landing Sequence: ${this.shipLandingState.phase} | progress ${Math.round(this.shipLandingState.totalProgress * 100)}% | stabilize ${Math.round(this.shipLandingState.stabilizationScore * 100)}% | resolved ${this.shipLandingState.resolvedLandingQuality ?? "pending"} | source ${this.landingQualitySource} | input ${this.shipLandingState.inputLocked ? "locked" : "free"} | K skip</span>
+      <span>Deployment Active: ${this.shipLandingState.active ? "true" : "false"} | phase ${this.shipLandingState.phase} | elapsed ${this.shipLandingState.elapsedTotal.toFixed(1)}s/${this.shipLandingState.baselineDuration.toFixed(1)}s | ext ${this.shipLandingState.extensionTime.toFixed(1)}s | progress ${Math.round(this.shipLandingState.totalProgress * 100)}%</span>
+      <span>Deployment Nav: alignment ${this.shipLandingState.alignmentOffset.toFixed(2)} / target ${this.shipLandingState.targetOffset.toFixed(2)} | stability ${Math.round(this.shipLandingState.stabilityScore * 100)}% | signal ${this.shipLandingState.signalInterferenceActive ? "true" : "false"} | reacquire ${this.shipLandingState.routeReacquisitionTriggered ? "true" : "false"}</span>
+      <span>Deployment Camera: SHIP ORBIT | yaw ${this.deploymentCameraYaw.toFixed(2)} | pitch ${this.deploymentCameraPitch.toFixed(2)} | zoom ${this.deploymentCameraDistance.toFixed(1)}m | target bound ${this.shipLandingState.active ? "true" : "false"} | cues ship-follow</span>
+      <span>Deployment Systems: station ${this.shipLandingState.stationFocus} | event ${this.shipLandingState.eventCategory} | ship audio stage ${this.shipLandingState.audioPhase} | Tycho after deployment ${this.raidMusicStartedForCurrentRun ? "true" : "false"}</span>
+      <span>Landing Quality: predicted ${this.shipLandingState.predictedLandingQuality} | applied ${this.shipLandingState.finalAppliedLandingQuality ?? this.shipLandingState.resolvedLandingQuality ?? "pending"} | authority ${this.shipLandingState.landingQualityAuthority} | resources ${this.shipLandingState.resourcesActive ? "active" : "inactive"} | finalized ${this.shipLandingState.lastFinalizationReason} | K skip</span>
       <span>Audio: master ${Math.round(this.settingsManager.snapshot.audio.masterVolume * 100)}% | music ${Math.round(this.settingsManager.snapshot.audio.musicVolume * 100)}% | sfx ${Math.round(this.settingsManager.snapshot.audio.sfxVolume * 100)}% | muted ${this.settingsManager.snapshot.audio.muted ? "true" : "false"}</span>
-      <span>Audio State: music ${getCurrentMusicState()} | ship ${this.shipAudio.state} | raid music ${this.raidMusicStartedForCurrentRun ? "started" : "pending"}</span>
+      <span>Audio State: music ${getCurrentMusicState()} | ship ${this.shipAudio.state} | phase ${shipAudioDebug.phase} | impact build ${shipAudioDebug.impactBuildActive ? "true" : "false"} | last ${shipAudioDebug.lastEvent} | raid music ${this.raidMusicStartedForCurrentRun ? "started" : "pending"}</span>
       <span>Progression: assignment ${this.classManager.snapshot.selectedClassId} | skill matrix ${this.skillManager.snapshot.version === 1 ? "ready" : "pending"} | acquired ${this.skillManager.acquiredCount}</span>
       <span>Overlay: ${this.overlayState} | Input Mode: ${this.inputMode} | Panel: ${this.activeInputPanel}</span>
+      <span>UI Panel Open: ${this.getActiveInputPanel()} | Interact consumed by: ${this.lastInteractConsumedBy} | Pending shared open: ${this.pendingSharedContainerOpenId ?? "none"}</span>
       <span>Pointer Lock: ${mouse.pointerLocked ? "canvas" : "none"} | Mouse Captured: ${mouse.mouseCaptured ? "true" : "false"}</span>
       <span>Mouse: ${mouse.lastMouseAction} | down ${mouse.lastButtonDown ?? "none"} | up ${mouse.lastButtonUp ?? "none"}</span>
       <span>Mouse Held: fire ${mouse.fireHeld ? "true" : "false"} | ADS ${mouse.adsHeld ? "true" : "false"} | wheel ${Math.round(mouse.wheelDelta)}</span>
@@ -1309,14 +1383,25 @@ export class App {
       <span>Crater Run: timer ${Math.ceil(this.raidTimerState.timeRemaining)}s/${this.selectedRaidDefinition.lengthSeconds}s | extract ${this.raidTimerState.extractionUnlocked ? "active" : "locked"} | Risk ${this.getDistanceRiskTier()}</span>
       <span>EVA Pack: ${this.raidInventory.usedSlots} / ${this.raidInventory.capacity}</span>
       <span>Loot Containers: ${this.lootDirector.containerCount} | Active enemies: ${this.enemyDebugStates.length}</span>
-      <span>PvE Authority: ${this.multiplayerMode ? "SERVER" : "LOCAL"} | Server enemies ${multiplayer.authoritativeEnemyCount} | active ${multiplayer.activeEnemyCount} | dormant ${multiplayer.dormantEnemyCount} | rendered ${multiplayer.renderedNetworkEnemyCount}</span>
+      <span>PvE Authority: ${this.multiplayerMode ? (multiplayer.status === "connected" ? "SERVER" : "DISCONNECTED") : "LOCAL"} | Server enemies ${multiplayer.authoritativeEnemyCount} | active ${multiplayer.activeEnemyCount} | dormant ${multiplayer.dormantEnemyCount} | rendered ${multiplayer.renderedNetworkEnemyCount}</span>
       <span>Enemy Net: tick ${multiplayer.enemyServerTickRate}/s | snapshot ${multiplayer.enemySnapshotRate}/s #${multiplayer.enemySnapshotId} | last ${multiplayer.lastEnemyEvent} | affected ${multiplayer.lastEnemyAffectedId ?? "none"} | corrections ${multiplayer.enemyCorrectionCount}</span>
+      <span>Network Lifecycle: connected ${multiplayer.status === "connected" ? "true" : "false"} | room ${multiplayer.roomId ?? "none"} | last ${multiplayer.lastRoomLifecycleEvent} | reset ${multiplayer.lastNetworkStateResetReason} | enemy clear ${multiplayer.lastNetworkEnemyClearReason}</span>
       <span>Local PvE: ${this.multiplayerMode ? "disabled" : "enabled"} | Enemy drops: ${this.multiplayerMode ? "server event credit only" : "local loot table"}</span>
+      <span>World Authority: ${multiplayer.worldAuthority} | Containers ${multiplayer.sharedContainersDepleted}/${multiplayer.sharedContainerCount} depleted | Last container ${multiplayer.lastContainerEvent} | Duplicate claims ${multiplayer.duplicateClaimCount}</span>
+      <span>Loot Routing: ${this.getLootRoutingMode(multiplayer)} v${multiplayer.sharedWorldVersion ?? "none"} | nearby ${this.lootDirector.getNearbyContainerId(this.player.state.position) ?? "none"} | pending ${this.pendingSharedContainerOpenId ?? "none"}</span>
+      <span>Loot Net: open ${multiplayer.lastContainerRequestId ?? "none"} ${multiplayer.lastContainerOpenResult} items ${multiplayer.lastContainerOpenItemCount ?? "none"} | mapping ${multiplayer.lastContainerMapping} | panel ${this.lastSharedContainerPanelId ?? "none"} items ${this.lastSharedContainerPanelItemCount ?? "none"} ${multiplayer.activeLootPanelApplied ? "applied" : "false"} | claim ${multiplayer.lastClaimRequest} ${multiplayer.lastClaimResult}</span>
+      <span>Loot Panel Refresh: ${this.lastSharedContainerClaimRefresh}</span>
+      <span>Loot Award: claimant ${multiplayer.lastClaimantPlayerId ?? "none"} | local ${multiplayer.lastClaimWasLocal ? "true" : "false"} | inventory add ${multiplayer.lastInventoryAddApplied ? "true" : "false"}</span>
+      <span>SFX: ${PlaceholderWeaponAudio.getDebugState().event} | ${PlaceholderWeaponAudio.getDebugState().path} | ${PlaceholderWeaponAudio.getDebugState().result}</span>
+      <span>Shared Objective: ${multiplayer.activeSharedObjectiveId ?? "none"} ${multiplayer.sharedObjectiveState} | Extraction Unlock Authority ${multiplayer.extractionUnlockAuthority} | Last objective ${multiplayer.lastObjectiveEvent}</span>
+      <span>Heavy Cargo Authority: ${this.multiplayerMode ? multiplayer.heavyCargoAuthority : this.heavyCargoState.authority} | Core ${this.heavyCargoState.status} | carrier ${this.heavyCargoState.carrierPlayerId ?? "none"} | secured ${this.heavyCargoState.shipSecured ? "true" : "false"} | last ${this.heavyCargoState.lastEvent}</span>
+      <span>Heavy Cargo Sync: room ${this.lastHeavyCargoRoomId ?? multiplayer.roomId ?? "none"} | pending ${this.pendingHeavyCargoRequest} | auth ${this.formatVector3(this.heavyCargoState.position)} | rendered ${this.formatVector3(this.heavyCargoManager.visibleCorePosition)} | nav ${this.activeHeavyCoreNavMarkerCount}</span>
+      <span>Heavy Cargo Pressure Event: ${this.heavyCargoState.pressure} | source ${this.heavyCargoState.pressureTrigger} | threats ${this.multiplayerMode ? multiplayer.activeEnemyCount : this.enemyDirector.activeEnemyCount}</span>
       <span>Ship: landing ${this.shipState.landingQuality} | readiness ${this.shipState.readiness} | risk ${this.shipState.cargoRisk} | repaired ${this.shipState.repaired ? "true" : "false"}</span>
       <span>Ship Cargo: ${this.shipState.cargoUsed}/${this.shipState.cargoCapacity} | ${this.getShipModuleSummary()} | access ${this.landedShip.cargoAccessRadius.toFixed(1)}m | manifest ${this.shipManager.cargoItems.length} stack${this.shipManager.cargoItems.length === 1 ? "" : "s"}</span>
       <span>Habitat Regolith Scrap: ${this.getStashQuantity("scrap")} | Credits: ${this.vendorManager.snapshot.credits}</span>
       <span>Input: ${input.activeInputMethod}${input.controllerConnected ? ` | ${input.controllerName ?? "controller"}` : ""}</span>
-      <span>Multiplayer: ${this.renderMultiplayerStatusLine()} | Mode: ${this.multiplayerMode ? "dedicated" : "solo"}</span>
+      <span>Multiplayer: ${this.renderMultiplayerStatusLine()} | leave ${multiplayer.lastRoomLeaveCode ?? "none"} | Mode: ${this.multiplayerMode ? "dedicated" : "solo"}</span>
       <span>Model: ${this.player.modelStatus}</span>
       <span>Traversal: ${this.traversalState.mode}${this.traversalState.active ? ` ${Math.round(this.traversalState.progress * 100)}%` : ""}</span>
       <span>Encounter: ${encounter.phase} | active ${encounter.activeEnemies}/${encounter.maxActiveEnemies}</span>
@@ -1357,10 +1442,27 @@ export class App {
       });
     }
 
-    if (!this.objectiveState.completed) {
+    const heavyObjectiveActive = this.objectiveState.type === "secure-rare-core";
+    if (heavyObjectiveActive && !this.heavyCargoState.shipSecured && this.heavyCargoState.status !== "extracted") {
+      const remoteCarrier = this.getRemotePlayer(this.heavyCargoState.carrierPlayerId);
+      const target = this.heavyCargoState.status === "carried" && !this.heavyCargoState.carriedByLocalPlayer && remoteCarrier
+        ? new Vector3(remoteCarrier.x, remoteCarrier.y, remoteCarrier.z)
+        : this.heavyCargoState.status === "carried"
+          ? this.landedShip.cargoAccessPosition
+          : this.heavyCargoState.position;
+      const label = this.heavyCargoState.status === "carried"
+        ? this.heavyCargoState.carriedByLocalPlayer ? "Load Core" : remoteCarrier ? `Escort ${remoteCarrier.name}` : "Ship Cargo Bay"
+        : this.heavyCargoState.status === "dropped" ? "Recover Helium-3 Core" : "Helium-3 Core";
+      markers.push({
+        id: "heavy-core",
+        label,
+        distance: this.horizontalDistance(playerPosition, target),
+        kind: "objective",
+      });
+    } else if (!this.objectiveState.completed) {
       markers.push({
         id: "primary-objective",
-        label: "Objective",
+        label: this.heavyCargoState.shipSecured ? "Extract Core" : this.heavyCargoState.carriedByLocalPlayer ? "Load Core" : "Helium-3 Core",
         distance: this.horizontalDistance(playerPosition, this.objectiveState.targetPosition),
         kind: "objective",
       });
@@ -1376,14 +1478,26 @@ export class App {
       });
     }
 
+    const downedTeammate = this.getNearestDownedTeammate(160);
+    if (downedTeammate) {
+      markers.push({
+        id: `revive-${downedTeammate.id}`,
+        label: `Revive ${downedTeammate.name}`,
+        distance: this.horizontalDistance(playerPosition, new Vector3(downedTeammate.x, downedTeammate.y, downedTeammate.z)),
+        kind: "danger",
+      });
+    }
+
     const extractionMarker = this.getNearestExtractionMarker(playerPosition);
     if (extractionMarker) {
       markers.push(extractionMarker);
     }
 
-    return markers
+    const sortedMarkers = markers
       .sort((a, b) => this.navigationPriority(a) - this.navigationPriority(b) || a.distance - b.distance)
       .slice(0, 6);
+    this.activeHeavyCoreNavMarkerCount = sortedMarkers.filter((marker) => marker.id === "heavy-core").length;
+    return sortedMarkers;
   }
 
   private getTacticalMapData(): TacticalMapData {
@@ -1426,9 +1540,43 @@ export class App {
         x: this.landedShip.launchAccessPosition.x,
         z: this.landedShip.launchAccessPosition.z,
         kind: "launch",
-        active: this.raidTimerState.extractionUnlocked || this.objectiveWasCompleted,
+        active: this.isExtractionAvailable,
       },
     ];
+
+    const heavyObjectiveActive = this.objectiveState.type === "secure-rare-core";
+    if (heavyObjectiveActive && this.heavyCargoState.status !== "extracted") {
+      const remoteCarrier = this.getRemotePlayer(this.heavyCargoState.carrierPlayerId);
+      const heavyPointPosition = this.heavyCargoState.status === "carried" && !this.heavyCargoState.carriedByLocalPlayer && remoteCarrier
+        ? new Vector3(remoteCarrier.x, remoteCarrier.y, remoteCarrier.z)
+        : this.heavyCargoState.shipSecured || this.heavyCargoState.status === "carried"
+          ? this.landedShip.cargoAccessPosition
+          : this.heavyCargoState.position;
+      points.push({
+        id: "heavy-core",
+        label: this.heavyCargoState.shipSecured
+          ? "Core Secured"
+          : this.heavyCargoState.status === "carried" && remoteCarrier
+            ? "Core Carrier"
+            : this.heavyCargoState.status === "dropped" ? "Dropped Core" : "Helium-3 Core",
+        x: heavyPointPosition.x,
+        z: heavyPointPosition.z,
+        kind: "objective",
+        active: !this.heavyCargoState.shipSecured,
+      });
+    }
+
+    const downedTeammate = this.getNearestDownedTeammate(999);
+    if (downedTeammate) {
+      points.push({
+        id: `revive-${downedTeammate.id}`,
+        label: "Revive",
+        x: downedTeammate.x,
+        z: downedTeammate.z,
+        kind: "objective",
+        active: true,
+      });
+    }
 
     for (const zone of extractionZoneDefinitions) {
       points.push({
@@ -1441,7 +1589,7 @@ export class App {
       });
     }
 
-    if (!this.objectiveState.completed) {
+    if (!this.objectiveState.completed && !heavyObjectiveActive) {
       points.push({
         id: "primary-objective",
         label: "Objective",
@@ -1637,6 +1785,42 @@ export class App {
     };
   }
 
+  private applyHeavyCargoInputModifiers(input: InputSnapshot): InputSnapshot {
+    if (!this.heavyCargoState.carriedByLocalPlayer || this.shipLandingState.active || this.raidOutcome !== "active") {
+      return input;
+    }
+
+    if (this.heavyCargoBlockedFeedbackCooldown <= 0) {
+      const weaponBlocked = input.fireHeld ||
+        input.firePressed ||
+        input.adsHeld ||
+        input.meleePressed ||
+        input.weaponSwapPressed ||
+        input.weaponSlotPressed !== null;
+      const movementBlocked = input.sprintHeld || input.jumpPressed;
+      if (weaponBlocked || movementBlocked) {
+        this.heavyCargoBlockedFeedbackCooldown = 2.2;
+        this.combatHud.showLootNotification(weaponBlocked
+          ? "Weapons locked while carrying heavy cargo"
+          : "Movement restricted by heavy cargo");
+      }
+    }
+
+    return {
+      ...input,
+      moveX: input.moveX * this.heavyCargoState.movementMultiplier,
+      moveZ: input.moveZ * this.heavyCargoState.movementMultiplier,
+      sprintHeld: false,
+      jumpPressed: false,
+      firePressed: false,
+      fireHeld: false,
+      adsHeld: false,
+      meleePressed: false,
+      weaponSlotPressed: null,
+      weaponSwapPressed: false,
+    };
+  }
+
   private navigationPriority(marker: HudNavigationMarker): number {
     if (marker.kind === "ship") return 0;
     if (marker.kind === "contract") return 1;
@@ -1668,8 +1852,31 @@ export class App {
     return Math.hypot(a.x - b.x, a.z - b.z);
   }
 
+  private formatVector3(position: Vector3): string {
+    return `${position.x.toFixed(1)},${position.y.toFixed(1)},${position.z.toFixed(1)}`;
+  }
+
   private get isRaidActive(): boolean {
     return this.raidScreen === "raid" && this.raidOutcome === "active" && this.playerHealth.snapshot.alive;
+  }
+
+  private syncMultiplayerDownedState(): void {
+    if (!this.multiplayerMode || this.raidScreen !== "raid" || this.raidOutcome !== "active") {
+      this.multiplayerDownedSent = false;
+      return;
+    }
+
+    if (this.playerHealth.snapshot.alive) {
+      this.multiplayerDownedSent = false;
+      return;
+    }
+
+    if (!this.multiplayerDownedSent) {
+      this.multiplayerDownedSent = true;
+      this.multiplayerClient.sendDowned();
+      this.combatHud.showLootNotification("DOWNED - WAIT FOR REVIVE OR RETURN TO HABITAT");
+      this.sfxAudio.playEvent("revive.downed");
+    }
   }
 
   private get enemyDebugStates() {
@@ -1685,14 +1892,17 @@ export class App {
     this.gameplayInput = this.suppressGameplayControls(this.gameplayInput);
     this.shipInRange = false;
     this.shipLandingState = this.shipLandingSequence.update(dt, this.input.snapshot);
-    if (this.shipLandingState.phase === "final-descent" && this.shipLandingState.phaseElapsed < dt * 1.5) {
-      this.shipAudio.play("ship_atmo_rumble");
+    if (this.shipLandingAudioPhase !== this.shipLandingState.phase) {
+      this.shipLandingAudioPhase = this.shipLandingState.phase;
+      this.playShipDeploymentPhaseAudio(this.shipLandingState.phase);
     }
 
+    this.orbitalDeploymentScene.update(this.shipLandingState, mapLayoutConfig.shipLandingSitePosition);
     if (!this.shipLandingState.touchdownApplied) {
       this.landedShip.setDescentPose(
         this.shipLandingState.descentProgress,
         this.shipLandingState.approachStability,
+        this.shipLandingState.alignmentOffset,
       );
     }
 
@@ -1715,11 +1925,35 @@ export class App {
 
   private completeShipLandingDeployment(): void {
     this.shipLandingState = this.shipLandingSequence.state;
+    this.shipLandingAudioPhase = "complete";
+    this.orbitalDeploymentScene.setEnabled(false);
     this.player.reset(this.playerSpawn);
     this.input.releasePointerLock();
     this.setInputMode("gameplay", "gameplay");
+    this.camera.fov = (70 * Math.PI) / 180;
+    this.deploymentCameraInitialized = false;
     this.startRaidMusicAfterDeployment();
     this.combatHud.showLootNotification("Deployed");
+  }
+
+  private playShipDeploymentPhaseAudio(phase: OrbitalDeploymentSequenceState["phase"]): void {
+    if (phase === "dock-release") {
+      this.shipAudio.play("ship_dock_release");
+    } else if (phase === "clearance-burn") {
+      this.shipAudio.play("ship_clearance_burn");
+    } else if (phase === "transit-corridor") {
+      this.shipAudio.play("ship_transit_corridor");
+    } else if (phase === "signal-interference") {
+      this.shipAudio.play("ship_signal_interference");
+    } else if (phase === "route-reacquisition") {
+      this.shipAudio.play("ship_route_reacquisition");
+    } else if (phase === "lunar-approach") {
+      this.shipAudio.play("ship_lunar_approach");
+    } else if (phase === "final-descent") {
+      this.shipAudio.play("ship_final_approach");
+    } else if (phase === "stabilization-window") {
+      this.shipAudio.play("ship_impact_build");
+    }
   }
 
   private startRaidMusicAfterDeployment(): void {
@@ -1733,7 +1967,7 @@ export class App {
   }
 
   private skipShipLandingSequence(): void {
-    this.shipLandingState = this.shipLandingSequence.skipToComplete();
+    this.shipLandingState = this.shipLandingSequence.skipToComplete("K skip");
     if (!this.shipLandingState.resolvedLandingQuality) {
       this.shipLandingState = this.shipLandingSequence.forceQuality("rough");
     }
@@ -1741,22 +1975,54 @@ export class App {
     this.shipState = this.shipManager.initializeForRaidWithQuality(quality);
     this.landedShip.settleAfterDescent(this.shipState);
     this.shipLandingState = this.shipLandingSequence.markTouchdownApplied();
-    this.shipLandingState = this.shipLandingSequence.skipToComplete();
+    this.shipLandingState = this.shipLandingSequence.skipToComplete("K skip");
+    this.shipLandingAudioPhase = "complete";
+    this.orbitalDeploymentScene.setEnabled(false);
     this.completeShipLandingDeployment();
-    this.combatHud.showLootNotification(`Landing skipped | ${quality}`);
+    this.combatHud.showLootNotification(`Deployment skipped | ${quality}`);
   }
 
-  private applyShipLandingCamera(): void {
-    const progress = this.shipLandingState.descentProgress;
-    const altitude = (1 - progress) * 24;
-    const center = mapLayoutConfig.shipLandingSitePosition.add(new Vector3(0, 2.2 + altitude * 0.65, 0));
-    const cameraOffset = new Vector3(-17, 9 + altitude * 0.35, -20 + (1 - progress) * 8);
+  private applyShipLandingCamera(dt: number): void {
+    const input = this.input.snapshot;
+    const descentProgress = this.shipLandingState.descentProgress;
+    if (!this.deploymentCameraInitialized) {
+      this.deploymentCameraYaw = 0;
+      this.deploymentCameraPitch = 0.32;
+      this.deploymentCameraDistance = 15;
+      this.deploymentCameraDistanceTarget = 15;
+      this.deploymentCameraInitialized = true;
+    }
+
+    this.deploymentCameraYaw += input.lookX * 0.0009;
+    this.deploymentCameraPitch = clamp(this.deploymentCameraPitch + input.lookY * 0.0008, -0.42, 0.82);
+    if (input.zoomDelta !== 0) {
+      this.deploymentCameraDistanceTarget = clamp(this.deploymentCameraDistanceTarget + input.zoomDelta * 0.9, 9.5, 23);
+    }
+    const zoomBlend = 1 - Math.exp(-9 * dt);
+    this.deploymentCameraDistance += (this.deploymentCameraDistanceTarget - this.deploymentCameraDistance) * zoomBlend;
+
+    const altitude = (1 - descentProgress) * 24;
+    const forwardOffset = -(1 - descentProgress) * 68;
+    const lateralOffset = this.shipLandingState.alignmentOffset * 5.5 * (1 - descentProgress);
+    const shipFocus = mapLayoutConfig.shipLandingSitePosition.add(new Vector3(lateralOffset, 2.2 + altitude, forwardOffset));
+    const { forward, right } = yawToBasis(this.deploymentCameraYaw);
+    const pitchRise = Math.sin(this.deploymentCameraPitch) * this.deploymentCameraDistance;
+    const flatDistance = Math.cos(this.deploymentCameraPitch) * this.deploymentCameraDistance;
+    const orbitOffset = forward.scale(-flatDistance).addInPlace(new Vector3(0, pitchRise, 0));
+    const shoulderBias = right.scale(1.25);
+    const desiredCamera = shipFocus.add(orbitOffset).addInPlace(shoulderBias);
+    const qualityShake = this.shipState.landingQuality === "clean" ? 0.06 : this.shipState.landingQuality === "rough" ? 0.12 : 0.2;
     const shake = this.shipLandingState.phase === "touchdown"
-      ? Math.sin(this.shipLandingState.phaseElapsed * 42) * (1 - this.shipLandingState.phaseProgress) * 0.18
+      ? Math.sin(this.shipLandingState.phaseElapsed * 42) * (1 - this.shipLandingState.phaseProgress) * qualityShake
+      : this.shipLandingState.signalInterferenceActive
+        ? Math.sin(this.shipLandingState.phaseElapsed * 21) * 0.045
       : 0;
-    this.camera.position = mapLayoutConfig.shipLandingSitePosition.add(cameraOffset).addInPlace(new Vector3(shake, Math.abs(shake) * 0.35, 0));
-    this.camera.setTarget(center);
-    this.camera.fov = (64 * Math.PI) / 180;
+    const cameraBlend = 1 - Math.exp(-18 * dt);
+    const shakenDesired = desiredCamera.add(new Vector3(shake, Math.abs(shake) * 0.35, 0));
+    this.camera.position = Vector3.Lerp(this.camera.position, shakenDesired, cameraBlend);
+    const lookAhead = yawToBasis(0).forward.scale(5 + descentProgress * 5);
+    this.camera.setTarget(shipFocus.add(new Vector3(0, 0.4, 0)).addInPlace(lookAhead));
+    this.camera.fov = ((this.shipLandingState.phase === "clearance-burn" ? 72 : 68 - descentProgress * 5) * Math.PI) / 180;
   }
 
   private updatePlayerStatus(dt: number): void {
@@ -1771,7 +2037,7 @@ export class App {
 
   private getInputMode(): "gameplay" | "ui" {
     if (this.shipLandingState.active) {
-      return "ui";
+      return "gameplay";
     }
 
     if (this.raidScreen === "raid" && this.raidOutcome === "active" && this.playerHealth.snapshot.alive) {
@@ -1852,7 +2118,7 @@ export class App {
       this.useMedkit();
     }
 
-    const extractionAvailable = this.raidTimerState.extractionUnlocked || this.objectiveWasCompleted;
+    const extractionAvailable = this.isExtractionAvailable;
     this.extractionState = this.extractionController.update(
       dt,
       this.gameplayInput,
@@ -1879,6 +2145,14 @@ export class App {
       return;
     }
 
+    if (this.handleReviveInteraction(dt)) {
+      return;
+    }
+
+    if (this.handleHeavyCargoInteractions()) {
+      return;
+    }
+
     if (this.shipInRange && this.canRepairShip() && (this.gameplayInput.reloadPressed || this.gameplayInput.uiDropPressed)) {
       this.repairShip(this.gameplayInput.uiDropPressed ? "full-stabilize" : "quick-patch");
       return;
@@ -1891,6 +2165,7 @@ export class App {
       !this.poiObjectiveManager.hasInteractTarget(this.player.state.position)
     ) {
       this.depositCargoToShip();
+      this.lastInteractConsumedBy = "ship";
       return;
     }
 
@@ -1899,15 +2174,56 @@ export class App {
       !this.extractionState.insideZone &&
       !this.poiObjectiveManager.hasInteractTarget(this.player.state.position)
     ) {
+      if (this.multiplayerMode) {
+        const containerId = this.lootDirector.getNearbyContainerId(this.player.state.position);
+
+        if (containerId) {
+          const multiplayer = this.multiplayerClient.snapshot;
+          this.lastInteractConsumedBy = "loot-cache";
+
+          if (this.heavyCargoState.carriedByLocalPlayer) {
+            this.combatHud.showLootNotification("Heavy cargo carrier cannot access recovery caches");
+            this.lastSharedContainerClaimRefresh = `blocked carrier open ${containerId}`;
+            return;
+          }
+
+          if (this.pendingSharedContainerOpenId === containerId) {
+            console.info(`[ClientLoot] open suppressed container=${containerId} reason=request-pending`);
+            return;
+          }
+
+          if (multiplayer.status !== "connected") {
+            this.pendingSharedContainerOpenId = null;
+            this.combatHud.showLootNotification("Connection lost - shared cache unavailable");
+          } else if (!multiplayer.sharedWorldSupported) {
+            this.pendingSharedContainerOpenId = null;
+            this.combatHud.showLootNotification("Cache link unavailable");
+          } else {
+            this.pendingSharedContainerOpenId = containerId;
+            this.raidBagOpen = false;
+            this.selectedLootIndex = 0;
+            this.inventoryManager.setActiveContainer(null);
+            this.multiplayerClient.requestContainerOpen(containerId);
+            this.noiseSystem.emit("loot", this.player.state.position, this.environmentState.gameplay);
+            this.combatHud.showLootNotification("Opening recovery cache...");
+          }
+        } else {
+          this.lastInteractConsumedBy = "none";
+        }
+        return;
+      }
+
       const container = this.lootDirector.openNearbyContainer(this.player.state.position);
 
       if (container) {
+        this.lastInteractConsumedBy = "loot-cache";
         this.raidBagOpen = true;
         this.selectedLootIndex = 0;
         this.noiseSystem.emit("loot", this.player.state.position, this.environmentState.gameplay);
         this.inventoryManager.setActiveContainer(container);
         this.setInputMode("ui", "loot-panel");
         this.combatHud.showLootNotification(container.items.length > 0 ? "Loot cache opened" : "Cache empty");
+        this.sfxAudio.playEvent(container.items.length > 0 ? "loot.open" : "loot.empty");
       }
     }
 
@@ -1915,7 +2231,15 @@ export class App {
       if (this.extractionState.currentZoneId === "personal-ship-return") {
         this.shipAudio.play("ship_launch_complete");
       }
-      this.outcomeItems = [...this.raidInventory.items, ...this.shipManager.cargoItems, ...this.survivedLoadoutItems];
+      const heavyCargoReward: LootStack[] = this.heavyCargoState.shipSecured
+        ? [{ type: "helium-drill-core", label: getItemDefinition("helium-drill-core").label, quantity: 1 }]
+        : [];
+      if (heavyCargoReward.length > 0) {
+        this.heavyCargoManager.markExtracted();
+        this.sfxAudio.playEvent("heavy.extracted");
+        this.heavyCargoState = this.heavyCargoManager.update(this.player.state, this.landedShip.cargoAccessPosition);
+      }
+      this.outcomeItems = [...this.raidInventory.items, ...this.shipManager.cargoItems, ...heavyCargoReward, ...this.survivedLoadoutItems];
       this.lootLostItems = [];
       this.contractManager.handleExtraction(this.outcomeItems);
       this.flushContractMessages();
@@ -1984,6 +2308,20 @@ export class App {
   }
 
   private takeLootItem(containerId: string, itemIndex: number): void {
+    if (this.multiplayerMode) {
+      const item = this.inventoryManager.snapshot.activeContainer?.items[itemIndex];
+      if (!item || !this.raidInventory.canAdd(item.type, item.quantity)) {
+        this.inventoryManager.setWarning("Inventory Full");
+        this.combatHud.showLootNotification("Inventory Full");
+        return;
+      }
+      this.multiplayerClient.requestContainerClaim(containerId, itemIndex, {
+        type: item.type,
+        quantity: item.quantity,
+      });
+      return;
+    }
+
     const eventResult = this.lootDirector.takeItem(containerId, itemIndex, this.raidInventory);
 
     if (!eventResult) {
@@ -1999,6 +2337,17 @@ export class App {
   }
 
   private takeAllLoot(containerId: string): void {
+    if (this.multiplayerMode) {
+      const items = this.inventoryManager.snapshot.activeContainer?.items ?? [];
+      if (items.length === 0 || !this.raidInventory.canAddAll(items)) {
+        this.inventoryManager.setWarning("Inventory Full");
+        this.combatHud.showLootNotification("Inventory Full");
+        return;
+      }
+      this.multiplayerClient.requestContainerClaim(containerId, "all");
+      return;
+    }
+
     const events = this.lootDirector.takeAll(containerId, this.raidInventory);
 
     if (events.length === 0) {
@@ -2068,6 +2417,198 @@ export class App {
     this.combatHud.showLootNotification("Signal boundary weak");
   }
 
+  private handleReviveInteraction(dt: number): boolean {
+    if (!this.multiplayerMode || !this.playerHealth.snapshot.alive || this.shipLandingState.active) {
+      this.reviveTargetId = null;
+      this.reviveProgressSeconds = 0;
+      return false;
+    }
+
+    const target = this.getNearestDownedTeammate(4.2);
+    if (!target) {
+      this.reviveTargetId = null;
+      this.reviveProgressSeconds = 0;
+      return false;
+    }
+
+    if (this.gameplayInput.interactHeld) {
+      const startingRevive = this.reviveTargetId !== target.id || this.reviveProgressSeconds === 0;
+      this.reviveTargetId = target.id;
+      this.reviveProgressSeconds = Math.min(3.5, this.reviveProgressSeconds + dt);
+      this.lastInteractConsumedBy = "revive";
+      if (startingRevive) {
+        this.sfxAudio.playEvent("revive.start");
+      }
+      if (this.reviveFeedbackCooldown <= 0) {
+        const progress = Math.round((this.reviveProgressSeconds / 3.5) * 100);
+        this.combatHud.showLootNotification(`REVIVING ${target.name.toUpperCase()} ${progress}%`);
+        this.reviveFeedbackCooldown = 1;
+      }
+      if (this.reviveProgressSeconds >= 3.5) {
+        this.multiplayerClient.requestRevive(target.id);
+        this.reviveProgressSeconds = 0;
+        this.combatHud.showLootNotification(`REVIVE REQUEST SENT - ${target.name}`);
+      }
+      return true;
+    }
+
+    this.reviveTargetId = target.id;
+    this.reviveProgressSeconds = 0;
+    if (this.gameplayInput.interactPressed) {
+      this.lastInteractConsumedBy = "revive";
+      this.combatHud.showLootNotification(`HOLD E TO REVIVE - ${target.name}`);
+      return true;
+    }
+    return false;
+  }
+
+  private getNearestDownedTeammate(range: number): NetworkPlayerState | null {
+    let nearest: { player: NetworkPlayerState; distance: number } | null = null;
+    for (const player of this.multiplayerClient.remotePlayerStates) {
+      if (player.status !== "downed" && player.status !== "dead") {
+        continue;
+      }
+      const distance = this.horizontalDistance(this.player.state.position, new Vector3(player.x, player.y, player.z));
+      if (distance > range || (nearest && distance >= nearest.distance)) {
+        continue;
+      }
+      nearest = { player, distance };
+    }
+    return nearest?.player ?? null;
+  }
+
+  private getRemotePlayer(playerId: string | null): NetworkPlayerState | null {
+    if (!playerId) {
+      return null;
+    }
+    return this.multiplayerClient.remotePlayerStates.find((player) => player.id === playerId) ?? null;
+  }
+
+  private handleHeavyCargoInteractions(): boolean {
+    if (this.heavyCargoState.carriedByLocalPlayer && this.gameplayInput.uiDropPressed) {
+      const dropPosition = this.getHeavyCargoDropPosition();
+      if (this.multiplayerMode) {
+        if (!this.canSendHeavyCargoAction()) {
+          return true;
+        }
+        this.pendingHeavyCargoRequest = "drop";
+        this.multiplayerClient.requestHeavyCargoDrop(heliumDrillCoreHeavyCargoId, {
+          x: dropPosition.x,
+          y: dropPosition.y,
+          z: dropPosition.z,
+        });
+      } else if (this.heavyCargoManager.tryLocalDrop(dropPosition)) {
+        this.heavyCargoState = this.heavyCargoManager.update(this.player.state, this.landedShip.cargoAccessPosition);
+      }
+      this.lastInteractConsumedBy = "heavy-cargo-drop";
+      this.combatHud.showLootNotification("CORE DROPPED - RECOVERABLE | Movement restored");
+      this.sfxAudio.playEvent("heavy.drop");
+      return true;
+    }
+
+    if (!this.gameplayInput.interactPressed || this.extractionState.insideZone) {
+      return false;
+    }
+
+    if (this.heavyCargoState.carriedByLocalPlayer && this.heavyCargoState.distanceToShipCargo <= 4) {
+      if (this.multiplayerMode) {
+        if (!this.canSendHeavyCargoAction()) {
+          return true;
+        }
+        this.pendingHeavyCargoRequest = "secure";
+        this.multiplayerClient.requestHeavyCargoSecure(heliumDrillCoreHeavyCargoId);
+      } else if (this.heavyCargoManager.tryLocalSecure(this.landedShip.cargoAccessPosition)) {
+        this.heavyCargoState = this.heavyCargoManager.update(this.player.state, this.landedShip.cargoAccessPosition);
+        this.onHeavyCargoSecured();
+      }
+      this.lastInteractConsumedBy = "heavy-cargo-secure";
+      return true;
+    }
+
+    if (
+      (this.heavyCargoState.status === "available" || this.heavyCargoState.status === "dropped") &&
+      this.heavyCargoManager.canPickup(this.player.state.position)
+    ) {
+      if (this.multiplayerMode) {
+        if (!this.canSendHeavyCargoAction()) {
+          return true;
+        }
+        this.pendingHeavyCargoRequest = "pickup";
+        this.multiplayerClient.requestHeavyCargoPickup(heliumDrillCoreHeavyCargoId);
+      } else if (this.heavyCargoManager.tryLocalPickup(this.player.state.position)) {
+        this.heavyCargoState = this.heavyCargoManager.update(this.player.state, this.landedShip.cargoAccessPosition);
+        this.onHeavyCargoPickedUp();
+      }
+      this.lastInteractConsumedBy = "heavy-cargo-pickup";
+      return true;
+    }
+
+    if (this.heavyCargoState.status === "locked" && this.heavyCargoManager.canRelease(this.player.state.position)) {
+      if (this.multiplayerMode) {
+        if (!this.canSendHeavyCargoAction()) {
+          return true;
+        }
+        this.pendingHeavyCargoRequest = "release";
+        this.multiplayerClient.requestHeavyCargoRelease(heliumDrillCoreHeavyCargoId);
+      } else if (this.heavyCargoManager.tryLocalRelease(this.player.state.position)) {
+        this.heavyCargoState = this.heavyCargoManager.update(this.player.state, this.landedShip.cargoAccessPosition);
+        this.combatHud.showLootNotification("HEAVY CORE RELEASED | E: Carry core");
+        this.sfxAudio.playEvent("heavy.release");
+      }
+      this.lastInteractConsumedBy = "heavy-cargo-release";
+      return true;
+    }
+
+    return false;
+  }
+
+  private getHeavyCargoDropPosition(): Vector3 {
+    const { forward, right } = yawToBasis(this.player.state.yaw);
+    const dropPosition = this.player.state.position
+      .add(forward.scale(1.35))
+      .addInPlace(right.scale(0.55));
+    dropPosition.y = Math.max(0.35, dropPosition.y);
+    return dropPosition;
+  }
+
+  private canSendHeavyCargoAction(): boolean {
+    const snapshot = this.multiplayerClient.snapshot;
+    if (snapshot.status !== "connected") {
+      this.combatHud.showLootNotification("CONNECTION LOST - MULTIPLAYER ACTIONS UNAVAILABLE");
+      return false;
+    }
+
+    if (snapshot.heavyCargoAuthority !== "SERVER" || !snapshot.sharedWorldSupported) {
+      this.combatHud.showLootNotification("CORE RECOVERY UNAVAILABLE - SERVER NOT READY");
+      return false;
+    }
+
+    return true;
+  }
+
+  private onHeavyCargoPickedUp(): void {
+    this.combatHud.showLootNotification("CORE SIGNATURE EXPOSED | LUMEN RESPONSE INBOUND | RETURN CORE TO SHIP");
+    this.sfxAudio.playEvent("heavy.pickup");
+    this.sfxAudio.playEvent("heavy.exposed");
+    this.noiseSystem.emit("loot", this.heavyCargoState.position, this.environmentState.gameplay, 1.6);
+    if (!this.heavyCargoPressureSpawned && !this.multiplayerMode) {
+      this.heavyCargoPressureSpawned = true;
+      this.enemyDirector.spawnEventEnemy("heavy-core-pressure-rusher", "grunt", this.heavyCargoState.position.add(new Vector3(14, 0, 8)), false);
+      this.enemyDirector.spawnEventEnemy("heavy-core-pressure-spitter", "spitter", this.heavyCargoState.position.add(new Vector3(-16, 0, 10)), false);
+    }
+  }
+
+  private onHeavyCargoSecured(): void {
+    this.objectiveWasCompleted = true;
+    this.objectiveDirector.completeHeavyCargoObjective();
+    this.objectiveState = this.objectiveDirector.state;
+    this.shipState = this.shipManager.secureHeavyCargo("Helium-3 Drill Core");
+    this.landedShip.applyShipState(this.shipState);
+    this.updateActiveExtractionZones();
+    this.combatHud.showLootNotification("HEAVY CARGO LOADED | EXTRACTION SIGNAL AVAILABLE");
+    this.sfxAudio.playEvent("heavy.secure");
+  }
+
   private getCurrentPoiDefinition() {
     return poiDefinitions.find((poi) => {
       return this.horizontalDistance(this.player.state.position, poi.center) <= poi.radius;
@@ -2079,8 +2620,24 @@ export class App {
   }
 
   private getShipPrompt(): string {
+    const reviveTarget = this.multiplayerMode ? this.getNearestDownedTeammate(4.2) : null;
+    if (reviveTarget) {
+      const progress = this.reviveTargetId === reviveTarget.id && this.reviveProgressSeconds > 0
+        ? ` ${Math.round((this.reviveProgressSeconds / 3.5) * 100)}%`
+        : "";
+      return `Hold E: Revive ${reviveTarget.name}${progress}`;
+    }
+
     if (!this.shipInRange) {
       return "";
+    }
+
+    if (this.heavyCargoState.carriedByLocalPlayer) {
+      return "E: Secure Helium-3 Core in ship hold | X: Drop Core";
+    }
+
+    if (this.heavyCargoState.shipSecured && this.raidInventory.usedSlots <= 0) {
+      return "Heavy cargo secured";
     }
 
     if (this.raidInventory.usedSlots <= 0) {
@@ -2107,12 +2664,24 @@ export class App {
       return "";
     }
 
-    if ((this.raidTimerState.extractionUnlocked || this.objectiveWasCompleted) && this.shipManager.cargoItems.length > 0) {
+    if (this.heavyCargoState.shipSecured) {
+      return "Heavy Cargo Secured: Helium-3 Drill Core | Extract to retain core";
+    }
+
+    if (this.heavyCargoState.carriedByLocalPlayer) {
+      return "Heavy core at cargo bay | Load before extraction";
+    }
+
+    if (this.isExtractionAvailable && this.shipManager.cargoItems.length > 0) {
       return "Cargo secured in hold | Return available";
     }
 
-    if ((this.raidTimerState.extractionUnlocked || this.objectiveWasCompleted) && this.raidInventory.usedSlots >= 4) {
+    if (this.isExtractionAvailable && this.raidInventory.usedSlots >= 4) {
       return "Return available";
+    }
+
+    if (!this.heavyCargoState.shipSecured) {
+      return "Extraction locked: secure Helium-3 core in ship hold";
     }
 
     if (this.shipState.landingQuality === "rough") {
@@ -2412,11 +2981,12 @@ export class App {
 
   private getShipResultStatus(): string {
     const cargo = this.shipManager.cargoItems;
-    const heavyCargo = this.shipManager.canStoreSpecialCargo() ? "Heavy cargo route stable." : "Heavy cargo route unavailable.";
+    const heavyCargo = this.heavyCargoState.shipSecured ? "Heavy Cargo secured: Helium-3 Drill Core." : "Heavy Cargo not secured.";
+    const route = this.shipManager.canStoreSpecialCargo() ? "Heavy cargo route stable." : "Heavy cargo route unavailable.";
     const risk = `Cargo risk ${this.formatShipCargoRisk().toLowerCase()}. Repair ${this.formatShipRepairStatus().toLowerCase()}.`;
     return cargo.length > 0
-      ? `${this.shipState.statusLabel}. Ship cargo secured. ${risk} ${heavyCargo}`
-      : `${this.shipState.statusLabel}. No ship cargo transferred. ${risk} ${heavyCargo}`;
+      ? `${this.shipState.statusLabel}. Ship cargo secured. ${risk} ${route} ${heavyCargo}`
+      : `${this.shipState.statusLabel}. No ordinary ship cargo transferred. ${risk} ${route} ${heavyCargo}`;
   }
 
   private getResultContractsCompleted(contractRewardLabels: readonly string[]): string[] {
@@ -2425,6 +2995,10 @@ export class App {
 
     if (active?.status === "ready-to-claim") {
       labels.push(`${active.definition.title} - Ready to submit at Faction Contracts`);
+    }
+
+    if (this.heavyCargoState.shipSecured) {
+      labels.push("Extract Helium-3 Drill Core - Heavy cargo secured");
     }
 
     return labels;
@@ -2707,6 +3281,14 @@ export class App {
     this.cameraRig.setCoverModifier({ active: false, peek: 0 });
     this.cameraRig.setTraversalLocked(false);
     this.input.releasePointerLock();
+    if (this.multiplayerMode) {
+      this.multiplayerClient.leaveRoom(`return to HQ after ${reason}`);
+      this.multiplayerMode = false;
+      this.heavyCargoManager.reset();
+      this.heavyCargoState = this.heavyCargoManager.update(this.player.state, this.landedShip.cargoAccessPosition);
+      this.pendingHeavyCargoRequest = "none";
+      this.lastHeavyCargoRoomId = null;
+    }
     this.loadingScreen.show("Returning to HQ", 1600);
     this.worldMap.setContractVariant(null, null);
     this.showMainMenu();
@@ -2718,7 +3300,7 @@ export class App {
 
   private startRaid(multiplayerMode = false): void {
     this.multiplayerMode = multiplayerMode;
-    this.loadingScreen.show(`Preparing ${this.selectedRaidDefinition.name}`, 1600);
+    this.loadingScreen.show(`Loading Into Crater Run | ${this.selectedRaidDefinition.name}`, 2400);
     this.loadoutManager.applyToLoadout(this.loadout, this.persistentStash.items);
     this.loadout.clampToStash(this.persistentStash.items);
     this.activeLoadout = this.loadout.snapshot;
@@ -2780,10 +3362,13 @@ export class App {
       ? serverLandingQuality ? "server" : "fallback"
       : "local";
     this.shipState = this.shipManager.initializeForRaidWithQuality("clean");
-    this.shipLandingState = this.shipLandingSequence.start(serverLandingQuality);
-    this.shipAudio.play("ship_descent_start");
+    this.shipLandingState = this.shipLandingSequence.start(serverLandingQuality, this.landingQualitySource);
+    this.shipLandingAudioPhase = this.shipLandingState.phase;
+    this.deploymentCameraInitialized = false;
+    this.shipAudio.play("ship_dock_release");
+    this.orbitalDeploymentScene.update(this.shipLandingState, mapLayoutConfig.shipLandingSitePosition);
     this.landedShip.applyShipState(this.shipState);
-    this.landedShip.setDescentPose(0, this.shipLandingState.approachStability);
+    this.landedShip.setDescentPose(0, this.shipLandingState.approachStability, this.shipLandingState.alignmentOffset);
     this.landedShip.setEnabled(true);
     this.shipInRange = true;
     this.raidTimer.reset(this.selectedRaidDefinition.lengthSeconds);
@@ -2824,18 +3409,35 @@ export class App {
     this.lootDirector.setRareLootChanceMultiplier(
       this.environmentState.gameplay.rareLootChanceMultiplier * this.selectedRaidDefinition.rareLootMultiplier,
     );
-    this.combatHud.showLootNotification("Descent burn active | K: Skip Landing");
-    this.objectiveDirector.reset();
+    this.heavyCargoManager.reset();
+    if (this.multiplayerMode && this.multiplayerClient.snapshot.status !== "connected") {
+      this.heavyCargoManager.setDisconnected();
+    }
+    this.heavyCargoState = this.heavyCargoManager.update(this.player.state, this.landedShip.cargoAccessPosition);
+    this.heavyCargoPressureSpawned = false;
+    this.pendingHeavyCargoRequest = "none";
+    this.activeHeavyCoreNavMarkerCount = 0;
+    this.lastHeavyCargoRoomId = this.multiplayerMode ? this.multiplayerClient.snapshot.roomId : null;
+    this.combatHud.showLootNotification("Deployment corridor active | K: Skip Deployment");
+    this.objectiveDirector.reset("secure-rare-core");
     this.objectiveState = this.objectiveDirector.state;
-    this.poiObjectiveManager.reset(this.getActiveContractPoiObjectiveTarget());
+    this.poiObjectiveManager.reset(
+      this.multiplayerMode ? null : this.getActiveContractPoiObjectiveTarget(),
+      this.multiplayerMode,
+    );
     this.poiObjectiveState = this.poiObjectiveManager.state;
     this.objectiveWasCompleted = false;
     this.multiplayerExtractSent = false;
     this.multiplayerDeathSent = false;
+    this.multiplayerDownedSent = false;
     this.pvpKillsThisRaid = 0;
     this.enemiesEliminatedThisRaid = 0;
     this.poiObjectiveOutcomesThisRaid = [];
+    this.networkAppliedPoiObjectiveIds.clear();
     this.contractObjectiveCompletedThisRaid = false;
+    this.reviveTargetId = null;
+    this.reviveProgressSeconds = 0;
+    this.reviveFeedbackCooldown = 0;
     this.enemyDirector.dispose();
     this.enemyDirector = new EnemyDirector(this.scene, this.player.root, this.playerHealth, this.enemyDirectorOptions);
     this.enemyDirector.setHitboxDebugVisible(this.enemyHitboxDebugVisible);
@@ -2845,7 +3447,7 @@ export class App {
   }
 
   private updateActiveExtractionZones(): void {
-    const extractionAvailable = this.raidTimerState.extractionUnlocked || this.objectiveWasCompleted;
+    const extractionAvailable = this.isExtractionAvailable;
     const activeZoneIds = extractionAvailable
       ? [...this.baseExtractionZoneIds, ...this.dynamicEventDirector.activeTemporaryExtractionZoneIds]
       : [];
@@ -2856,6 +3458,14 @@ export class App {
 
     this.extractionController.setActiveZones([...fallbackZones, ...shipZones]);
     this.worldMap.setActiveExtractionZones(activeZoneIds);
+  }
+
+  private get isExtractionAvailable(): boolean {
+    if (this.objectiveState.type === "secure-rare-core") {
+      return this.objectiveWasCompleted;
+    }
+
+    return this.raidTimerState.extractionUnlocked || this.objectiveWasCompleted;
   }
 
   private getShipExtractionZone(): ExtractionZoneDefinition {
@@ -2996,6 +3606,9 @@ export class App {
           objectiveType: event.objectiveType,
           poiId: event.poiId,
         });
+        if (this.multiplayerMode && !this.networkAppliedPoiObjectiveIds.delete(event.objectiveId)) {
+          this.multiplayerClient.sendObjectiveComplete(event.objectiveId, event.objectiveType, event.poiId);
+        }
       }
       this.combatHud.showLootNotification(event.message);
     }
@@ -3053,7 +3666,12 @@ export class App {
 
   private showMainMenu(): void {
     this.raidScreen = "menu";
+    this.habitatPreview.dispose();
+    this.menuContent.classList.remove("class-deploy-content", "ship-dashboard-content");
+    this.menuContent.classList.add("hq-command-content");
     this.landedShip.setEnabled(false);
+    this.orbitalDeploymentScene.setEnabled(false);
+    this.shipLandingState = this.shipLandingSequence.reset();
     this.shipAudio.stopAll();
     this.raidMusicStartedForCurrentRun = false;
     void playMenuMusic();
@@ -3065,74 +3683,104 @@ export class App {
     const dogTags = this.getStashQuantity("dog-tag");
     const level = this.persistentStash.raidLevel;
     const totalXp = this.loopProfile.xp;
-    const stationCards = hqStations.map((station) => `
+    const commandNav: Array<{ label: string; action: string; station: HQStationId }> = [
+      { label: "PLAY", action: "start", station: "raid-terminal" },
+      { label: "LOADOUT", action: "hq-loadout", station: "loadout-locker" },
+      { label: "ARSENAL", action: "arsenal", station: "arsenal" },
+      { label: "SHIP", action: "ship-systems", station: "ship-systems" },
+      { label: "CLASS", action: "class-assignment", station: "class-assignment" },
+      { label: "SKILLS", action: "skill-matrix", station: "skill-matrix" },
+      { label: "STASH", action: "stash", station: "stash" },
+      { label: "VENDORS", action: "vendors", station: "vendor-row" },
+      { label: "STYLE", action: "hq-style", station: "style-locker" },
+      { label: "CONTRACTS", action: "intel", station: "intel-board" },
+    ];
+    const navTabs = commandNav.map((item) => `
       <button
         type="button"
-        class="hq-station-card ${hqState.selectedStationId === station.id ? "active" : ""}"
-        data-action="${station.action}"
-        data-accent="${station.accent}"
+        class="hq-nav-button ${hqState.selectedStationId === item.station ? "active" : ""}"
+        data-action="${item.action}"
       >
-        <span>${station.eyebrow}</span>
-        <strong>${station.title}</strong>
-        <small>${station.description}</small>
+        ${item.label}
       </button>
     `).join("");
+    const loadoutReady = this.getGearScore() >= this.selectedRaidDefinition.recommendedGearScore ? "Run ready" : "Under-geared";
+    const gearScore = this.getGearScore();
+    const sidearmName = weaponDefinitions[this.loadout.snapshot.sidearmWeaponId].name;
+    const primaryWeapon = this.loadout.snapshot.primaryWeaponId;
+    const primaryWeaponMarkup = primaryWeapon
+      ? `<button type="button" class="hq-inline-link" data-action="hq-inspect-primary">${this.loadout.primaryWeaponName}</button>`
+      : `<strong>None</strong>`;
+    const activeContract = this.contractManager.snapshot.active?.definition;
+    const activeContractLabel = activeContract ? activeContract.title : "No active contract";
     this.menuContent.innerHTML = `
-      <div class="main-menu-actions hq-quick-actions">
-        <button type="button" data-action="start">Crater Runs</button>
-        <button type="button" data-action="multiplayer-start">Multiplayer Crater Run</button>
-        <button type="button" data-action="hq-loadout">Loadout</button>
-        <button type="button" data-action="ship-systems">Ship Systems</button>
-        <button type="button" data-action="arsenal">Arsenal</button>
-        <button type="button" data-action="class-assignment">Class Assignment</button>
-        <button type="button" data-action="skill-matrix">Skill Matrix</button>
-        <button type="button" data-action="vendors">Faction Vendors</button>
-        <button type="button" data-action="settings">Settings</button>
-      </div>
-      <div class="hq-screen">
-        <header class="hq-hero">
-          <div>
+      <div class="hq-screen hq-command-deck">
+        <header class="hq-command-topbar">
+          <div class="hq-brand-lockup">
             <span>Lunar Habitat</span>
-            <h1>${themeConfig.brand.title}</h1>
-            <p>${themeConfig.brand.subtitle}</p>
-            <p>${themeConfig.brand.menuFlavor.replaceAll("\n", "<br>")}</p>
+            <strong>${themeConfig.brand.title}</strong>
           </div>
-          <button type="button" data-action="settings">Settings</button>
+          <nav class="hq-primary-nav" aria-label="Habitat navigation">
+            ${navTabs}
+          </nav>
+          <div class="hq-utility-cluster">
+            <span>Cr ${credits}</span>
+            <span>Scrap ${scrap}</span>
+            <span>He-3 ${rareCores}</span>
+            <span>Lv ${level}</span>
+            <span>Rep ${this.reputation.value}</span>
+            <span>${this.multiplayerClient.snapshot.status}</span>
+            <button type="button" data-action="settings">Settings</button>
+          </div>
         </header>
-        <section class="hq-status-strip">
-          <div><span>Credits</span><strong>${credits}</strong></div>
-          <div><span>Regolith Scrap</span><strong>${scrap}</strong></div>
-          <div><span>Helium-3</span><strong>${rareCores}</strong></div>
-          <div><span>Faction Tags</span><strong>${dogTags}</strong></div>
-          <div><span>Level</span><strong>${level}</strong></div>
-          <div><span>XP</span><strong>${totalXp}</strong></div>
-          <div><span>Reputation</span><strong>${this.reputation.value}</strong></div>
-          <div><span>Multiplayer</span><strong>${this.multiplayerClient.snapshot.status}</strong></div>
-        </section>
-        <section class="hq-preview-panel">
-          <h2>Current Crater Runner</h2>
-          ${this.renderHQPlayerPreview()}
+        <section class="hq-context-panel">
+          <span>Command Feed</span>
+          <strong>${activeContractLabel}</strong>
+          <p>${this.environmentState.label} conditions queued. ${themeConfig.enemyCollectiveName} signatures rising below the regolith.</p>
           <div>
-            <span>Outfit</span><strong>${this.cosmeticManager.getEquippedName("outfit")}</strong>
-            <span>Primary</span><strong>${this.loadout.primaryWeaponName}</strong>
-            <span>Assignment</span><strong>${this.classManager.selectedClass.displayName}</strong>
-            <span>Last Station</span><strong>${this.formatHQStation(hqState.selectedStationId)}</strong>
+            <span>XP</span><strong>${totalXp}</strong>
+            <span>Faction Tags</span><strong>${dogTags}</strong>
+            <span>Multiplayer</span><strong>${this.renderMultiplayerStatusLine()}</strong>
           </div>
         </section>
-        <section class="hq-station-grid">
-          ${stationCards}
+        <section class="hq-runner-stage">
+          <div class="hq-stage-ring"></div>
+          ${this.renderHQPlayerPreview()}
+          <div class="hq-runner-summary">
+            <span>Current Runner</span>
+            <strong>${this.classManager.selectedClass.displayName}</strong>
+            <div>
+              <span>Outfit</span><strong>${this.cosmeticManager.getEquippedName("outfit")}</strong>
+              <span>Primary</span>${primaryWeaponMarkup}
+              <span>Sidearm</span><button type="button" class="hq-inline-link" data-action="hq-inspect-sidearm">${sidearmName}</button>
+              <span>EVA Pack</span><strong>${this.loadoutManager.raidBagUsedSlots}/${this.loadoutManager.raidBagCapacity} ready</strong>
+            </div>
+          </div>
         </section>
-        <section class="hq-intel-ticker">
-          <strong>Intel Feed</strong>
-          <span>${this.environmentState.label} crater conditions queued. Faint ${themeConfig.enemyCollectiveName} signatures are rising below the regolith. Darkness makes them visible; light does not make them gone. ${this.renderMultiplayerStatusLine()}</span>
+        <section class="hq-deploy-panel">
+          <span>Selected Operation</span>
+          <strong>${this.selectedRaidDefinition.name}</strong>
+          <p>${this.selectedRaidDefinition.description}</p>
+          <div>
+            <span>Mode</span><strong>Solo / Co-op Ready</strong>
+            <span>Gear</span><strong>${gearScore} / ${this.selectedRaidDefinition.recommendedGearScore} ${loadoutReady}</strong>
+            <span>Ship</span><strong>${this.shipState.statusLabel}</strong>
+            <span>Objective</span><strong>${activeContractLabel}</strong>
+          </div>
+          <button type="button" class="hq-deploy-button" data-action="start">DEPLOY</button>
+          <button type="button" class="hq-secondary-deploy" data-action="multiplayer-start">Deploy Multiplayer</button>
         </section>
       </div>
-      <div class="main-menu-actions debug-actions">
-        <button type="button" data-action="debug-grant-resources">Grant Test Resources</button>
-        <button type="button" data-action="debug-reset-save">Reset Save / Debug</button>
-      </div>
+      <details class="debug-tools">
+        <summary>Debug / Development Tools</summary>
+        <div class="main-menu-actions debug-actions">
+          <button type="button" data-action="debug-grant-resources">Grant Test Resources</button>
+          <button type="button" data-action="debug-reset-save">Reset Save / Debug</button>
+        </div>
+      </details>
     `;
     this.bindMenuButtons();
+    this.habitatPreview.mount(this.menuContent.querySelector<HTMLElement>(".hq-runner-preview-host"), "habitat");
   }
 
   private showRaidSelectMenu(): void {
@@ -3194,82 +3842,137 @@ export class App {
 
   private showShipSystemsMenu(): void {
     this.raidScreen = "ship-systems";
-    const modules = this.shipModuleManager.installedModules;
     const cargo = this.shipModuleManager.cargoModule;
     const next = this.shipModuleManager.nextCargoModule;
-    const launchPrep = this.shipLaunchPrepSeconds().toFixed(1);
-    const heavyCargoExamples = [
-      "Helium-3 Drill Core",
-      "Lumen Relic Mass",
-      "Reactor Spindle",
-      "Black Box Survey Crate",
-      "Sealed Mining Cache",
-    ];
-    const moduleRows = modules.map((module) => `
-      <article class="loadout-details-card ship-module-card">
-        <span>${this.capitalize(module.slot)} Module</span>
-        <strong>${module.name}</strong>
-        <p>${module.description}</p>
-        <em>${module.effect}</em>
+    this.menuContent.classList.add("ship-dashboard-content");
+    const credits = this.vendorManager.snapshot.credits;
+    const scrap = this.getStashQuantity("scrap");
+    const rareCores = this.getStashQuantity("rare-core");
+    const integrityPercent = Math.max(0, Math.min(100, Math.round(this.shipState.integrity)));
+    const conditionLabel = integrityPercent >= 80 ? "GOOD" : integrityPercent >= 55 ? "SERVICEABLE" : "COMPROMISED";
+    const upgradeSlotsUsed = this.shipModuleManager.installedModules.filter((module) => module.tier > 0).length;
+    const navTabs = [
+      ["PLAY", "menu"],
+      ["LOADOUT", "hq-loadout"],
+      ["ARSENAL", "arsenal"],
+      ["SHIP", "ship-systems"],
+      ["CLASS", "class-assignment"],
+      ["SKILLS", "skill-matrix"],
+      ["STASH", "stash"],
+      ["VENDORS", "vendors"],
+      ["STYLE", "hq-style"],
+      ["CONTRACTS", "intel"],
+    ].map(([label, action]) => `<button type="button" class="${action === "ship-systems" ? "active" : ""}" data-action="${action}">${label}</button>`).join("");
+    const moduleRows = [
+      { label: cargo.name, level: `Level ${cargo.tier}`, effect: cargo.effect || "Cargo Capacity +10%", state: "installed" },
+      { label: "Standard Extraction Beacon", level: "Level 1", effect: "Extraction Speed +5% (staged)", state: "installed" },
+      { label: "Empty Slot", level: "Available", effect: "Available for installation", state: "empty" },
+      { label: "Empty Slot", level: "Available", effect: "Available for installation", state: "empty" },
+    ].map((module) => `
+      <article class="ship-dashboard-module ${module.state}">
+        <span>${module.level}</span>
+        <strong>${module.label}</strong>
+        <p>${module.effect}</p>
       </article>
     `).join("");
     const nextCost = next?.installCost ? this.formatMaterialCost(next.installCost) : "";
-
+    const statRows = [
+      ["Hull Integrity", `${integrityPercent * 10} / 1000`],
+      ["Cargo Capacity", `${this.shipState.cargoUsed} / ${this.shipState.cargoCapacity}`],
+      ["Fuel Efficiency", "1.00x staged"],
+      ["Extraction Speed", "1.05x staged"],
+      ["Signal Strength", "1.10x staged"],
+      ["Heat Signature", this.shipState.cargoRisk === "secure" ? "Medium" : "Elevated"],
+      ["Upgrade Slots", `${Math.min(upgradeSlotsUsed, 4)} / 4`],
+      ["Drone Capacity", "0 / 2 staged"],
+    ].map(([label, value]) => `<div><span>${label}</span><strong>${value}</strong></div>`).join("");
+    const resourceRows = [
+      ["H3", rareCores],
+      ["Scrap Alloy", scrap],
+      ["Circuit Fragments", this.getStashQuantity("electronics")],
+      ["Lumen Essence", this.getStashQuantity("lumen-essence")],
+      ["Old Earth Components", this.getStashQuantity("encrypted-data")],
+      ["Crater Glass", this.getStashQuantity("crater-tissue")],
+      ["Credits", credits],
+    ].map(([label, value]) => `<div><span>${label}</span><strong>${typeof value === "number" ? value.toLocaleString() : value}</strong></div>`).join("");
+    const activeEffects = [
+      ["Cargo Capacity", `+${Math.max(0, cargo.cargoCapacityBonus ?? 0) || 10}% ${cargo.cargoCapacityBonus ? "active" : "staged"}`],
+      ["Extraction Speed", "+5% staged"],
+      ["Fuel Efficiency", "+5% staged"],
+    ].map(([label, value]) => `<div><span>${label}</span><strong>${value}</strong></div>`).join("");
     this.menuContent.innerHTML = `
-      <div class="inspect-screen ship-systems-screen">
-        <header class="inspect-header">
-          <div>
-            <span>Hangar Terminal</span>
-            <h2>Ship Systems</h2>
-            <p>Return craft module checks, cargo rack state, and descent diagnostics.</p>
+      <div class="ship-dashboard-screen">
+        <header class="ship-dashboard-topbar">
+          <div class="ship-dashboard-brand">
+            <span>Lunar Habitat</span>
+            <strong>${themeConfig.brand.title}</strong>
           </div>
-          <div class="inspect-currency">
-            <span>Last Landing</span><strong>${this.formatLandingQuality(this.shipState.landingQuality)}</strong>
-            <span>Cargo</span><strong>${this.shipState.cargoCapacity}</strong>
-            <span>Launch Prep</span><strong>${launchPrep}s</strong>
-            <span>Preview Model</span><strong>${this.previewModelStatus === "available" ? "Obsidian Sentinel available" : "fallback primitive"}</strong>
+          <nav aria-label="Ship systems navigation">${navTabs}</nav>
+          <div class="ship-dashboard-resources">
+            <span>Cr ${credits}</span>
+            <span>Scrap ${scrap}</span>
+            <span>H3 ${rareCores}</span>
+            <button type="button" data-action="settings">Settings</button>
           </div>
-          <button type="button" data-action="menu">Back</button>
         </header>
-        <section class="inspect-grid">
-          <article class="inspect-card weapon-preview-card">
-            <span>Ship Callsign</span>
-            <h3>BLACK DUST-01</h3>
-            <div class="weapon-silhouette ship-silhouette"></div>
-            <p>Operational status: ${this.capitalize(this.shipState.readiness)}. Cargo risk: ${this.capitalize(this.shipState.cargoRisk)}. Heavy recovery: ${this.shipManager.canStoreSpecialCargo() ? "eligible" : "unavailable"}.</p>
-          </article>
-          <article class="inspect-card stat-panel">
-            <h3>Cargo Module</h3>
-            <div><span>Installed</span><strong>${cargo.name}</strong></div>
-            <div><span>Tier</span><strong>${cargo.tier}</strong></div>
-            <div><span>Capacity Bonus</span><strong>+${cargo.cargoCapacityBonus ?? 0}</strong></div>
-            <div><span>Heavy Cargo</span><strong>${this.shipModuleManager.heavyCargoEnabled ? "Enabled" : "Locked"}</strong></div>
-            <div><span>Next Capacity</span><strong>${next ? 12 + (next.cargoCapacityBonus ?? 0) : this.shipState.cargoCapacity}</strong></div>
-            ${next ? `<button type="button" data-action="ship-upgrade-cargo">Upgrade: ${next.name} (${nextCost})</button>` : "<button type=\"button\" disabled>Max Tier</button>"}
-          </article>
-          <article class="inspect-card attachment-panel">
-            <h3>Installed Modules</h3>
-            <div class="ship-module-grid">${moduleRows}</div>
-          </article>
-          <article class="inspect-card repair-panel">
-            <h3>Recovery Frame</h3>
-            <p>${this.shipModuleManager.heavyCargoEnabled ? "Oversized recovery compatible." : "Cargo frame insufficient for oversized recovery."}</p>
-            <div class="ship-recovery-list">
-              ${heavyCargoExamples.map((label) => `<span>${label}</span>`).join("")}
+        <aside class="ship-identity-panel">
+          <span>Ship Identity</span>
+          <strong>KESTREL-9</strong>
+          <b>PROSPECTOR CLASS</b>
+          <p>A refurbished extraction craft built for survival in the most inhospitable places. The past of this ship is unknown.</p>
+          <div class="ship-condition-meter">
+            <span>Ship Condition</span>
+            <strong>${integrityPercent}%</strong>
+            <i><em style="width: ${integrityPercent}%"></em></i>
+            <b>${conditionLabel}</b>
+          </div>
+          <div class="ship-live-state">
+            <span>Landing</span><strong>${this.formatLandingQuality(this.shipState.landingQuality)}</strong>
+            <span>Readiness</span><strong>${this.capitalize(this.shipState.readiness)}</strong>
+            <span>Heavy Cargo</span><strong>${this.shipManager.canStoreSpecialCargo() ? "Eligible" : "Unavailable"}</strong>
+          </div>
+        </aside>
+        <main class="ship-overview-panel">
+          <header>
+            <span>Ship Overview</span>
+            <strong>KESTREL-9 // EXTRACTION READY</strong>
+          </header>
+          <div class="ship-preview-stage">
+            <div class="kestrel-silhouette"><i></i><b></b><em></em></div>
+            <div>
+              <span>Kestrel-9</span>
+              <strong>Prospector Extraction Craft</strong>
+              <p>${this.shipState.statusLabel}. Cargo risk ${this.capitalize(this.shipState.cargoRisk)}. Heavy recovery ${this.shipModuleManager.heavyCargoEnabled ? "frame online" : "frame pending"}.</p>
             </div>
-          </article>
-          <article class="inspect-card repair-panel">
-            <h3>Repair Doctrine</h3>
-            <p><b>Quick Patch:</b> cheap stabilization. Risk messaging may remain.</p>
-            <p><b>Full Stabilize:</b> higher material cost. Clears or reduces operational warnings.</p>
-            <p>Raid repair still spends carried EVA Pack materials first.</p>
-          </article>
-          <article class="inspect-card repair-panel">
-            <h3>Phase Notes</h3>
-            <p>Descent sequence: extended. Landing skip: K during descent only.</p>
-            <p>Launch prep: personal ship route uses existing return countdown with landing-quality timing hooks.</p>
-            <p>Multiplayer authority: room landing quality is accepted when present; full ship cargo/repair sync remains future work.</p>
-          </article>
+          </div>
+          <section class="ship-dashboard-modules">${moduleRows}</section>
+          ${next ? `<button type="button" class="ship-upgrade-button" data-action="ship-upgrade-cargo">Upgrade Cargo: ${next.name} (${nextCost})</button>` : `<button type="button" class="ship-upgrade-button" disabled>Cargo Module Max Tier</button>`}
+        </main>
+        <aside class="ship-stat-panel">
+          <section>
+            <span>Ship Statistics</span>
+            ${statRows}
+          </section>
+          <section>
+            <span>Resources</span>
+            ${resourceRows}
+          </section>
+          <section>
+            <span>Active Effects</span>
+            ${activeEffects}
+          </section>
+        </aside>
+        <section class="ship-alert-rail">
+          <span>System Alerts</span>
+          <b>Minor Hull Damage Detected</b>
+          <b>Signal Interference Increases Extraction Risk</b>
+        </section>
+        <section class="ship-mission-panel">
+          <span>Next Mission</span>
+          <strong>Crater Exploration</strong>
+          <div><span>Risk</span><b>Moderate</b></div>
+          <div><span>Travel Cost</span><b>120 H3</b></div>
+          <button type="button" data-action="start">Launch Mission</button>
         </section>
       </div>
     `;
@@ -3277,44 +3980,100 @@ export class App {
   }
 
   private showClassAssignmentMenu(): void {
+    this.showPreDeploymentClassMenu("assignment");
+  }
+
+  private showPreDeploymentClassMenu(mode: "assignment" | "solo" | "multiplayer" = "assignment"): void {
     this.raidScreen = "class-assignment";
+    this.preDeploymentMode = mode;
+    this.menuContent.classList.remove("hq-command-content");
+    this.menuContent.classList.add("class-deploy-content");
     const selectedClassId = this.classManager.snapshot.selectedClassId;
+    const selectedClass = this.classManager.selectedClass;
+    const gearScore = this.getGearScore();
+    const primaryWeapon = this.loadout.snapshot.primaryWeaponId;
+    const primaryLabel = primaryWeapon ? weaponDefinitions[primaryWeapon].name : "None";
+    const sidearmLabel = weaponDefinitions[this.loadout.snapshot.sidearmWeaponId].name;
+    const modeLabel = mode === "multiplayer" ? "Multiplayer Crater Run" : mode === "solo" ? "Solo Crater Run" : "Assignment Review";
+    const deployAction = mode === "multiplayer" ? "class-deploy-multiplayer" : "class-deploy-solo";
+    const deployLabel = mode === "multiplayer" ? "Deploy Multiplayer" : "Deploy";
     const cards = classDefinitions.map((definition) => `
-      <article class="class-card ${definition.id === selectedClassId ? "active" : ""}">
+      <button
+        type="button"
+        class="class-choice ${definition.id === selectedClassId ? "active" : ""}"
+        data-action="class-select-${definition.id}"
+        ${definition.unlocked ? "" : "disabled"}
+      >
         <span>${definition.roleLabel}</span>
         <strong>${definition.displayName}</strong>
-        <p>${definition.shortDescription}</p>
-        <small>${definition.startingTendency}</small>
-        <em>Future branches: ${definition.futureSkillBranches.join(" / ")}</em>
-        <button type="button" data-action="class-select-${definition.id}" ${definition.unlocked ? "" : "disabled"}>
-          ${definition.id === selectedClassId ? "Assigned" : "Select Assignment"}
-        </button>
-      </article>
+        <small>${definition.id === selectedClassId ? "Selected" : "Available"}</small>
+      </button>
     `).join("");
 
     this.menuContent.innerHTML = `
-      <div class="inspect-screen progression-screen">
-        <header class="inspect-header">
+      <div class="class-deploy-screen">
+        <header class="class-deploy-topbar">
           <div>
-            <span>Habitat Operations</span>
-            <h2>Class Assignment</h2>
-            <p>Local role planning for crater work. Trait effects remain pending calibration.</p>
+            <span>${themeConfig.brand.title}</span>
+            <strong>Deployment Assignment</strong>
           </div>
-          <div class="inspect-currency">
-            <span>Selected</span><strong>${this.classManager.selectedClass.displayName}</strong>
-            <span>Skill Points</span><strong>${this.skillManager.snapshot.availableSkillPoints}</strong>
+          <div>
+            <span>${modeLabel}</span>
+            <span>${this.selectedRaidDefinition.name}</span>
           </div>
           <button type="button" data-action="menu">Back</button>
         </header>
-        <section class="class-grid">${cards}</section>
-      </div>
-      <div class="main-menu-actions">
-        <button type="button" data-action="skill-matrix">Skill Matrix</button>
-        <button type="button" data-action="loadout">Loadout</button>
-        <button type="button" data-action="menu">Back to Habitat</button>
+        <section class="class-deploy-brief">
+          <span>Operation</span>
+          <strong>${this.selectedRaidDefinition.name}</strong>
+          <p>${this.selectedRaidDefinition.description}</p>
+          <div>
+            <span>Mode</span><b>${modeLabel}</b>
+            <span>Gear</span><b>${gearScore} / ${this.selectedRaidDefinition.recommendedGearScore}</b>
+            <span>Ship</span><b>${this.shipState.statusLabel}</b>
+          </div>
+        </section>
+        <section class="class-deploy-stage">
+          <div class="class-stage-light"></div>
+          <div class="class-runner-preview-host" aria-label="Class assignment runner preview">
+            ${this.renderHQPlayerPreview()}
+          </div>
+          <div class="class-selected-copy">
+            <span>Selected Class</span>
+            <strong>${selectedClass.displayName}</strong>
+            <p>${selectedClass.shortDescription}</p>
+            <small>${selectedClass.startingTendency}</small>
+          </div>
+        </section>
+        <section class="class-deploy-detail">
+          <span>Readiness</span>
+          <strong>${selectedClass.roleLabel}</strong>
+          <p>${this.escapeHtml(selectedClass.shortDescription)}</p>
+          <div class="class-readiness-grid">
+            <span>Primary</span><b>${primaryLabel}</b>
+            <span>Sidearm</span><b>${sidearmLabel}</b>
+            <span>EVA Pack</span><b>${this.loadoutManager.raidBagUsedSlots}/${this.loadoutManager.raidBagCapacity}</b>
+            <span>Route</span><b>${this.selectedRaidDefinition.craterZone}</b>
+          </div>
+        </section>
+        <nav class="class-choice-rail" aria-label="Class choices">
+          ${cards}
+        </nav>
+        <section class="class-action-rail">
+          <button type="button" data-action="menu">Return to Habitat</button>
+          <button type="button" data-action="raid-select">Change Operation</button>
+          <button type="button" data-action="class-review-loadout">Review Loadout</button>
+          ${mode === "assignment"
+            ? `<button type="button" class="class-primary-action" data-action="class-confirm-assignment">Confirm Assignment</button>`
+            : `<button type="button" class="class-primary-action" data-action="${deployAction}">${deployLabel}</button>`}
+        </section>
+        <section class="class-progression-strip" aria-label="Deployment steps">
+          <b>Class</b><b>Loadout</b><b>Ship Prep</b><b>Deploy</b>
+        </section>
       </div>
     `;
     this.bindMenuButtons();
+    this.habitatPreview.mount(this.menuContent.querySelector<HTMLElement>(".class-runner-preview-host .hq-runner-preview-host"), "class-selection");
   }
 
   private showSkillMatrixMenu(): void {
@@ -3389,6 +4148,12 @@ export class App {
     return `${status.status} | ${room} | ${status.playerCount}/${status.maxPlayers} runners | ${status.lifecycle} | ${ping}`;
   }
 
+  private getLootRoutingMode(status: MultiplayerConnectionSnapshot): string {
+    if (!this.multiplayerMode) return "LOCAL";
+    if (status.status !== "connected") return "DISCONNECTED";
+    return status.sharedWorldSupported ? "SERVER" : "UNSUPPORTED";
+  }
+
   private detectObsidianSentinelPreview(): PreviewModelStatus {
     const path = "/models/player/obsidianSentinelPlayer.glb";
     void fetch(path, { method: "HEAD" })
@@ -3415,15 +4180,17 @@ export class App {
     ].join("; ");
 
     return `
-      <div class="raider-preview hq-raider-preview" aria-label="HQ Crater Runner preview" style="${style}">
-        <div class="preview-backpack"></div>
-        <div class="preview-head"><span></span></div>
-        <div class="preview-torso"><i></i></div>
-        <div class="preview-arm left"></div>
-        <div class="preview-arm right"></div>
-        <div class="preview-leg left"></div>
-        <div class="preview-leg right"></div>
-        <div class="preview-weapon"></div>
+      <div class="hq-runner-preview-host" aria-label="HQ Crater Runner preview">
+        <div class="raider-preview hq-raider-preview" style="${style}">
+          <div class="preview-backpack"></div>
+          <div class="preview-head"><span></span></div>
+          <div class="preview-torso"><i></i></div>
+          <div class="preview-arm left"></div>
+          <div class="preview-arm right"></div>
+          <div class="preview-leg left"></div>
+          <div class="preview-leg right"></div>
+          <div class="preview-weapon"></div>
+        </div>
       </div>
       <small class="preview-model-status">Preview Model: ${this.previewModelStatus === "available" ? "Obsidian Sentinel available" : "fallback primitive"}</small>
     `;
@@ -3433,10 +4200,6 @@ export class App {
     const palette = this.cosmeticManager.getPalette();
     this.player.applyCosmeticPalette(palette);
     this.weaponController.applyWrapColor(palette.accent);
-  }
-
-  private formatHQStation(stationId: HQStationId): string {
-    return hqStations.find((station) => station.id === stationId)?.title ?? "Crater Runs";
   }
 
   private getGearScore(): number {
@@ -3974,9 +4737,7 @@ export class App {
         ${body}
         <div class="main-menu-actions">
           <button type="button" data-action="start">Crater Runs</button>
-          <button type="button" data-action="inspect">Inspect Weapon</button>
           <button type="button" data-action="workbench">Fabrication Bench</button>
-          <button type="button" data-action="settings">Settings</button>
           <button type="button" data-action="menu">Back</button>
         </div>
       `;
@@ -4015,7 +4776,7 @@ export class App {
         ${this.renderLoadoutHero()}
         ${this.renderPlayerPreviewPanel()}
         <section class="equipped-gear-panel">
-          <h3>Equipped Gear</h3>
+          <h3>Equipped Slots</h3>
           <div class="gear-slot-grid">${gearSlots}</div>
         </section>
         <section class="stash-inventory-panel">
@@ -4204,9 +4965,8 @@ export class App {
           <button type="button" data-action="${type ? `loadout-select-${type}` : "noop"}">
             <span>${equipmentSlotLabels[slot]}</span>
             <strong>${label}</strong>
-            ${locked ? "<small>Free starter</small>" : `<small>${definition?.rarity ?? "empty"}</small>`}
+            ${locked ? "<small>Free starter | Inspect in details</small>" : `<small>${definition?.rarity ?? "empty"}${weaponIdFromLootType(type ?? "scrap") ? " | Inspect in details" : ""}</small>`}
           </button>
-          ${!locked ? `<button type="button" data-action="loadout-unequip-${slot}">Unequip</button>` : ""}
         </div>
       `;
     }).join("");
@@ -4270,11 +5030,18 @@ export class App {
     const attachmentStats = attachment
       ? `<div><span>Attachment Slot</span><strong>${this.formatSlotName(attachment.slot)}</strong></div><div><span>Effect</span><strong>${attachment.description}</strong></div>`
       : "";
+    const equippedSlot = this.getEquippedSlotForLootType(type);
+    const weaponInspectAction = weaponId
+      ? `<button type="button" data-action="loadout-inspect-selected">Inspect Weapon</button>`
+      : "";
+    const unequipAction = equippedSlot
+      ? `<button type="button" data-action="loadout-unequip-${equippedSlot}">Unequip</button>`
+      : "";
 
     return `
       <article class="loadout-details-card" style="--rarity-color: ${color}">
         <strong>${definition.label}</strong>
-        <span>${definition.rarity.toUpperCase()} ${definition.category}</span>
+        <span>${definition.rarity.toUpperCase()} ${definition.category}${equippedSlot ? ` | Equipped ${equipmentSlotLabels[equippedSlot]}` : ""}</span>
         <p>${definition.description}</p>
         <div><span>Use</span><strong>${definition.use}</strong></div>
         <div><span>Value</span><strong>${definition.value}</strong></div>
@@ -4283,12 +5050,53 @@ export class App {
         ${attachmentStats}
         <em>Items brought into a Crater Run are lost on death unless they are free starter gear.</em>
         <footer>
+          ${weaponInspectAction}
           <button type="button" data-action="loadout-equip-selected">Equip</button>
+          ${unequipAction}
           <button type="button" data-action="loadout-bag-selected">Move to EVA Pack</button>
           <button type="button" data-action="loadout-discard-selected">Discard</button>
         </footer>
       </article>
     `;
+  }
+
+  private getEquippedSlotForLootType(type: LootType): EquipmentSlot | null {
+    const manager = this.loadoutManager.snapshot;
+    const loadout = this.loadout.snapshot;
+
+    if (loadout.primaryWeaponId && weaponLootTypes[loadout.primaryWeaponId] === type) {
+      return "primary";
+    }
+
+    if (weaponLootTypes[loadout.sidearmWeaponId] === type) {
+      return "sidearm";
+    }
+
+    if (loadout.meleeWeaponId && weaponLootTypes[loadout.meleeWeaponId] === type) {
+      return "melee";
+    }
+
+    if (manager.armorType === type) {
+      return "armor";
+    }
+
+    if (manager.backpackType === type) {
+      return "backpack";
+    }
+
+    if (manager.tacticalToolType === type) {
+      return "tactical";
+    }
+
+    if (manager.consumable1Type === type) {
+      return "consumable1";
+    }
+
+    if (manager.consumable2Type === type) {
+      return "consumable2";
+    }
+
+    return null;
   }
 
   private renderWeaponDetails(weaponId: WeaponId): string {
@@ -4315,12 +5123,17 @@ export class App {
     return filter.charAt(0).toUpperCase() + filter.slice(1);
   }
 
-  private showInspectWeaponMenu(context: "inspect" | "arsenal" = "inspect"): void {
+  private showInspectWeaponMenu(context: "inspect" | "arsenal" | "habitat" = "inspect"): void {
+    this.inspectWeaponContext = context;
     this.raidScreen = context === "arsenal" ? "arsenal" : "inspect";
     this.loadout.clampToStash(this.persistentStash.items);
     const weaponId = this.resolveInspectedWeaponId();
-    const headerEyebrow = context === "arsenal" ? "Weapon Systems" : "Weapon Bench";
-    const headerBackAction = context === "arsenal" ? "menu" : "loadout";
+    const headerEyebrow = context === "arsenal"
+      ? "Weapon Systems"
+      : context === "habitat"
+        ? "Equipped Weapon"
+        : "Weapon Bench";
+    const headerBackAction = context === "arsenal" || context === "habitat" ? "menu" : "loadout";
 
     if (!weaponId) {
       this.menuContent.innerHTML = `
@@ -5345,6 +6158,13 @@ export class App {
   private readonly handleMenuClick = (event: Event): void => {
     const button = event.currentTarget as HTMLButtonElement;
     const action = button.dataset.action;
+    if (action !== "debug-grant-resources" && action !== "debug-reset-save") {
+      this.habitatPreview.dispose();
+    }
+    this.sfxAudio.playEvent(action === "start" || action === "multiplayer-start" || action?.startsWith("launch-raid-") || action?.startsWith("class-deploy-")
+      ? "ui.deploy"
+      : action === "settings" ? "ui.play" : "ui.nav");
+    this.menuContent.classList.remove("hq-command-content", "class-deploy-content", "ship-dashboard-content");
 
     if (this.isPurchaseLikeAction(action) && !this.consumePurchaseActionClick()) {
       return;
@@ -5352,19 +6172,41 @@ export class App {
 
     if (action === "start") {
       this.hqManager.open("raid-terminal");
-      this.showRaidSelectMenu();
+      this.showPreDeploymentClassMenu("solo");
     } else if (action === "multiplayer-start") {
-      void this.startMultiplayerRaid();
+      this.hqManager.open("raid-terminal");
+      this.showPreDeploymentClassMenu("multiplayer");
     } else if (action?.startsWith("launch-raid-")) {
       const raidId = action.replace("launch-raid-", "") as RaidTierId;
       this.selectedRaidDefinition = raidDefinitionById[raidId] ?? defaultRaidDefinition;
+      this.showPreDeploymentClassMenu("solo");
+    } else if (action === "class-deploy-solo") {
       this.startRaid(false);
+    } else if (action === "class-deploy-multiplayer") {
+      void this.startMultiplayerRaid();
+    } else if (action === "raid-select") {
+      this.hqManager.open("raid-terminal");
+      this.showRaidSelectMenu();
     } else if (action === "noop") {
       return;
     } else if (action === "hq-loadout") {
       this.hqManager.open("loadout-locker");
       this.loadoutTab = "gear";
       this.showLoadoutMenu();
+    } else if (action === "hq-inspect-primary") {
+      const weaponId = this.loadout.snapshot.primaryWeaponId;
+      if (weaponId) {
+        this.inspectedWeaponId = weaponId;
+        this.loadoutManager.select(weaponLootTypes[weaponId]);
+        this.showInspectWeaponMenu("habitat");
+      } else {
+        this.combatHud.showLootNotification("No primary weapon equipped");
+      }
+    } else if (action === "hq-inspect-sidearm") {
+      const weaponId = this.loadout.snapshot.sidearmWeaponId;
+      this.inspectedWeaponId = weaponId;
+      this.loadoutManager.select(weaponLootTypes[weaponId]);
+      this.showInspectWeaponMenu("habitat");
     } else if (action === "hq-style") {
       this.hqManager.open("style-locker");
       this.loadoutTab = "cosmetics";
@@ -5381,7 +6223,14 @@ export class App {
     } else if (action?.startsWith("class-select-")) {
       const classId = action.replace("class-select-", "") as ClassId;
       this.combatHud.showLootNotification(this.classManager.select(classId));
-      this.showClassAssignmentMenu();
+      this.showPreDeploymentClassMenu(this.preDeploymentMode);
+    } else if (action === "class-confirm-assignment") {
+      this.combatHud.showLootNotification(`${this.classManager.selectedClass.displayName} assignment confirmed`);
+      this.showMainMenu();
+    } else if (action === "class-review-loadout") {
+      this.hqManager.open("loadout-locker");
+      this.loadoutTab = "gear";
+      this.showLoadoutMenu();
     } else if (action === "skill-matrix") {
       this.hqManager.open("skill-matrix");
       this.showSkillMatrixMenu();
@@ -5663,7 +6512,7 @@ export class App {
       this.showLoadoutMenu();
     } else if (action?.startsWith("inspect-select-")) {
       this.inspectedWeaponId = action.replace("inspect-select-", "") as WeaponId;
-      this.showInspectWeaponMenu(this.raidScreen === "arsenal" ? "arsenal" : "inspect");
+      this.showInspectWeaponMenu(this.inspectWeaponContext);
     } else if (action?.startsWith("inspect-equip-primary-")) {
       const weaponId = action.replace("inspect-equip-primary-", "") as WeaponId;
       this.inspectedWeaponId = weaponId;
@@ -5742,6 +6591,16 @@ export class App {
     } else if (action === "loadout-equip-selected") {
       this.combatHud.showLootNotification(this.loadoutManager.equipSelected(this.loadout, this.persistentStash.items));
       this.showLoadoutMenu();
+    } else if (action === "loadout-inspect-selected") {
+      const selectedType = this.loadoutManager.snapshot.selectedType;
+      const weaponId = selectedType ? weaponIdFromLootType(selectedType) : null;
+      if (weaponId && this.weaponExistsForInspect(weaponId)) {
+        this.inspectedWeaponId = weaponId;
+        this.showInspectWeaponMenu("inspect");
+      } else {
+        this.combatHud.showLootNotification("Select an equipped weapon to inspect");
+        this.showLoadoutMenu();
+      }
     } else if (action === "loadout-bag-selected") {
       this.combatHud.showLootNotification(this.loadoutManager.moveSelectedToRaidBag(this.persistentStash.items));
       this.loadoutManager.applyToLoadout(this.loadout, this.persistentStash.items);
@@ -5980,6 +6839,240 @@ export class App {
       this.combatHud.showLootNotification("Lunar Infection detected. Mental stability compromised.");
     }
   };
+
+  private readonly handleNetworkContainerState = (state: NetworkContainerState | null): void => {
+    if (!this.multiplayerMode) {
+      return;
+    }
+
+    if (!state) {
+      this.pendingSharedContainerOpenId = null;
+      this.raidBagOpen = false;
+      this.inventoryManager.setWarning("Recovery cache unavailable");
+      this.combatHud.showLootNotification("Recovery cache unavailable");
+      return;
+    }
+
+    const view = this.lootDirector.applyNetworkContainerState(state);
+    this.multiplayerClient.markContainerMapping(view !== null, false);
+    const activeContainer = this.inventoryManager.snapshot.activeContainer;
+    const isPendingOpenResponse = this.pendingSharedContainerOpenId === state.id;
+
+    if (activeContainer?.id === state.id) {
+      this.inventoryManager.refreshActiveContainer(view);
+      this.lastSharedContainerPanelId = state.id;
+      this.lastSharedContainerPanelItemCount = state.items.length;
+      this.lastSharedContainerClaimRefresh = `state refresh ${state.id} items=${state.items.length}`;
+      if (state.depleted) {
+        this.inventoryManager.setWarning("Recovery cache depleted");
+        this.combatHud.showLootNotification("Recovery cache depleted");
+      }
+      return;
+    }
+
+    if ((state.lastInteractionPlayerId === this.multiplayerClient.localPlayerId || isPendingOpenResponse) && view) {
+      this.pendingSharedContainerOpenId = null;
+      this.raidBagOpen = true;
+      this.selectedLootIndex = 0;
+      this.inventoryManager.setActiveContainer(view);
+      this.setInputMode("ui", "loot-panel");
+      this.multiplayerClient.markContainerMapping(true, true);
+      this.lastSharedContainerPanelId = state.id;
+      this.lastSharedContainerPanelItemCount = state.items.length;
+      this.lastSharedContainerClaimRefresh = `${isPendingOpenResponse ? "pending open applied" : "local open applied"} ${state.id} items=${state.items.length}`;
+      this.combatHud.showLootNotification(view.items.length > 0 ? "Recovery cache opened" : "Cache empty");
+      this.sfxAudio.playEvent(view.items.length > 0 ? "loot.open" : "loot.empty");
+      return;
+    }
+
+    if (this.pendingSharedContainerOpenId === state.id) {
+      this.pendingSharedContainerOpenId = null;
+      this.lastSharedContainerClaimRefresh = `pending open cleared ${state.id}`;
+    }
+  };
+
+  private readonly handleNetworkContainerClaimResult = (result: NetworkContainerClaimResult): void => {
+    if (!this.multiplayerMode) {
+      return;
+    }
+
+    if (result.container) {
+      const view = this.lootDirector.applyNetworkContainerState(result.container);
+      if (this.inventoryManager.snapshot.activeContainer?.id === result.container.id) {
+        this.inventoryManager.refreshActiveContainer(view);
+        this.lastSharedContainerPanelId = result.container.id;
+        this.lastSharedContainerPanelItemCount = result.container.items.length;
+        this.lastSharedContainerClaimRefresh = `claim result refresh ${result.container.id} items=${result.container.items.length} ok=${result.ok}`;
+      }
+    }
+
+    if (!result.ok) {
+      const message = result.reason === "depleted" ? "Item no longer available" : "Recovery claim failed";
+      this.inventoryManager.setWarning(message);
+      this.combatHud.showLootNotification(message);
+      this.multiplayerClient.markInventoryAddApplied(false);
+      return;
+    }
+
+    if (result.claimantPlayerId !== this.multiplayerClient.localPlayerId) {
+      this.multiplayerClient.markInventoryAddApplied(false);
+      return;
+    }
+
+    const events: LootEvent[] = [];
+    for (const item of result.claimedItems) {
+      if (!this.isLootType(item.type)) {
+        console.warn(`[Multiplayer Loot] Unknown approved loot type: ${item.type}`);
+        continue;
+      }
+      const type = item.type as LootType;
+      const event = this.inventoryManager.add(type, item.quantity);
+      if (event) {
+        events.push(event);
+      }
+    }
+
+    if (events.length === 0) {
+      this.inventoryManager.setWarning("Inventory Full");
+      this.combatHud.showLootNotification("Inventory Full");
+      this.multiplayerClient.markInventoryAddApplied(false);
+      return;
+    }
+
+    this.inventoryManager.clearWarning();
+    this.applyLootRewards(events);
+    this.multiplayerClient.markInventoryAddApplied(true);
+    this.combatHud.showLootNotification(events.length === 1 ? `Recovered: ${events[0]!.label}` : `Recovered: ${events.length} items`);
+    this.sfxAudio.playEvent(events.some((event) => getItemDefinition(event.type).rarity === "rare" || getItemDefinition(event.type).rarity === "epic" || getItemDefinition(event.type).rarity === "legendary" || getItemDefinition(event.type).rarity === "core")
+      ? "loot.rare"
+      : "loot.claim");
+  };
+
+  private readonly handleNetworkObjectiveState = (state: NetworkObjectiveState): void => {
+    if (!this.multiplayerMode || !state.completed) {
+      return;
+    }
+
+    const changed = this.poiObjectiveManager.completeFromNetwork(state.id);
+    if (changed) {
+      this.networkAppliedPoiObjectiveIds.add(state.id);
+    }
+    if (
+      state.extractionUnlocked &&
+      !this.objectiveWasCompleted &&
+      (this.objectiveState.type !== "secure-rare-core" || this.heavyCargoState.shipSecured)
+    ) {
+      this.objectiveWasCompleted = true;
+      this.updateActiveExtractionZones();
+      this.shipState = this.shipManager.updateExtractionReadiness(true);
+      this.combatHud.showLootNotification("Return route available");
+    }
+
+    if (!changed) {
+      return;
+    }
+
+    this.poiObjectiveState = this.poiObjectiveManager.state;
+  };
+
+  private readonly handleNetworkHeavyCargoState = (state: NetworkHeavyCargoState): void => {
+    this.heavyCargoManager.applyNetworkState(state, this.multiplayerClient.localPlayerId);
+    this.lastHeavyCargoRoomId = this.multiplayerClient.snapshot.roomId;
+    this.pendingHeavyCargoRequest = "none";
+    const previousSecured = this.heavyCargoState.shipSecured;
+    const previousCarried = this.heavyCargoState.carriedByLocalPlayer;
+    const previousStatus = this.heavyCargoState.status;
+    this.heavyCargoState = this.heavyCargoManager.update(this.player.state, this.landedShip.cargoAccessPosition);
+
+    if (!previousCarried && this.heavyCargoState.carriedByLocalPlayer) {
+      this.onHeavyCargoPickedUp();
+    } else if (previousStatus !== "carried" && this.heavyCargoState.status === "carried") {
+      this.combatHud.showLootNotification("CORE SIGNATURE EXPOSED | ESCORT CARRIER TO SHIP");
+    }
+
+    if (!previousSecured && this.heavyCargoState.shipSecured) {
+      this.onHeavyCargoSecured();
+    }
+  };
+
+  private readonly handleNetworkHeavyCargoActionResult = (result: NetworkHeavyCargoActionResult): void => {
+    if (!this.multiplayerMode) {
+      return;
+    }
+    if (result.cargo) {
+      this.heavyCargoManager.applyNetworkState(result.cargo, this.multiplayerClient.localPlayerId);
+      this.heavyCargoState = this.heavyCargoManager.update(this.player.state, this.landedShip.cargoAccessPosition);
+      this.lastHeavyCargoRoomId = this.multiplayerClient.snapshot.roomId;
+    }
+    this.pendingHeavyCargoRequest = "none";
+
+    if (result.ok) {
+      if (result.reason === "released") {
+        this.combatHud.showLootNotification("HEAVY CORE RELEASED | E: Carry core");
+        this.sfxAudio.playEvent("heavy.release");
+      } else if (result.reason === "dropped") {
+        this.combatHud.showLootNotification("CORE DROPPED - RECOVERABLE");
+        this.sfxAudio.playEvent("heavy.drop");
+      } else if (result.reason === "secured") {
+        this.combatHud.showLootNotification("HEAVY CARGO SECURED | HELIUM-3 DRILL CORE | EXTRACTION AVAILABLE");
+        this.sfxAudio.playEvent("heavy.secure");
+      }
+      return;
+    }
+
+    const message = this.formatHeavyCargoRejection(result.reason);
+    this.inventoryManager.setWarning(message);
+    this.combatHud.showLootNotification(message);
+    this.sfxAudio.playEvent("ui.error");
+  };
+
+  private formatHeavyCargoRejection(reason: NetworkHeavyCargoActionResult["reason"]): string {
+    if (reason === "busy" || reason === "already-carried") return "CORE ALREADY CARRIED BY TEAMMATE";
+    if (reason === "locked") return "CORE NOT RELEASED";
+    if (reason === "not-carrier") return "CORE TRANSFER REJECTED";
+    if (reason === "already-secured") return "CORE ALREADY SECURED";
+    if (reason === "out-of-range") return "CORE ACTION OUT OF RANGE";
+    if (reason === "missing") return "CORE RECOVERY UNAVAILABLE - SERVER NOT READY";
+    if (reason === "dropped") return "CORE DROP REJECTED";
+    if (reason === "secured") return "CORE TRANSFER REJECTED";
+    return "CORE PICKUP REJECTED";
+  }
+
+  private readonly handleNetworkReviveResult = (result: NetworkReviveResult): void => {
+    const localId = this.multiplayerClient.localPlayerId;
+    if (result.ok) {
+      if (result.targetPlayerId === localId) {
+        this.playerHealth.setCurrentFromServer(result.targetHealth);
+        this.multiplayerDownedSent = false;
+        this.combatHud.showLootNotification("REVIVED - SUIT STABILITY LIMITED");
+        this.sfxAudio.playEvent("revive.complete");
+      } else {
+        this.combatHud.showLootNotification("TEAMMATE REVIVED");
+        this.sfxAudio.playEvent("revive.complete");
+      }
+      this.reviveTargetId = null;
+      this.reviveProgressSeconds = 0;
+      return;
+    }
+
+    const message = this.formatReviveRejection(result.reason);
+    this.reviveProgressSeconds = 0;
+    this.combatHud.showLootNotification(message);
+    this.sfxAudio.playEvent("ui.error");
+  };
+
+  private formatReviveRejection(reason: NetworkReviveResult["reason"]): string {
+    if (reason === "out-of-range") return "REVIVE CANCELLED - OUT OF RANGE";
+    if (reason === "not-downed") return "REVIVE CANCELLED - TARGET ACTIVE";
+    if (reason === "reviver-not-active") return "REVIVE CANCELLED - REVIVER DOWN";
+    if (reason === "self") return "CANNOT REVIVE SELF";
+    if (reason === "target-missing") return "REVIVE CANCELLED - TARGET LEFT";
+    return "REVIVE FAILED";
+  }
+
+  private isLootType(type: string): type is LootType {
+    return type in itemDefinitions;
+  }
 
   private formatDelta(delta: number): string {
     return delta >= 0 ? `+${delta}` : String(delta);

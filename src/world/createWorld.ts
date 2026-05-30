@@ -14,6 +14,7 @@ import {
   mapLayoutConfig,
   poiDefinitions,
 } from "./MapLayout";
+import { createTychoScarVisualSlice } from "./TychoScarVisualSlice";
 import { themeConfig } from "../theme/ThemeConfig";
 
 export type WorldMap = Readonly<{
@@ -28,8 +29,10 @@ export const createWorld = (scene: Scene): WorldMap => {
   createGround(scene);
   createGroundGrid(scene);
   createArenaWalls(scene);
+  createLunarTerrainVariation(scene);
   createPoiPads(scene);
   createMapProps(scene);
+  createTychoScarVisualSlice(scene);
   const extractionMeshes = createExtractionZones(scene);
   const contractVariantMeshes = createContractVariantMarkers(scene);
 
@@ -76,7 +79,7 @@ const createGround = (scene: Scene): void => {
 };
 
 const createGroundGrid = (scene: Scene): void => {
-  const gridColor = themeConfig.colors.cyan.scale(0.16);
+  const gridColor = themeConfig.colors.cyan.scale(0.055);
 
   for (let i = -halfMapSize; i <= halfMapSize; i += 10) {
     const xLine = MeshBuilder.CreateLines(
@@ -151,7 +154,7 @@ const createPoiPads = (scene: Scene): void => {
       `${poi.id}-ground-material`,
       colors[poi.id] ?? new Color3(0.3, 0.3, 0.3),
     );
-    material.alpha = 0.62;
+    material.alpha = 0.28;
 
     const pad = MeshBuilder.CreateCylinder(
       `${poi.id}-poi-area`,
@@ -182,6 +185,297 @@ const createMapProps = (scene: Scene): void => {
   createStylizedRouteDressing(scene);
   createDystopianCityDressing(scene);
   createCoverRoutes(scene, concrete, cargo, wood);
+  createExpandedPoiAnchors(scene, concrete, cargo, wood, tarp, shack);
+  createShipLandingMarker(scene);
+  createRouteFlowPolish(scene, concrete, cargo, wood);
+};
+
+const poiCenter = (id: string): Vector3 => poiDefinitions.find((poi) => poi.id === id)?.center.clone() ?? Vector3.Zero();
+
+const createLunarTerrainVariation = (scene: Scene): void => {
+  const moundMaterial = createMaterial(scene, "lunar-mound-material", new Color3(0.08, 0.1, 0.14), themeConfig.colors.cyan.scale(0.018));
+  moundMaterial.alpha = 0.86;
+  const ridgeMaterial = createMaterial(scene, "lunar-ridge-material", new Color3(0.12, 0.14, 0.18), themeConfig.colors.cyan.scale(0.02));
+  const rockMaterial = createMaterial(scene, "lunar-rock-cluster-material", new Color3(0.16, 0.18, 0.22), themeConfig.colors.purple.scale(0.018));
+  const dustMaterial = createMaterial(scene, "lunar-dust-field-material", new Color3(0.09, 0.11, 0.13), themeConfig.colors.cyan.scale(0.012));
+  dustMaterial.alpha = 0.52;
+
+  const mounds = [
+    [-126, -54, 22, 0.08],
+    [-118, 68, 28, 0.1],
+    [-82, 116, 24, 0.09],
+    [-48, -104, 30, 0.08],
+    [38, -122, 28, 0.1],
+    [102, -64, 34, 0.09],
+    [116, 42, 26, 0.08],
+    [54, 102, 32, 0.1],
+    [-16, 122, 22, 0.08],
+    [18, -54, 26, 0.07],
+  ] as const;
+
+  for (const [x, z, diameter, height] of mounds) {
+    const mound = MeshBuilder.CreateCylinder(
+      `lunar-crater-mound-${x}-${z}`,
+      { height, diameter, tessellation: 40 },
+      scene,
+    );
+    mound.position.set(x, height / 2 + 0.018, z);
+    mound.material = moundMaterial;
+    mound.checkCollisions = false;
+    mound.metadata = { gameplayTag: "terrain-mound" };
+  }
+
+  const dustFields = [
+    [-102, -96, 26, 18, 0.18],
+    [-38, -68, 30, 14, -0.24],
+    [34, -40, 34, 16, 0.1],
+    [82, -16, 28, 18, -0.35],
+    [-72, 46, 34, 14, 0.42],
+    [48, 70, 32, 16, -0.18],
+  ] as const;
+
+  for (const [x, z, width, depth, yaw] of dustFields) {
+    const field = createBox(
+      scene,
+      `lunar-dust-field-${x}-${z}`,
+      new Vector3(x, 0.028, z),
+      new Vector3(width, 0.035, depth),
+      dustMaterial,
+      "terrain-dust",
+    );
+    field.rotation.y = yaw;
+    field.checkCollisions = false;
+  }
+
+  const ridges = [
+    [-80, -68, 42, 0.32],
+    [-20, -86, 38, -0.22],
+    [42, -78, 46, 0.18],
+    [78, 6, 52, -0.34],
+    [8, 54, 44, 0.42],
+    [-78, 28, 48, -0.18],
+    [-118, 16, 36, 0.28],
+  ] as const;
+
+  for (const [x, z, length, yaw] of ridges) {
+    const ridge = createBox(
+      scene,
+      `lunar-ridge-line-${x}-${z}`,
+      new Vector3(x, 0.16, z),
+      new Vector3(length, 0.22, 1.8),
+      ridgeMaterial,
+      "terrain-ridge",
+    );
+    ridge.rotation.y = yaw;
+    ridge.checkCollisions = false;
+  }
+
+  const rocks = [
+    [-124, -18, 2.6, 1.3],
+    [-92, 20, 3.2, 1.6],
+    [-54, -92, 2.4, 1.1],
+    [-26, 106, 3.8, 1.8],
+    [22, 88, 2.8, 1.4],
+    [48, -112, 3.4, 1.8],
+    [82, -72, 2.6, 1.4],
+    [112, 12, 3.2, 1.5],
+    [104, 86, 4.2, 2.0],
+    [-126, 100, 3.4, 1.7],
+  ] as const;
+
+  for (const [x, z, width, height] of rocks) {
+    createBox(
+      scene,
+      `lunar-rock-cluster-${x}-${z}`,
+      new Vector3(x, height / 2, z),
+      new Vector3(width, height, width * 0.78),
+      rockMaterial,
+      "cover",
+    );
+  }
+};
+
+const createExpandedPoiAnchors = (
+  scene: Scene,
+  concrete: StandardMaterial,
+  cargo: StandardMaterial,
+  wood: StandardMaterial,
+  tarp: StandardMaterial,
+  shack: StandardMaterial,
+): void => {
+  const signMaterial = createMaterial(scene, "expanded-poi-sign-material", new Color3(0.06, 0.1, 0.16), themeConfig.colors.cyan.scale(0.16));
+  const amber = createMaterial(scene, "expanded-poi-amber-material", new Color3(0.3, 0.16, 0.04), themeConfig.colors.orange.scale(0.24));
+  const cyan = createMaterial(scene, "expanded-poi-cyan-material", new Color3(0.04, 0.2, 0.24), themeConfig.colors.cyan.scale(0.38));
+  const Lumen = createMaterial(scene, "expanded-poi-Lumen-material", new Color3(0.12, 0.06, 0.2), themeConfig.colors.purple.scale(0.34));
+
+  const drop = poiCenter("warehouse");
+  createBox(scene, "expanded-drop-yard-slab", drop.add(new Vector3(0, 0.08, 0)), new Vector3(28, 0.16, 18), concrete, "poi-floor");
+  createBox(scene, "expanded-drop-yard-rig", drop.add(new Vector3(-8, 2.2, -7)), new Vector3(4, 4.4, 4), cargo, "cover");
+  createBox(scene, "expanded-drop-yard-crane-arm", drop.add(new Vector3(2, 4.5, -7)), new Vector3(18, 0.55, 1), amber, "poi-sign");
+  createBox(scene, "expanded-drop-yard-crates", drop.add(new Vector3(9, 1.1, 5)), new Vector3(8, 2.2, 4), cargo, "cover");
+  createPoiSign(scene, "expanded-sign-tycho-drop", "TYCHO", drop.add(new Vector3(0, 3.6, -20)), signMaterial, amber);
+
+  const gate = poiCenter("checkpoint");
+  createBox(scene, "expanded-raid-gate-left", gate.add(new Vector3(-10, 1.8, 0)), new Vector3(4, 3.6, 18), concrete, "cover");
+  createBox(scene, "expanded-raid-gate-right", gate.add(new Vector3(10, 1.8, 0)), new Vector3(4, 3.6, 18), concrete, "cover");
+  createBox(scene, "expanded-raid-gate-crossbar", gate.add(new Vector3(0, 4.3, -2)), new Vector3(26, 0.7, 1.2), amber, "poi-sign");
+  createBox(scene, "expanded-raid-gate-booth", gate.add(new Vector3(0, 1.2, 12)), new Vector3(6, 2.4, 5), concrete, "cover");
+  createPoiSign(scene, "expanded-sign-redline", "REDLINE", gate.add(new Vector3(0, 4.9, -11)), signMaterial, amber);
+
+  const camp = poiCenter("abandoned-camp");
+  createBox(scene, "expanded-camp-main-tent", camp.add(new Vector3(-7, 0.9, 2)), new Vector3(10, 1.8, 7), tarp, "cover");
+  createBox(scene, "expanded-camp-side-tent", camp.add(new Vector3(8, 0.75, -7)), new Vector3(7, 1.5, 5), tarp, "cover");
+  createBox(scene, "expanded-camp-scrap-wall", camp.add(new Vector3(0, 1.1, 13)), new Vector3(22, 2.2, 1), wood, "cover");
+  createBarrel(scene, "expanded-camp-canister-a", camp.add(new Vector3(12, 0.75, 4)), amber);
+  createPoiSign(scene, "expanded-sign-hollow", "HOLLOW", camp.add(new Vector3(-2, 3.4, 18)), signMaterial, cyan);
+
+  const signal = poiCenter("data-shack");
+  createBox(scene, "expanded-signal-shack-body", signal.add(new Vector3(0, 1.7, 0)), new Vector3(12, 3.4, 10), shack, "cover");
+  createBox(scene, "expanded-signal-antenna-mast", signal.add(new Vector3(7, 5.2, -5)), new Vector3(0.6, 10.4, 0.6), cyan, "poi-sign");
+  createBox(scene, "expanded-signal-terminal", signal.add(new Vector3(-5, 0.8, 7)), new Vector3(4, 1.6, 2), concrete, "cover");
+  createPoiSign(scene, "expanded-sign-vanta", "VANTA", signal.add(new Vector3(0, 4.2, 13)), signMaterial, cyan);
+
+  const core = poiCenter("core-pit");
+  const coreRing = MeshBuilder.CreateTorus("expanded-core-pit-outer-ring", { diameter: 34, thickness: 0.28, tessellation: 64 }, scene);
+  coreRing.position.copyFrom(core.add(new Vector3(0, 0.18, 0)));
+  coreRing.rotation.x = Math.PI / 2;
+  coreRing.material = Lumen;
+  coreRing.checkCollisions = false;
+  coreRing.metadata = { gameplayTag: "core-pit-ring" };
+  createBox(scene, "expanded-core-pit-drill-spine", core.add(new Vector3(0, 2.8, -10)), new Vector3(5, 5.6, 4), concrete, "cover");
+  createBox(scene, "expanded-core-pit-Lumen-growth", core.add(new Vector3(16, 1.8, 12)), new Vector3(4, 3.6, 8), Lumen, "cover");
+  createPoiSign(scene, "expanded-sign-basin", "BASIN", core.add(new Vector3(0, 4.3, 22)), signMaterial, Lumen);
+
+  createCable(scene, "expanded-route-ship-to-drop", [
+    mapLayoutConfig.shipLandingSitePosition.add(new Vector3(0, 0.22, 7)),
+    new Vector3(-110, 0.22, -62),
+    drop.add(new Vector3(-4, 0.22, -7)),
+  ], themeConfig.colors.orange.scale(0.72));
+  createCable(scene, "expanded-route-drop-to-core", [
+    drop.add(new Vector3(10, 0.22, 2)),
+    new Vector3(-40, 0.22, -18),
+    core.add(new Vector3(-12, 0.22, -3)),
+  ], themeConfig.colors.cyan.scale(0.66));
+  createCable(scene, "expanded-route-core-to-signal", [
+    core.add(new Vector3(-5, 0.22, 12)),
+    new Vector3(-34, 0.22, 48),
+    signal.add(new Vector3(6, 0.22, -8)),
+  ], themeConfig.colors.purple.scale(0.72));
+
+  createZipline(scene, "expanded-signal-to-core-zipline", signal.add(new Vector3(6, 7.2, -4)), core.add(new Vector3(-10, 5.0, 5)), themeConfig.colors.cyan, cyan);
+  createZipline(scene, "expanded-core-to-camp-zipline", core.add(new Vector3(12, 5.2, 6)), camp.add(new Vector3(-8, 4.2, -2)), themeConfig.colors.rootGreen, cyan);
+};
+
+const createShipLandingMarker = (scene: Scene): void => {
+  const landing = mapLayoutConfig.shipLandingSitePosition;
+  const padMaterial = createMaterial(scene, "ship-landing-pad-material", new Color3(0.08, 0.1, 0.12), themeConfig.colors.orange.scale(0.12));
+  const beaconMaterial = createMaterial(scene, "ship-landing-beacon-material", new Color3(0.28, 0.18, 0.06), themeConfig.colors.orange.scale(0.5));
+  const guideMaterial = createMaterial(scene, "ship-landing-guide-material", new Color3(0.02, 0.16, 0.18), themeConfig.colors.cyan.scale(0.42));
+
+  const pad = MeshBuilder.CreateCylinder("ship-landing-site-pad", { height: 0.035, diameter: 28, tessellation: 48 }, scene);
+  pad.position.copyFrom(landing.add(new Vector3(0, 0.035, 0)));
+  pad.material = padMaterial;
+  pad.checkCollisions = false;
+  pad.metadata = { gameplayTag: "ship-landing-site" };
+
+  for (const [index, offset] of [
+    new Vector3(-9, 0.45, 10),
+    new Vector3(9, 0.45, 10),
+    new Vector3(-9, 0.45, -10),
+    new Vector3(9, 0.45, -10),
+  ].entries()) {
+    createBox(scene, `ship-landing-guide-${index}`, landing.add(offset), new Vector3(1, 0.9, 1), guideMaterial, "landing-guide");
+  }
+
+  createBox(scene, "ship-landing-beacon-mast", landing.add(new Vector3(-15, 2.4, 8)), new Vector3(0.45, 4.8, 0.45), beaconMaterial, "ship-marker");
+  createBox(scene, "ship-landing-beacon-head", landing.add(new Vector3(-15, 4.95, 8)), new Vector3(1.3, 0.42, 1.3), beaconMaterial, "ship-marker");
+  createBox(scene, "ship-landing-cargo-stack", landing.add(new Vector3(14, 0.9, -6)), new Vector3(4.5, 1.8, 3.2), padMaterial, "cover");
+};
+
+const createRouteFlowPolish = (
+  scene: Scene,
+  concrete: StandardMaterial,
+  cargo: StandardMaterial,
+  wood: StandardMaterial,
+): void => {
+  const trailMaterial = createMaterial(scene, "expanded-route-trail-material", new Color3(0.11, 0.12, 0.14), themeConfig.colors.cyan.scale(0.014));
+  trailMaterial.alpha = 0.42;
+  const hazard = createMaterial(scene, "expanded-route-hazard-material", new Color3(0.32, 0.12, 0.04), themeConfig.colors.orange.scale(0.22));
+  const lumenGrowth = createMaterial(scene, "alien-growth-site-material", new Color3(0.12, 0.04, 0.2), themeConfig.colors.purple.scale(0.42));
+  const lumenNode = createMaterial(scene, "alien-lumen-node-material", new Color3(0.03, 0.22, 0.12), themeConfig.colors.rootGreen.scale(0.44));
+  const cyan = createMaterial(scene, "route-cyan-guide-material", new Color3(0.03, 0.17, 0.2), themeConfig.colors.cyan.scale(0.32));
+
+  const trails = [
+    [-104, -74, 12, 55, -0.08],
+    [-78, -52, 12, 48, -0.72],
+    [-38, -28, 12, 58, -1.08],
+    [26, -44, 10, 66, -0.78],
+    [66, -66, 10, 52, -0.28],
+    [-88, 36, 10, 60, 0.2],
+    [-50, 64, 9, 52, 0.62],
+    [48, 34, 12, 70, 1.08],
+  ] as const;
+
+  for (const [x, z, width, depth, yaw] of trails) {
+    const trail = createBox(scene, `expanded-lunar-route-${x}-${z}`, new Vector3(x, 0.032, z), new Vector3(width, 0.035, depth), trailMaterial, "route-trail");
+    trail.rotation.y = yaw;
+    trail.checkCollisions = false;
+  }
+
+  const coverClusters = [
+    [-96, -64, concrete, 0.2],
+    [-72, -46, cargo, -0.28],
+    [-48, -32, wood, 0.52],
+    [-18, -18, concrete, -0.08],
+    [34, -36, cargo, 0.34],
+    [78, -72, concrete, -0.32],
+    [-98, 48, wood, 0.18],
+    [-54, 66, concrete, -0.48],
+    [42, 58, cargo, 0.25],
+    [74, 18, concrete, -0.18],
+  ] as const;
+
+  for (const [x, z, material, yaw] of coverClusters) {
+    const first = createBox(scene, `expanded-route-cover-a-${x}-${z}`, new Vector3(x, 0.7, z), new Vector3(5.2, 1.4, 1.1), material, "cover");
+    const second = createBox(scene, `expanded-route-cover-b-${x}-${z}`, new Vector3(x + 3.2, 0.55, z + 2.6), new Vector3(1.2, 1.1, 4.2), material, "cover");
+    first.rotation.y = yaw;
+    second.rotation.y = yaw + 0.35;
+  }
+
+  for (const [index, x, z] of [
+    [0, -114, -70],
+    [1, -64, -42],
+    [2, -8, -24],
+    [3, 40, -48],
+    [4, -92, 58],
+    [5, -42, 74],
+    [6, 34, 58],
+  ] as const) {
+    createBox(scene, `expanded-cyan-route-light-${index}`, new Vector3(x, 0.5, z), new Vector3(0.65, 1, 0.65), cyan, "route-marker");
+  }
+
+  const alienSite = new Vector3(118, 0, 82);
+  const alienPad = MeshBuilder.CreateCylinder("alien-growth-site-risk-ring", { height: 0.035, diameter: 25, tessellation: 48 }, scene);
+  alienPad.position.copyFrom(alienSite.add(new Vector3(0, 0.05, 0)));
+  alienPad.material = lumenGrowth;
+  alienPad.checkCollisions = false;
+  alienPad.metadata = { gameplayTag: "alien-growth-site" };
+  for (const [index, offset, height, yaw] of [
+    [0, new Vector3(-7, 1.8, -3), 8, 0.24],
+    [1, new Vector3(5, 1.35, 5), 6, -0.45],
+    [2, new Vector3(0, 1.1, -9), 5, 0.72],
+    [3, new Vector3(9, 1.55, -2), 7, -0.12],
+  ] as const) {
+    const tendril = createBox(scene, `alien-growth-tendril-${index}`, alienSite.add(offset), new Vector3(1.1, height, 1.1), lumenGrowth, "cover");
+    tendril.rotation.z = yaw;
+    tendril.rotation.y = yaw * 1.7;
+  }
+  createBox(scene, "alien-growth-lumen-node", alienSite.add(new Vector3(0, 1.1, 0)), new Vector3(2.6, 2.2, 2.6), lumenNode, "objective-platform");
+  createPoiSign(scene, "expanded-sign-alien-growth", "LUMEN", alienSite.add(new Vector3(0, 4.4, 14)), lumenGrowth, lumenNode);
+
+  const gate = poiCenter("checkpoint");
+  createBox(scene, "raid-gate-warning-light-left", gate.add(new Vector3(-14, 4.8, -7)), new Vector3(0.8, 0.8, 0.8), hazard, "route-marker");
+  createBox(scene, "raid-gate-warning-light-right", gate.add(new Vector3(14, 4.8, -7)), new Vector3(0.8, 0.8, 0.8), hazard, "route-marker");
 };
 
 const createWarehouse = (

@@ -14,7 +14,7 @@ import { themeConfig } from "../theme/ThemeConfig";
 
 export const importedPlayerModelConfig = {
   useImportedPlayerModel: false,
-  url: "/models/player/roots_operator_fn.glb",
+  url: "/models/player/obsidianSentinelPlayer.glb",
   targetHeight: 2.05,
   modelScale: 0.98,
   positionOffset: new Vector3(0, -0.02, 0),

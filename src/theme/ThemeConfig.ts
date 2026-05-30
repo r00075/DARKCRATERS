@@ -37,7 +37,7 @@ export const themeConfig = {
     hazardOrange: "#FF6B1A",
     criticalRed: "#FF3347",
     alienLumenGreen: "#72FF9D",
-    umbraViolet: "#7A4DFF",
+    lumenViolet: "#7A4DFF",
   },
   colors: {
     sky: hex("#05070A"),
@@ -77,7 +77,7 @@ export const themeConfig = {
     guard: "Guardian",
     elite: "Crater Horror",
   },
-  enemyCollectiveName: "The Umbra",
+  enemyCollectiveName: "The Lumen",
   factions: {
     lea: {
       name: "L.E.A. - Lunar Extraction Authority",
@@ -129,20 +129,20 @@ export const themeConfig = {
       recommendedTier: "Survey Run",
       environmentalHazards: ["oxygen drain", "cold shadow pockets", "low gravity"],
       primaryLoot: ["Regolith Scrap", "Oxygen Cells", "Helium-3 Canisters"],
-      enemyPresence: "Light Umbra activity",
-      visualTheme: "Wrecked mining rigs, broken floodlights, dark regolith, cold blue rim light, and faint alien lumen traces.",
+      enemyPresence: "Light Lumen activity",
+      visualTheme: "Wrecked mining rigs, broken floodlights, dark regolith, cold blue rim light, and faint Lumen traces.",
       extractionNotes: "Lunar ascenders are easier to reach but still expose runners to open crater lanes.",
     },
   },
-  umbraTypes: {
+  lumenTypes: {
     lunarTick: {
       id: "lunar_tick",
       displayName: "Lunar Tick",
       pluralName: "Lunar Ticks",
-      faction: "Umbra",
+      faction: "Lumen",
       sizeClass: "Smallest",
       role: "Swarm Parasite",
-      description: "Small parasite-like Umbra organisms that attack in swarms, pierce EVA suit seams, and spread a neurotoxic lunar infection that erodes mental stability over time.",
+      description: "Small parasite-like Lumen organisms that attack in swarms, pierce EVA suit seams, and spread a neurotoxic lunar infection that erodes mental stability over time.",
       combatRole: "Pressure the player through swarming, panic, and infection rather than raw damage.",
       spawnNotes: "Common near nests, dark crater pockets, dead mining crews, broken rigs, and abandoned tunnels.",
     },
@@ -154,22 +154,22 @@ export const themeConfig = {
     spitter: {
       name: "Spitter",
       role: "ranged acid alien",
-      description: "Medium-distance Umbra that spits corrosive bile and tries to keep pressure from cover lanes.",
+      description: "Medium-distance Lumen that spits corrosive bile and tries to keep pressure from cover lanes.",
     },
     guardian: {
       name: "Guardian",
       role: "Helium-3 objective defender",
-      description: "Armored Umbra grown around mining equipment and fusion-fuel containers.",
+      description: "Armored Lumen grown around mining equipment and fusion-fuel containers.",
     },
     craterHorror: {
       name: "Crater Horror",
       role: "elite lunacy pressure alien",
-      description: "Rare high-tier Umbra whose presence bends HUD signals and mental stability.",
+      description: "Rare high-tier Lumen whose presence bends HUD signals and mental stability.",
     },
     choirNode: {
       name: "Choir Node",
       role: "stationary signal growth",
-      description: "Alien growth that buffs nearby Umbra and disrupts runner HUD systems.",
+      description: "Alien growth that buffs nearby Lumen and disrupts runner HUD systems.",
     },
     craterborn: {
       name: "Craterborn",

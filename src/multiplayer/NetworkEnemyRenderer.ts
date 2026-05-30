@@ -109,6 +109,10 @@ export class NetworkEnemyRenderer {
   }
 
   public dispose(): void {
+    this.clear();
+  }
+
+  public clear(_reason = "cleared"): void {
     for (const view of this.enemies.values()) {
       view.root.dispose(false, true);
     }

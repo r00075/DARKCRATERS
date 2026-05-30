@@ -13,9 +13,9 @@ start "DARK CRATERS CLIENT" powershell -NoExit -Command "Set-Location '%PROJECT%
 timeout /t 5
 
 REM START CLIENT NGROK
-start "NGROK CLIENT" powershell -NoExit -Command "ngrok http 5173 --url=https://shrill-doily-outgrow.ngrok-free.dev --config=C:\ngrok-configs\client.yml"
+start "NGROK CLIENT" powershell -NoExit -Command "ngrok http 5173 --url=https://pajamas-outlast-twisted.ngrok-free.dev --config=C:\ngrok-configs\client.yml"
 
 timeout /t 3
 
 REM START SERVER NGROK
-start "NGROK SERVER" powershell -NoExit -Command "ngrok http 2567 --url=https://encrust-attic-vacation.ngrok-free.dev --config=C:\ngrok-configs\server.yml"
+start "NGROK SERVER" powershell -NoExit -Command "ngrok http 2567 --url=https://cannot-skirt-engulf.ngrok-free.dev --config=C:\ngrok-configs\server.yml"

@@ -7,9 +7,11 @@ import {
   Vector3,
 } from "@babylonjs/core";
 import { lootRarityByType, themeConfig } from "../theme/ThemeConfig";
+import { mapLayoutConfig } from "../world/MapLayout";
 import type { LootRarity } from "../theme/ThemeConfig";
-import { getItemDefinition, type LootType } from "./ItemDefinitions";
+import { getItemDefinition, itemDefinitions, type LootType } from "./ItemDefinitions";
 import type { LootEvent, LootStack, RaidInventory } from "./RaidInventory";
+import type { NetworkContainerState } from "../multiplayer/MultiplayerTypes";
 
 export type LootDirectorResult = Readonly<{
   events: LootEvent[];
@@ -55,7 +57,7 @@ const rarityScore: Record<LootRarity, number> = {
 const containerDefinitions: LootContainerDefinition[] = [
   {
     id: "camp-supply-cache",
-    position: new Vector3(-49, 0.45, 32),
+    position: new Vector3(88, 0.45, 41),
     table: [
       { type: "scrap", quantity: 3, chance: 1 },
       { type: "cloth", quantity: 2, chance: 0.5 },
@@ -69,7 +71,7 @@ const containerDefinitions: LootContainerDefinition[] = [
   },
   {
     id: "data-shack-lockbox",
-    position: new Vector3(29, 0.45, 42),
+    position: new Vector3(-74, 0.45, 86),
     table: [
       { type: "scrap", quantity: 5, chance: 1 },
       { type: "weapon-parts", quantity: 2, chance: 0.35 },
@@ -83,7 +85,7 @@ const containerDefinitions: LootContainerDefinition[] = [
   },
   {
     id: "checkpoint-field-kit",
-    position: new Vector3(-14, 0.45, -41),
+    position: new Vector3(58, 0.45, -92),
     table: [
       { type: "scrap", quantity: 2, chance: 1 },
       { type: "armor-plate", quantity: 1, chance: 0.35 },
@@ -96,7 +98,7 @@ const containerDefinitions: LootContainerDefinition[] = [
   },
   {
     id: "warehouse-armory-crate",
-    position: new Vector3(52, 0.45, -36),
+    position: new Vector3(-86, 0.45, -26),
     table: [
       { type: "scrap", quantity: 7, chance: 1 },
       { type: "weapon-parts", quantity: 4, chance: 0.7 },
@@ -117,7 +119,7 @@ const containerDefinitions: LootContainerDefinition[] = [
   },
   {
     id: "warehouse-med-station",
-    position: new Vector3(39, 0.45, -22),
+    position: new Vector3(-98, 0.45, -12),
     table: [
       { type: "medkit", quantity: 1, chance: 0.85 },
       { type: "bandage", quantity: 3, chance: 0.7 },
@@ -136,12 +138,60 @@ const containerDefinitions: LootContainerDefinition[] = [
   },
   {
     id: "roadside-junk-cache",
-    position: new Vector3(14, 0.45, 15),
+    position: new Vector3(-62, 0.45, -70),
     table: [
       { type: "scrap", quantity: 2, chance: 1 },
       { type: "cloth", quantity: 2, chance: 0.65 },
       { type: "ammo", quantity: 6, chance: 0.35 },
       { type: "battery", quantity: 1, chance: 0.22 },
+    ],
+  },
+  {
+    id: "landing-site-emergency-cache",
+    position: new Vector3(-110, 0.45, -88),
+    table: [
+      { type: "scrap", quantity: 2, chance: 1 },
+      { type: "bandage", quantity: 1, chance: 0.6 },
+      { type: "ammo", quantity: 8, chance: 0.5 },
+      { type: "battery", quantity: 1, chance: 0.35 },
+    ],
+  },
+  {
+    id: "ridge-miner-cache",
+    position: new Vector3(-112, 0.45, 90),
+    table: [
+      { type: "scrap", quantity: 5, chance: 1 },
+      { type: "cloth", quantity: 3, chance: 0.52 },
+      { type: "electronics", quantity: 1, chance: 0.28 },
+      { type: "ammo", quantity: 10, chance: 0.55 },
+      { type: "anti-toxin", quantity: 1, chance: 0.22 },
+    ],
+  },
+  {
+    id: "core-pit-helium-cache",
+    position: new Vector3(12, 0.45, 8),
+    table: [
+      { type: "scrap", quantity: 8, chance: 1 },
+      { type: "rare-core", quantity: 1, chance: 0.42 },
+      { type: "weapon-parts", quantity: 5, chance: 0.62 },
+      { type: "electronics", quantity: 3, chance: 0.52 },
+      { type: "acid-gland", quantity: 1, chance: 0.18 },
+      { type: "helium-drill-core", quantity: 1, chance: 0.08 },
+      { type: "attachment-thermal-optic", quantity: 1, chance: 0.12 },
+    ],
+  },
+  {
+    id: "far-side-lumen-cache",
+    position: new Vector3(106, 0.45, 82),
+    table: [
+      { type: "alien-chitin", quantity: 4, chance: 0.72 },
+      { type: "lumen-essence", quantity: 1, chance: 0.3 },
+      { type: "infected-sample", quantity: 1, chance: 0.28 },
+      { type: "crater-tissue", quantity: 2, chance: 0.26 },
+      { type: "lumen-relic-mass", quantity: 1, chance: 0.07 },
+      { type: "rare-core", quantity: 1, chance: 0.18 },
+      { type: "horror-core", quantity: 1, chance: 0.04 },
+      { type: "scrap", quantity: 6, chance: 0.9 },
     ],
   },
 ];
@@ -150,6 +200,7 @@ export class LootDirector {
   private readonly containers: LootContainer[] = [];
   private readonly containerMaterial: StandardMaterial;
   private readonly openedMaterial: StandardMaterial;
+  private readonly depletedMaterial: StandardMaterial;
   private readonly lootMaterials: Record<LootType, StandardMaterial>;
   private readonly spawnedLoot: AbstractMesh[] = [];
   private rareLootChanceMultiplier = 1;
@@ -161,6 +212,11 @@ export class LootDirector {
 
     this.openedMaterial = new StandardMaterial("loot-container-opened-material", scene);
     this.openedMaterial.diffuseColor = new Color3(0.18, 0.22, 0.34);
+    this.openedMaterial.emissiveColor = themeConfig.colors.cyan.scale(0.045);
+
+    this.depletedMaterial = new StandardMaterial("loot-container-depleted-material", scene);
+    this.depletedMaterial.diffuseColor = new Color3(0.06, 0.07, 0.085);
+    this.depletedMaterial.emissiveColor = themeConfig.colors.orange.scale(0.025);
 
     this.lootMaterials = {
       credits: this.createLootMaterial("loot-credits-material", "credits"),
@@ -176,6 +232,7 @@ export class LootDirector {
       electronics: this.createLootMaterial("loot-electronics-material", "electronics"),
       "weapon-parts": this.createLootMaterial("loot-weapon-parts-material", "weapon-parts"),
       "alien-chitin": this.createLootMaterial("loot-alien-chitin-material", "alien-chitin"),
+      "lumen-essence": this.createLootMaterial("loot-lumen-essence-material", "lumen-essence"),
       "acid-gland": this.createLootMaterial("loot-acid-gland-material", "acid-gland"),
       "crater-tissue": this.createLootMaterial("loot-crater-tissue-material", "crater-tissue"),
       "horror-core": this.createLootMaterial("loot-horror-core-material", "horror-core"),
@@ -208,9 +265,18 @@ export class LootDirector {
       "weapon-repair-kit": this.createLootMaterial("loot-weapon-repair-kit-material", "weapon-repair-kit"),
       "rare-upgrade-kit": this.createLootMaterial("loot-rare-upgrade-kit-material", "rare-upgrade-kit"),
       "elite-backpack": this.createLootMaterial("loot-elite-backpack-material", "elite-backpack"),
+      "helium-drill-core": this.createLootMaterial("loot-helium-drill-core-material", "helium-drill-core"),
+      "lumen-relic-mass": this.createLootMaterial("loot-lumen-relic-mass-material", "lumen-relic-mass"),
+      "reactor-spindle": this.createLootMaterial("loot-reactor-spindle-material", "reactor-spindle"),
+      "black-box-survey-crate": this.createLootMaterial("loot-black-box-survey-crate-material", "black-box-survey-crate"),
+      "sealed-mining-cache": this.createLootMaterial("loot-sealed-mining-cache-material", "sealed-mining-cache"),
     };
 
     this.spawnContainers();
+  }
+
+  public get containerCount(): number {
+    return this.containers.length;
   }
 
   public tryInteract(playerPosition: Vector3, _inventory: RaidInventory): LootDirectorResult | null {
@@ -239,9 +305,52 @@ export class LootDirector {
     return this.toView(container);
   }
 
+  public getNearbyContainerId(playerPosition: Vector3): string | null {
+    return this.findNearbyOpenableContainer(playerPosition)?.id ?? null;
+  }
+
   public getContainerView(containerId: string): LootContainerView | null {
     const container = this.containers.find((item) => item.id === containerId);
     return container ? this.toView(container) : null;
+  }
+
+  public applyNetworkContainerState(state: NetworkContainerState): LootContainerView | null {
+    const container = this.containers.find((item) => item.id === state.id);
+
+    if (!container) {
+      return null;
+    }
+
+    container.opened = state.opened;
+    container.items = state.items
+      .filter((item) => item.type in itemDefinitions && item.quantity > 0)
+      .map((item) => {
+        const type = item.type as LootType;
+        return {
+          type,
+          label: getItemDefinition(type).label,
+          quantity: item.quantity,
+        };
+      });
+    container.mesh.metadata = {
+      ...container.mesh.metadata,
+      opened: state.opened,
+      depleted: state.depleted,
+    };
+
+    if (state.opened) {
+      container.mesh.material = this.openedMaterial;
+      container.mesh.rotation.x = 0.35;
+    }
+
+    if (state.depleted) {
+      this.markContainerDepleted(container);
+    } else {
+      container.mesh.setEnabled(true);
+      container.mesh.scaling.y = 1;
+    }
+
+    return this.toView(container);
   }
 
   public takeItem(containerId: string, itemIndex: number, inventory: RaidInventory): LootEvent | null {
@@ -291,7 +400,7 @@ export class LootDirector {
     const container = this.containers.find((item) => item.id === containerId);
 
     if (container && container.items.length === 0) {
-      container.mesh.setEnabled(false);
+      this.markContainerDepleted(container);
     }
   }
 
@@ -303,9 +412,10 @@ export class LootDirector {
     container.opened = true;
     container.mesh.material = this.openedMaterial;
     container.mesh.rotation.x = 0.35;
+    container.mesh.scaling.y = 1;
 
     for (const drop of container.table) {
-      if (Math.random() > this.adjustedDropChance(drop)) {
+      if (Math.random() > this.adjustedDropChance(drop, container.mesh.position)) {
         continue;
       }
 
@@ -315,6 +425,18 @@ export class LootDirector {
         quantity: drop.quantity,
       });
     }
+  }
+
+  private markContainerDepleted(container: LootContainer): void {
+    container.mesh.setEnabled(true);
+    container.mesh.material = this.depletedMaterial;
+    container.mesh.rotation.x = 0.35;
+    container.mesh.scaling.y = 0.46;
+    container.mesh.metadata = {
+      ...container.mesh.metadata,
+      opened: true,
+      depleted: true,
+    };
   }
 
   public reset(): void {
@@ -427,12 +549,14 @@ export class LootDirector {
     this.spawnedLoot.push(loot);
   }
 
-  private adjustedDropChance(drop: LootDrop): number {
+  private adjustedDropChance(drop: LootDrop, position: Vector3): number {
+    const distanceFromShip = Vector3.Distance(position, mapLayoutConfig.shipLandingSitePosition);
+    const distanceMultiplier = 1 + Math.min(0.75, Math.max(0, distanceFromShip - 45) / 150);
     if (!this.isRareDrop(drop.type)) {
-      return drop.chance;
+      return Math.min(0.98, drop.chance * (1 + Math.min(0.18, distanceMultiplier - 1)));
     }
 
-    return Math.min(0.95, drop.chance * this.rareLootChanceMultiplier);
+    return Math.min(0.95, drop.chance * this.rareLootChanceMultiplier * distanceMultiplier);
   }
 
   private isRareDrop(type: LootType): boolean {

@@ -225,7 +225,7 @@ const conditionPresets: Record<RaidConditionPreset, Readonly<{
     flashlightDetectionMultiplier: 1.82,
     flashlightUsefulness: "critical",
     darkness: 0.9,
-    visibilityLabel: "Umbra biolumen and black fog",
+    visibilityLabel: "Lumen bioLumen and black fog",
   },
 };
 

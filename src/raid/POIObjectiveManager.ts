@@ -184,12 +184,12 @@ export class POIObjectiveManager {
     };
   }
 
-  public reset(contractTarget?: ContractPOIObjectiveTarget | null): void {
+  public reset(contractTarget?: ContractPOIObjectiveTarget | null, deterministic = false): void {
     this.disposeRuntimeObjectives();
     this.pendingSpawnRequests.length = 0;
     this.pendingEvents.length = 0;
 
-    const definitions = this.createRaidDefinitions(contractTarget);
+    const definitions = this.createRaidDefinitions(contractTarget, deterministic);
 
     for (const definition of definitions) {
       this.objectives.push(this.createRuntimeObjective(definition));
@@ -252,6 +252,17 @@ export class POIObjectiveManager {
       )[0];
 
     if (!objective) {
+      return false;
+    }
+
+    this.completeObjective(objective);
+    return true;
+  }
+
+  public completeFromNetwork(objectiveId: string): boolean {
+    const objective = this.objectives.find((item) => item.definition.id === objectiveId);
+
+    if (!objective || objective.completed) {
       return false;
     }
 
@@ -334,15 +345,16 @@ export class POIObjectiveManager {
     }
   }
 
-  private createRaidDefinitions(contractTarget?: ContractPOIObjectiveTarget | null): POIObjectiveDefinition[] {
-    const count = poiObjectiveConfig.minPerRaid
-      + Math.floor(Math.random() * (poiObjectiveConfig.maxPerRaid - poiObjectiveConfig.minPerRaid + 1));
+  private createRaidDefinitions(contractTarget?: ContractPOIObjectiveTarget | null, deterministic = false): POIObjectiveDefinition[] {
+    const count = deterministic
+      ? poiObjectiveConfig.maxPerRaid
+      : poiObjectiveConfig.minPerRaid + Math.floor(Math.random() * (poiObjectiveConfig.maxPerRaid - poiObjectiveConfig.minPerRaid + 1));
     const forcedPoi = contractTarget
       ? poiDefinitions.find((poi) => poi.name === contractTarget.poiName || poi.id === contractTarget.poiName)
       : null;
     const orderedPois = [...poiDefinitions]
       .filter((poi) => poi.id !== forcedPoi?.id)
-      .sort(() => Math.random() - 0.5);
+      .sort((a, b) => deterministic ? a.id.localeCompare(b.id) : Math.random() - 0.5);
     const selected = forcedPoi
       ? [forcedPoi, ...orderedPois.slice(0, Math.max(0, count - 1))]
       : orderedPois.slice(0, count);
@@ -350,7 +362,7 @@ export class POIObjectiveManager {
     return selected.map((poi, index) => {
       const threatRating = poiThreatRatings[poi.id] ?? 1;
       const contractLinked = Boolean(forcedPoi && forcedPoi.id === poi.id && contractTarget);
-      const type = contractLinked && contractTarget ? contractTarget.objectiveType : this.pickObjectiveType(poi, index);
+      const type = contractLinked && contractTarget ? contractTarget.objectiveType : this.pickObjectiveType(poi, index, deterministic);
       const copy = objectiveTypeCopy[type];
       const rewardThreat = contractLinked ? Math.min(5, threatRating + 1) : threatRating;
       const rewardRarity = this.rewardRarityForThreat(rewardThreat);
@@ -481,7 +493,7 @@ export class POIObjectiveManager {
     };
   }
 
-  private pickObjectiveType(poi: PoiDefinition, index: number): POIObjectiveType {
+  private pickObjectiveType(poi: PoiDefinition, index: number, deterministic = false): POIObjectiveType {
     if (poi.id === "core-pit") {
       return "retrieve-core-fragment";
     }
@@ -496,7 +508,7 @@ export class POIObjectiveManager {
       "clear-enemy-patrol",
       "hack-signal-box",
     ];
-    return types[(index + Math.floor(Math.random() * types.length)) % types.length];
+    return types[(index + (deterministic ? 0 : Math.floor(Math.random() * types.length))) % types.length];
   }
 
   private objectivePositionForPoi(poi: PoiDefinition, index: number): Vector3 {

@@ -1,8 +1,14 @@
 import { themeConfig } from "../theme/ThemeConfig";
 
 const loadingTips = [
+  "ORBITAL HQ LINK ESTABLISHED",
+  "PRESSURIZING DOCKING CORRIDOR",
+  "LOADING HABITAT SYSTEMS",
+  "SYNCING CRATER RUNNER PROFILE",
+  "HELIUM-3 CONTRACT BOARD ONLINE",
+  "WARNING: SURFACE CONDITIONS HOSTILE",
   ...themeConfig.brand.loadingLines,
-  "Helium-3 brought humanity to the Moon. The Umbra answered.",
+  "Helium-3 brought humanity to the Moon. The Lumen answered.",
   "Extract to keep what your EVA Pack carries.",
   "Regolith Scrap powers fabrication and upgrades.",
   "Faction contracts pay better when you survive.",
@@ -10,6 +16,14 @@ const loadingTips = [
   "Your Habitat Stash is safe. Your EVA Pack is not.",
   "Carry Anti-Toxin into Tick-heavy crater zones. Lunar Infection erodes Mental Stability over time.",
   "The Quiet Order believes Lunacy is not just disease, but signal exposure.",
+] as const;
+
+const craterRunTips = [
+  "PREPARE. DESCEND. DELIVER.",
+  "THE CRATER NEEDS LUMEN.",
+  "SHIP-CENTERED DESCENT CAMERA ONLINE.",
+  "HELIUM-3 RECOVERY AUTHORITY ARMED.",
+  "WARNING: LUNAR SURFACE CONDITIONS HOSTILE.",
 ] as const;
 
 export class LoadingScreenManager {
@@ -22,7 +36,7 @@ export class LoadingScreenManager {
     this.root.className = "loading-screen";
     this.root.innerHTML = `
       <div class="loading-card">
-        <span class="loading-kicker">Crater Run Systems Online</span>
+        <span class="loading-kicker">Habitat Transfer</span>
         <h1>${themeConfig.brand.title}</h1>
         <p data-loading-tagline>${themeConfig.brand.loadingLines[0]}</p>
         <div class="loading-progress"><i></i></div>
@@ -42,12 +56,26 @@ export class LoadingScreenManager {
     }
 
     this.destination.textContent = destination;
+    const habitatTransfer = /hq|habitat/i.test(destination);
+    const craterRunTransfer = /crater|deployment|deploy|tycho/i.test(destination) && !habitatTransfer;
+    this.root.classList.toggle("habitat-transfer", habitatTransfer);
+    this.root.classList.toggle("crater-run-transfer", craterRunTransfer);
+    const kicker = this.root.querySelector(".loading-kicker");
+    if (kicker) {
+      kicker.textContent = craterRunTransfer ? "Deployment Authorized" : habitatTransfer ? "Habitat Transfer" : "System Transfer";
+    }
     const tagline = themeConfig.brand.loadingLines[Math.floor(Math.random() * themeConfig.brand.loadingLines.length)];
     const taglineElement = this.root.querySelector("[data-loading-tagline]");
     if (taglineElement) {
-      taglineElement.textContent = tagline;
+      taglineElement.textContent = craterRunTransfer
+        ? "LOADING INTO CRATER RUN"
+        : habitatTransfer ? "ORBITAL HQ LINK ESTABLISHED" : tagline;
     }
-    this.tip.textContent = loadingTips[Math.floor(Math.random() * loadingTips.length)];
+    this.tip.textContent = craterRunTransfer
+      ? craterRunTips[Math.floor(Math.random() * craterRunTips.length)]
+      : habitatTransfer
+      ? loadingTips[Math.floor(Math.random() * 6)]
+      : loadingTips[Math.floor(Math.random() * loadingTips.length)];
     this.root.classList.add("active");
     this.root.setAttribute("aria-hidden", "false");
 

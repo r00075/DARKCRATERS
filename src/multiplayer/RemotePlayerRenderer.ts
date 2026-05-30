@@ -19,11 +19,15 @@ type RemotePlayerView = {
 export class RemotePlayerRenderer {
   private readonly players = new Map<string, RemotePlayerView>();
   private readonly material: StandardMaterial;
+  private readonly downedMaterial: StandardMaterial;
   private readonly deadMaterial: StandardMaterial;
 
   public constructor(private readonly scene: Scene) {
     this.material = new StandardMaterial("remote-player-material", scene);
     this.material.diffuseColor = new Color3(0.24, 0.72, 0.92);
+    this.downedMaterial = new StandardMaterial("remote-player-downed-material", scene);
+    this.downedMaterial.diffuseColor = new Color3(0.95, 0.5, 0.12);
+    this.downedMaterial.emissiveColor = new Color3(0.28, 0.12, 0.02);
     this.deadMaterial = new StandardMaterial("remote-player-dead-material", scene);
     this.deadMaterial.diffuseColor = new Color3(0.18, 0.18, 0.2);
   }
@@ -35,7 +39,7 @@ export class RemotePlayerRenderer {
       const view = this.players.get(state.id) ?? this.createView(state);
       view.target = state;
       view.root.setEnabled(state.status === "active" || state.status === "downed");
-      view.body.material = state.status === "dead" ? this.deadMaterial : this.material;
+      view.body.material = state.status === "downed" ? this.downedMaterial : state.status === "dead" ? this.deadMaterial : this.material;
       this.interpolateView(dt, view);
       this.updateLabel(view);
     }
@@ -52,6 +56,10 @@ export class RemotePlayerRenderer {
   }
 
   public dispose(): void {
+    this.clear();
+  }
+
+  public clear(): void {
     for (const view of this.players.values()) {
       view.root.dispose(false, true);
       view.label.remove();
@@ -89,7 +97,8 @@ export class RemotePlayerRenderer {
     const targetPosition = new Vector3(view.target.x, view.target.y, view.target.z);
     view.root.position = Vector3.Lerp(view.root.position, targetPosition, blend);
     view.root.rotation.y += (view.target.yaw - view.root.rotation.y) * blend;
-    view.body.scaling.y = 1 - view.target.crouch * 0.38;
+    view.body.scaling.y = view.target.status === "downed" ? 0.32 : 1 - view.target.crouch * 0.38;
+    view.body.position.y = view.target.status === "downed" ? 0.32 : 0.98;
   }
 
   private updateLabel(view: RemotePlayerView): void {

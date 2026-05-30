@@ -10,6 +10,7 @@ import { EnemyAgent } from "../ai/EnemyAgent";
 import type { PlayerHealth } from "../combat/PlayerHealth";
 import type { InputSnapshot } from "../input/InputController";
 import type { MotorState } from "../world/PlayerMotor";
+import { poiDefinitions } from "../world/MapLayout";
 import type { RaidInventory } from "./RaidInventory";
 
 export type ObjectiveType = "data-cache" | "eliminate-target" | "secure-rare-core";
@@ -29,6 +30,8 @@ const objectiveConfig = {
   searchDuration: 2.25,
 };
 
+const poiCenter = (id: string): Vector3 => poiDefinitions.find((poi) => poi.id === id)?.center.clone() ?? Vector3.Zero();
+
 type ObjectiveDefinition = Readonly<{
   type: ObjectiveType;
   title: string;
@@ -41,19 +44,19 @@ const definitions: ObjectiveDefinition[] = [
     type: "data-cache",
     title: "Recover Black Box Data",
     description: "Find the marked mining cache and hold E to crack it.",
-    targetPosition: new Vector3(30, 0.45, 36),
+    targetPosition: poiCenter("data-shack").add(new Vector3(4, 0.45, -2)),
   },
   {
     type: "eliminate-target",
     title: "Tag the Crater Horror",
-    description: "Track the elite Umbra threat and recover its signal shard.",
-    targetPosition: new Vector3(-42, 0, 30),
+    description: "Track the elite Lumen threat and recover its signal shard.",
+    targetPosition: poiCenter("core-pit").add(new Vector3(8, 0, 8)),
   },
   {
     type: "secure-rare-core",
     title: "Extract Helium-3 Core",
     description: "Find the marked mining rig, secure the Helium-3 core, and extract before the crater goes dark.",
-    targetPosition: new Vector3(48, 0.35, -30),
+    targetPosition: poiCenter("core-pit").add(new Vector3(-5, 0.35, 2)),
   },
 ];
 
@@ -122,9 +125,11 @@ export class ObjectiveDirector {
     };
   }
 
-  public reset(): void {
+  public reset(forcedType?: ObjectiveType): void {
     this.disposeSpawned();
-    this.definition = definitions[Math.floor(Math.random() * definitions.length)];
+    this.definition = forcedType
+      ? definitions.find((definition) => definition.type === forcedType) ?? definitions[0]
+      : definitions[Math.floor(Math.random() * definitions.length)];
     this.completed = false;
     this.searchProgress = 0;
     this.targetKilled = false;
@@ -137,6 +142,15 @@ export class ObjectiveDirector {
     } else {
       this.spawnRareCore();
     }
+  }
+
+  public completeHeavyCargoObjective(): void {
+    if (this.definition.type !== "secure-rare-core" || this.completed) {
+      return;
+    }
+    this.completed = true;
+    this.searchProgress = objectiveConfig.searchDuration;
+    this.objectiveMesh?.setEnabled(false);
   }
 
   public dispose(): void {
@@ -178,7 +192,7 @@ export class ObjectiveDirector {
     }
 
     if (this.definition.type === "secure-rare-core" && input.interactPressed) {
-      this.complete(inventory, "rare-core", 1);
+      this.searchProgress = 0;
     }
   }
 

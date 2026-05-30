@@ -40,6 +40,8 @@ export class LandedShip {
   private warningPulse = 0;
   private warningBaseIntensity = 0;
   private warningPulseSpeed = 5.5;
+  private landingDustTimer = 0;
+  private landingDustStrength = 1;
 
   public constructor(private readonly scene: Scene, position: Vector3) {
     this.root = new TransformNode("landed-ship-root", scene);
@@ -76,6 +78,8 @@ export class LandedShip {
     this.addBox("landed-ship-bay-light-left", new Vector3(-1.85, 1.66, 3.52), new Vector3(0.28, 0.22, 0.2), light, false);
     this.addBox("landed-ship-bay-light-right", new Vector3(1.85, 1.66, 3.52), new Vector3(0.28, 0.22, 0.2), light, false);
     this.addBox("landed-ship-warning-beacon", new Vector3(0, 2.42, 2.15), new Vector3(0.44, 0.28, 0.44), warning, false);
+    this.addBox("landed-ship-engine-glow-left", new Vector3(-3.0, 1.12, 3.42), new Vector3(0.62, 0.22, 0.86), light, false);
+    this.addBox("landed-ship-engine-glow-right", new Vector3(3.0, 1.12, 3.42), new Vector3(0.62, 0.22, 0.86), light, false);
 
     for (const [index, x, z] of [
       [0, -2.25, -2.1],
@@ -198,10 +202,10 @@ export class LandedShip {
         : state.repaired
           ? 0.36
           : 0.9;
-    this.warningPulseSpeed = state.repaired ? 2.1 : 5.5;
+    this.warningPulseSpeed = state.repairStatus === "patched" ? 2.8 : state.repaired ? 1.5 : 5.5;
     this.warningLight.intensity = this.warningBaseIntensity;
     this.bayLight.intensity = state.landingQuality === "damaged"
-      ? state.repaired ? 0.42 : 0.25
+      ? state.repairStatus === "repaired" ? 0.48 : state.repairStatus === "patched" ? 0.34 : 0.22
       : 0.52;
 
     const damagedPanel = this.parts.find((part) => part.mesh.name === "landed-ship-cargo-bay");
@@ -209,10 +213,55 @@ export class LandedShip {
       damagedPanel.mesh.rotation.z = 0.13;
       damagedPanel.mesh.position.y -= 0.18;
     }
+
+    const warningBeacon = this.parts.find((part) => part.mesh.name === "landed-ship-warning-beacon");
+    if (warningBeacon && state.landingQuality === "damaged" && state.repairStatus !== "repaired") {
+      warningBeacon.mesh.rotation.y = 0.35;
+    }
+  }
+
+  public setDescentPose(descentProgress: number, stability: number, alignmentOffset = 0): void {
+    const progress = Math.max(0, Math.min(1, descentProgress));
+    const instability = 1 - Math.max(0, Math.min(1, stability));
+    const altitude = (1 - progress) * 24;
+    const forwardOffset = -(1 - progress) * 68;
+    const lateralOffset = alignmentOffset * 5.5 * (1 - progress);
+    const settle = progress >= 0.96 ? Math.sin((progress - 0.96) * Math.PI * 25) * 0.08 : 0;
+
+    for (const part of this.parts) {
+      if (!this.isShipFlightPart(part.mesh.name)) {
+        continue;
+      }
+
+      part.mesh.position.copyFrom(part.cleanPosition);
+      part.mesh.position.x -= lateralOffset;
+      part.mesh.position.y += altitude + settle;
+      part.mesh.position.z -= forwardOffset;
+      part.mesh.rotation.copyFrom(part.cleanRotation);
+      part.mesh.rotation.z += Math.sin(progress * Math.PI * 5) * instability * 0.035;
+      part.mesh.rotation.x += Math.cos(progress * Math.PI * 4) * instability * 0.025;
+    }
+
+    this.bayLight.intensity = 0.56 + (1 - progress) * 0.28;
+    this.warningLight.intensity = Math.max(this.warningBaseIntensity, instability * 0.55);
+  }
+
+  public settleAfterDescent(state: ShipState): void {
+    this.applyShipState(state);
+    this.landingDustTimer = 1;
+    this.landingDustStrength = state.landingQuality === "clean" ? 0.75 : state.landingQuality === "rough" ? 1.15 : 1.55;
   }
 
   public update(dt: number): void {
     this.warningPulse += dt;
+    this.landingDustTimer = Math.max(0, this.landingDustTimer - dt);
+    const scorch = this.parts.find((part) => part.mesh.name === "landed-ship-scorch-mark")?.mesh;
+    if (scorch) {
+      const pulse = this.landingDustTimer > 0 ? this.landingDustTimer * this.landingDustStrength : 0;
+      scorch.scaling.setAll(1 + pulse * 0.16);
+      scorch.isVisible = true;
+    }
+
     if (this.warningBaseIntensity <= 0) {
       return;
     }
@@ -337,5 +386,17 @@ export class LandedShip {
     material.specularColor = new Color3(0.16, 0.18, 0.22);
     this.materials.push(material);
     return material;
+  }
+
+  private isShipFlightPart(name: string): boolean {
+    return !(
+      name.includes("pad") ||
+      name.includes("crate") ||
+      name.includes("canister") ||
+      name.includes("beacon") ||
+      name.includes("hazard-marker") ||
+      name.includes("skid-mark") ||
+      name.includes("scorch")
+    );
   }
 }

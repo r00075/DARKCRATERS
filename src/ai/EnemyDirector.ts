@@ -13,6 +13,7 @@ import { enemyTypeDefinitions, type EnemyLootDrop, type EnemyType } from "./Enem
 
 export type EnemyDirectorOptions = Readonly<{
   difficultyLevel: number;
+  disabled?: boolean;
   onLootDropped: (event: LootEvent) => void;
   onPlayerHit?: (enemyType: EnemyType) => void;
   onEnemyKilled?: (enemyType: EnemyType) => void;
@@ -35,9 +36,11 @@ export class EnemyDirector {
   ) {
     this.difficultyLevel = Math.max(1, options.difficultyLevel);
     this.healthMultiplier = 1 + Math.min(0.45, (this.difficultyLevel - 1) * 0.055);
-    this.enemies = this.encounterDirector
-      .createInitialSpawns(this.difficultyLevel, this.playerBody.position)
-      .map((definition) => this.createEnemy(definition));
+    this.enemies = options.disabled
+      ? []
+      : this.encounterDirector
+        .createInitialSpawns(this.difficultyLevel, this.playerBody.position)
+        .map((definition) => this.createEnemy(definition));
   }
 
   public get debugStates(): EnemyDebugState[] {
@@ -80,6 +83,10 @@ export class EnemyDirector {
     noiseEvents: readonly NoiseEvent[] = [],
     raidElapsedSeconds = 0,
   ): void {
+    if (this.options.disabled) {
+      return;
+    }
+
     this.applyNoiseEvents(noiseEvents);
     const reinforcementSpawns = this.encounterDirector.update(
       dt,
@@ -124,6 +131,11 @@ export class EnemyDirector {
     spawn: Vector3,
     highValueLoot: boolean,
   ): void {
+    if (this.options.disabled) {
+      this.pendingEncounterMessages.push("Local PvE spawn suppressed in multiplayer");
+      return;
+    }
+
     if (!this.encounterDirector.canSpawn(this.activeEnemyCount)) {
       this.pendingEncounterMessages.push("Enemy pressure capped");
       return;

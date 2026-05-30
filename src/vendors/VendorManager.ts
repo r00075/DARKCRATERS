@@ -67,6 +67,7 @@ export const vendorDefinitions: Record<VendorId, VendorDefinition> = {
       "attachment-angled-grip",
       "attachment-thermal-optic",
       "weapon-parts",
+      "reactor-spindle",
       "scrap",
     ],
     inventory: [
@@ -94,7 +95,7 @@ export const vendorDefinitions: Record<VendorId, VendorDefinition> = {
     faction: "Free Orbit Security",
     accentPrimary: "#7F8A96",
     accentSecondary: "#FF3347",
-    buys: ["cloth", "alien-chitin", "infected-sample", "medkit", "bandage", "armor-plate", "improved-armor-plate", "anti-toxin"],
+    buys: ["cloth", "alien-chitin", "lumen-essence", "infected-sample", "medkit", "bandage", "armor-plate", "improved-armor-plate", "anti-toxin"],
     inventory: [
       { type: "bandage", price: 18, minReputationLevel: 1 },
       { type: "medkit", price: 55, minReputationLevel: 1 },
@@ -113,7 +114,7 @@ export const vendorDefinitions: Record<VendorId, VendorDefinition> = {
     faction: "Helios Dynamics",
     accentPrimary: "#FFB02E",
     accentSecondary: "#FFE0A3",
-    buys: ["rare-core", "horror-core", "dog-tag", "encrypted-data", "target-token", "electronics"],
+    buys: ["rare-core", "horror-core", "dog-tag", "encrypted-data", "target-token", "electronics", "helium-drill-core", "lumen-relic-mass", "black-box-survey-crate", "sealed-mining-cache"],
     inventory: [
       { type: "weapon-assault-rifle", price: 420, minReputationLevel: 2 },
       { type: "electronics", price: 88, minReputationLevel: 2 },
@@ -130,7 +131,7 @@ export const vendorDefinitions: Record<VendorId, VendorDefinition> = {
     faction: "Crater Rats",
     accentPrimary: "#D66A2A",
     accentSecondary: "#B8A078",
-    buys: ["scrap", "cloth", "alien-chitin", "ammo", "battery", "weapon-parts"],
+    buys: ["scrap", "cloth", "alien-chitin", "ammo", "battery", "weapon-parts", "sealed-mining-cache"],
     inventory: [
       { type: "scrap", price: 8, minReputationLevel: 1 },
       { type: "cloth", price: 10, minReputationLevel: 1 },
@@ -149,10 +150,11 @@ export const vendorDefinitions: Record<VendorId, VendorDefinition> = {
     faction: "The Quiet Order",
     accentPrimary: "#7A4DFF",
     accentSecondary: "#72FF9D",
-    buys: ["elite-backpack", "rare-upgrade-kit", "rare-core", "horror-core", "acid-gland", "crater-tissue", "infected-sample", "dog-tag", "scrap", "cloth", "target-token"],
+    buys: ["elite-backpack", "rare-upgrade-kit", "rare-core", "horror-core", "acid-gland", "crater-tissue", "lumen-essence", "lumen-relic-mass", "infected-sample", "dog-tag", "scrap", "cloth", "target-token"],
     inventory: [
       { type: "elite-backpack", price: 520, minReputationLevel: 3 },
       { type: "anti-toxin", price: 130, minReputationLevel: 2 },
+      { type: "lumen-essence", price: 260, minReputationLevel: 3 },
       { type: "rare-upgrade-kit", price: 420, minReputationLevel: 3 },
       { type: "attachment-thermal-optic", price: 680, minReputationLevel: 4 },
       { type: "rare-core", price: 900, minReputationLevel: 5 },

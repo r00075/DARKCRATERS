@@ -15,6 +15,7 @@ export type ExtractionState = Readonly<{
   activeZoneIds: string[];
   currentZoneId: string | null;
   currentZoneName: string | null;
+  currentZonePrompt: string | null;
   cancelReason: "moved-away" | "took-damage" | "released" | null;
 }>;
 
@@ -38,6 +39,7 @@ export class ExtractionController {
       activeZoneIds: this.activeZoneIds,
       currentZoneId: null,
       currentZoneName: null,
+      currentZonePrompt: null,
       cancelReason: this.cancelReason,
     };
   }
@@ -68,6 +70,7 @@ export class ExtractionController {
       activeZoneIds: this.activeZoneIds,
       currentZoneId: null,
       currentZoneName: null,
+      currentZonePrompt: null,
       cancelReason: null,
     };
   }
@@ -76,8 +79,9 @@ export class ExtractionController {
     const insideZone = activeZone !== null;
     const extracting = insideZone && input.interactHeld && !tookDamage;
 
+    const duration = activeZone?.durationSeconds ?? extractionConfig.duration;
     if (extracting) {
-      this.progressSeconds = Math.min(extractionConfig.duration, this.progressSeconds + dt);
+      this.progressSeconds = Math.min(duration, this.progressSeconds + dt);
       this.cancelReason = null;
     } else {
       if (this.progressSeconds > 0) {
@@ -92,17 +96,20 @@ export class ExtractionController {
       this.progressSeconds = 0;
     }
 
-    this.completed = this.progressSeconds >= extractionConfig.duration;
+    this.completed = this.progressSeconds >= duration;
 
     return {
       insideZone,
       extracting,
-      progress: this.progressSeconds / extractionConfig.duration,
-      secondsRemaining: Math.max(0, extractionConfig.duration - this.progressSeconds),
+      progress: this.progressSeconds / duration,
+      secondsRemaining: Math.max(0, duration - this.progressSeconds),
       completed: this.completed,
       activeZoneIds: this.activeZoneIds,
       currentZoneId: activeZone?.id ?? null,
       currentZoneName: activeZone?.name ?? null,
+      currentZonePrompt: activeZone?.id === "personal-ship-return"
+        ? "Hold E to Initiate Return"
+        : null,
       cancelReason: this.cancelReason,
     };
   }

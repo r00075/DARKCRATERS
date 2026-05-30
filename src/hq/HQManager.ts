@@ -5,7 +5,11 @@ export type HQStationId =
   | "workshop"
   | "vendor-row"
   | "style-locker"
-  | "intel-board";
+  | "intel-board"
+  | "ship-systems"
+  | "arsenal"
+  | "class-assignment"
+  | "skill-matrix";
 
 export type HQStationDefinition = Readonly<{
   id: HQStationId;
@@ -72,6 +76,38 @@ export const hqStations: readonly HQStationDefinition[] = [
     description: "Crater Runner suits, wraps, EVA pack looks, banners, and identity.",
     action: "hq-style",
     accent: "cyan",
+  },
+  {
+    id: "ship-systems",
+    title: "Ship Systems",
+    eyebrow: "Hangar",
+    description: "Modules, cargo rack state, descent checks, and return-system notes.",
+    action: "ship-systems",
+    accent: "cyan",
+  },
+  {
+    id: "arsenal",
+    title: "Arsenal",
+    eyebrow: "Weapons",
+    description: "Inspect service state, attachments, ammunition class, and upgrade tiers.",
+    action: "arsenal",
+    accent: "orange",
+  },
+  {
+    id: "class-assignment",
+    title: "Class Assignment",
+    eyebrow: "Role",
+    description: "Select a local operations specialty. Live trait effects remain pending.",
+    action: "class-assignment",
+    accent: "green",
+  },
+  {
+    id: "skill-matrix",
+    title: "Skill Matrix",
+    eyebrow: "Progression",
+    description: "Prototype branch planning for crater routes, recovery, suit operation, and response.",
+    action: "skill-matrix",
+    accent: "purple",
   },
   {
     id: "intel-board",

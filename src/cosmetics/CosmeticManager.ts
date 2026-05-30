@@ -291,7 +291,7 @@ export const cosmeticDefinitions: Record<CosmeticId, CosmeticDefinition> = {
   "streamsniper-elite": {
     id: "streamsniper-elite",
     category: "outfit",
-    name: "Umbra Trophy Elite",
+    name: "Lumen Trophy Elite",
     rarity: "core",
     unlocked: false,
     description: "Flashy elite identity placeholder for contract trophies.",

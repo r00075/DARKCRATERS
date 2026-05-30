@@ -1,4 +1,5 @@
 import { App } from "./runtime/App";
+import { PlaceholderWeaponAudio } from "./audio/PlaceholderWeaponAudio";
 import { unlockAudio, playMenuMusic } from "./audio/darkCratersAudio";
 import "./styles.css";
 
@@ -14,9 +15,8 @@ const audioGate = document.createElement("div");
 audioGate.className = "audio-start-gate";
 audioGate.innerHTML = `
   <div class="audio-start-panel">
-    <strong>DARK CRATERS</strong>
-    <span><b>𝔼𝔸ℝ𝕃𝕐 𝔸ℂℂ𝔼𝕊𝕊</b></span>
     <button type="button" class="audio-start-button">PLAY</button>
+    <span>ENTER HABITAT</span>
   </div>
 `;
 
@@ -26,6 +26,7 @@ const playButton = audioGate.querySelector<HTMLButtonElement>(".audio-start-butt
 
 playButton?.addEventListener("click", () => {
   void unlockAudio();
+  new PlaceholderWeaponAudio().playEvent("ui.play");
   void playMenuMusic();
 
   audioGate.remove();
