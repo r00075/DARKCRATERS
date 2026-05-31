@@ -1022,7 +1022,7 @@ export class MultiplayerClient {
     return import.meta.env.VITE_SERVER_URL ?? import.meta.env.VITE_COLYSEUS_ENDPOINT ?? "ws://localhost:2567";
   }
 
-  private get squadId(): string {
+      private get squadId(): string {
     const params = new URLSearchParams(window.location.search);
     const explicitSquad = params.get("squad");
 
@@ -1037,7 +1037,12 @@ export class MultiplayerClient {
       return existing;
     }
 
-    const next = `squad-${crypto.randomUUID()}`;
+    const randomUuid =
+      typeof globalThis.crypto?.randomUUID === "function"
+        ? globalThis.crypto.randomUUID()
+        : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+
+    const next = `squad-${randomUuid}`;
     window.localStorage.setItem(storageKey, next);
     return next;
   }
