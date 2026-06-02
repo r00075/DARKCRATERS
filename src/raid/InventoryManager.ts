@@ -35,7 +35,7 @@ export class InventoryManager {
   }
 
   public refreshActiveContainer(container: LootContainerView | null): void {
-    this.activeContainerView = container && container.items.length > 0 ? container : null;
+    this.activeContainerView = container;
   }
 
   public add(type: LootType, quantity: number): LootEvent | null {

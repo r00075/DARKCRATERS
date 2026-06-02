@@ -646,21 +646,24 @@ export class CombatHud {
       return "";
     }
 
-    const items = container.items.length > 0
+    const items = container.status === "loading"
+      ? `<span class="loot-empty">Loading cache contents...</span>`
+      : container.items.length > 0
       ? container.items.map((item, index) => {
-        const definition = getItemDefinition(item.type);
-        const color = colorToCss(themeConfig.rarityColors[definition.rarity]);
+        const known = item.known !== false;
+        const definition = known ? getItemDefinition(item.type) : getItemDefinition("scrap");
+        const color = colorToCss(known ? themeConfig.rarityColors[definition.rarity] : themeConfig.colors.orange);
         const selected = index === raid.selectedLootIndex;
         return `
           <div class="loot-row${selected ? " selected" : ""}" style="--rarity-color: ${color}">
             <span>${item.label}</span>
-            <small>${item.quantity > 1 ? `x${item.quantity}` : `${definition.slots} slot${definition.slots > 1 ? "s" : ""}`} | ${definition.rarity} | ${definition.stackable ? "stacks" : "does not stack"}</small>
+            <small>${known ? `${item.quantity > 1 ? `x${item.quantity}` : `${definition.slots} slot${definition.slots > 1 ? "s" : ""}`} | ${definition.rarity} | ${definition.stackable ? "stacks" : "does not stack"}` : `x${item.quantity} | unknown server item | claimable`}</small>
             <button type="button" class="loot-take-button" data-loot-action="take" data-container-id="${container.id}" data-item-index="${index}">Take</button>
-            ${this.formatItemTooltip(item.type, item.quantity)}
+            ${known ? this.formatItemTooltip(item.type, item.quantity) : ""}
           </div>
         `;
       }).join("")
-      : `<span class="loot-empty">Empty</span>`;
+      : `<span class="loot-empty">No recoverable contents</span>`;
 
     return `
       <section class="loot-container-panel">

@@ -103,6 +103,7 @@ export class MultiplayerClient {
   private sendTimer = 0;
   private pingTimer = 0;
   private connectPromise: Promise<boolean> | null = null;
+  private lastConnectionError = "none";
   private readonly localName = `Runner-${Math.floor(1000 + Math.random() * 8999)}`;
   private snapshotState: MultiplayerConnectionSnapshot = {
     status: "offline",
@@ -194,6 +195,19 @@ export class MultiplayerClient {
     const result = await this.connectPromise;
     this.connectPromise = null;
     return result;
+  }
+
+  public get serverEndpoint(): string {
+    return this.endpoint;
+  }
+
+  public get matchmakingEndpoint(): string {
+    const endpoint = this.endpoint.replace(/^ws:\/\//, "http://").replace(/^wss:\/\//, "https://");
+    return `${endpoint.replace(/\/$/, "")}/matchmake/joinOrCreate/raid_room`;
+  }
+
+  public get lastConnectError(): string {
+    return this.lastConnectionError;
   }
 
   public update(
@@ -462,6 +476,7 @@ export class MultiplayerClient {
 
   private async connectInternal(): Promise<boolean> {
     try {
+      this.lastConnectionError = "none";
       this.updateSnapshot({ status: "connecting", endpoint: this.endpoint, lastEvent: "connecting" });
       const client = new Client(this.endpoint);
       this.room = await client.joinOrCreate("raid_room", {
@@ -541,6 +556,7 @@ export class MultiplayerClient {
       return true;
     } catch (error) {
       console.warn("[MultiplayerClient] Could not connect to DARK CRATERS server", error);
+      this.lastConnectionError = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
       this.room = null;
       this.remotePlayers = [];
       this.networkEnemies = [];
@@ -737,9 +753,9 @@ export class MultiplayerClient {
     const result = message as Partial<NetworkContainerClaimResult> | null;
     const container = this.normalizeContainerState(result?.container);
     const claimedItems = Array.isArray(result?.claimedItems)
-      ? result.claimedItems.filter((item): item is NetworkContainerClaimResult["claimedItems"][number] => {
-        return typeof item?.type === "string" && typeof item.quantity === "number";
-      })
+      ? result.claimedItems
+        .map((item) => this.normalizeNetworkLootStack(item))
+        .filter((item): item is NetworkContainerClaimResult["claimedItems"][number] => item !== null)
       : [];
 
     const normalized: NetworkContainerClaimResult = {
@@ -909,14 +925,66 @@ export class MultiplayerClient {
       return null;
     }
 
+    const items = state.items
+      .map((item) => {
+        const normalized = this.normalizeNetworkLootStack(item);
+        const keys = item && typeof item === "object" ? Object.keys(item as Record<string, unknown>).join(",") : "none";
+        console.info(`[ClientLoot] row normalized container=${state.id} inputKeys=${keys} itemId=${normalized?.type ?? "missing"} rawType=${normalized?.type ?? "missing"} known=${normalized !== null}`);
+        return normalized;
+      })
+      .filter((item): item is NetworkContainerState["items"][number] => item !== null);
+
     return {
       id: state.id,
       opened: Boolean(state.opened),
       depleted: Boolean(state.depleted),
-      items: state.items.filter((item): item is NetworkContainerState["items"][number] => {
-        return typeof item?.type === "string" && typeof item.quantity === "number";
-      }),
+      items,
       lastInteractionPlayerId: typeof state.lastInteractionPlayerId === "string" ? state.lastInteractionPlayerId : null,
+    };
+  }
+
+  private normalizeNetworkLootStack(item: unknown): NetworkContainerState["items"][number] | null {
+    const payload = item as {
+      type?: unknown;
+      rawType?: unknown;
+      itemType?: unknown;
+      id?: unknown;
+      itemId?: unknown;
+      quantity?: unknown;
+      count?: unknown;
+      amount?: unknown;
+    } | null;
+
+    if (!payload || typeof payload !== "object") {
+      return null;
+    }
+
+    const type = typeof payload.type === "string"
+      ? payload.type
+      : typeof payload.rawType === "string"
+        ? payload.rawType
+        : typeof payload.itemType === "string"
+          ? payload.itemType
+          : typeof payload.itemId === "string"
+            ? payload.itemId
+            : typeof payload.id === "string"
+              ? payload.id
+              : null;
+    const quantity = typeof payload.quantity === "number"
+      ? payload.quantity
+      : typeof payload.count === "number"
+        ? payload.count
+        : typeof payload.amount === "number"
+          ? payload.amount
+          : 1;
+
+    if (!type || !Number.isFinite(quantity)) {
+      return null;
+    }
+
+    return {
+      type,
+      quantity,
     };
   }
 

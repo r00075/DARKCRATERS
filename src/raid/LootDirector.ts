@@ -21,7 +21,8 @@ export type LootDirectorResult = Readonly<{
 export type LootContainerView = Readonly<{
   id: string;
   title: string;
-  items: LootStack[];
+  status?: "loading" | "ready";
+  items: Array<LootStack & { rawType?: string; known?: boolean }>;
 }>;
 
 type LootContainerDefinition = Readonly<{
@@ -322,16 +323,43 @@ export class LootDirector {
     }
 
     container.opened = state.opened;
-    container.items = state.items
-      .filter((item) => item.type in itemDefinitions && item.quantity > 0)
+    const renderedItems = state.items
+      .filter((item) => item.quantity > 0)
       .map((item) => {
+        if (!(item.type in itemDefinitions)) {
+          console.info(`[ClientLoot] fallback item row container=${state.id} itemId=${item.type} rawType=${item.type}`);
+          return {
+            type: "scrap" as LootType,
+            rawType: item.type,
+            known: false,
+            label: "Unknown Item",
+            quantity: item.quantity,
+          };
+        }
         const type = item.type as LootType;
         return {
           type,
           label: getItemDefinition(type).label,
           quantity: item.quantity,
+          known: true,
         };
       });
+    container.items = renderedItems;
+    const reason = renderedItems.length === state.items.length
+      ? "ok"
+      : renderedItems.length > 0
+        ? "missing-definition"
+        : state.items.length > 0
+          ? "unknown-payload"
+          : "ok";
+    console.info(`[ClientLoot] open response container=${state.id} serverItems=${state.items.length} renderedItems=${renderedItems.length} reason=${reason}`);
+    console.info(`[ClientLoot] render rows container=${state.id} serverItems=${state.items.length} rows=${renderedItems.length}`);
+    if (state.items.length > 0 && renderedItems.length === 0) {
+      console.info(`[ClientLoot] render blocked container=${state.id} reason=unknown-payload`);
+    }
+    for (const item of renderedItems) {
+      console.info(`[ClientLoot] claim available container=${state.id} itemId=${item.rawType ?? item.type}`);
+    }
     container.mesh.metadata = {
       ...container.mesh.metadata,
       opened: state.opened,
@@ -574,6 +602,7 @@ export class LootDirector {
     return {
       id: container.id,
       title: this.formatContainerTitle(container.id),
+      status: "ready",
       items: container.items.map((item) => ({ ...item })),
     };
   }

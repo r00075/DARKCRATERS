@@ -714,6 +714,17 @@ export class RaidRoom extends Room {
 
   private releaseHeavyCargoForPlayer(player: ServerPlayerState, reason: "leave" | "downed"): void {
     const before = this.sharedWorld.getHeavyCargo(heavyCargoId);
+    if (before?.status !== "carried" || before.carrierPlayerId !== player.id) {
+      if (reason === "leave") {
+        const skipReason = before?.carrierPlayerId === player.id && before?.status !== "carried"
+          ? "already-dropped-after-downed"
+          : "not-current-carrier";
+        console.info(
+          `[HeavyCargo] release-on-leave skipped room=${this.roomId} player=${player.name} id=${heavyCargoId} reason=${skipReason} state=${before?.status ?? "missing"}`,
+        );
+      }
+      return;
+    }
     const releaseReason = reason === "downed" ? "carrier-downed" : "carrier-leave";
     const requestedDropPosition = this.getSafeDownedHeavyCargoDropPosition(player);
     const dropResolution = this.resolveHeavyCargoDropPosition(player, requestedDropPosition, releaseReason);
@@ -736,13 +747,9 @@ export class RaidRoom extends Room {
       return;
     }
 
-    const current = this.sharedWorld.getHeavyCargo(heavyCargoId);
     if (reason === "leave") {
-      const skipReason = before?.carrierPlayerId === player.id && before?.status !== "carried"
-        ? "already-dropped-after-downed"
-        : "not-current-carrier";
       console.info(
-        `[HeavyCargo] release-on-leave skipped room=${this.roomId} player=${player.name} id=${heavyCargoId} reason=${skipReason} state=${current?.status ?? "missing"}`,
+        `[HeavyCargo] release-on-leave skipped room=${this.roomId} player=${player.name} id=${heavyCargoId} reason=not-current-carrier state=${this.sharedWorld.getHeavyCargo(heavyCargoId)?.status ?? "missing"}`,
       );
     }
   }

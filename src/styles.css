@@ -2671,21 +2671,26 @@ body.input-mode-ui #app {
 }
 
 .ship-dashboard-screen {
+  box-sizing: border-box;
   width: 100vw;
   height: 100vh;
   display: grid;
   grid-template:
     "top top top" 70px
     "identity overview stats" minmax(0, 1fr)
-    "alerts alerts mission" 132px / minmax(230px, 0.72fr) minmax(520px, 1.45fr) minmax(300px, 0.86fr);
-  gap: 14px;
-  padding: 16px 18px;
+    "alerts alerts mission" 118px / minmax(198px, 0.62fr) minmax(390px, 1.36fr) minmax(248px, 0.82fr);
+  gap: 12px;
+  padding: 14px 16px;
   overflow: hidden;
   text-align: left;
   background:
     radial-gradient(circle at 45% 30%, rgba(65, 217, 255, 0.12), transparent 34%),
     radial-gradient(circle at 76% 70%, rgba(122, 77, 255, 0.1), transparent 32%),
     linear-gradient(135deg, rgba(2, 6, 12, 0.98), rgba(6, 13, 24, 0.96));
+}
+
+.ship-dashboard-screen * {
+  box-sizing: border-box;
 }
 
 .ship-dashboard-screen button {
@@ -2695,7 +2700,7 @@ body.input-mode-ui #app {
 .ship-dashboard-topbar {
   grid-area: top;
   display: grid;
-  grid-template-columns: minmax(170px, 0.44fr) minmax(0, 1fr) minmax(220px, 0.55fr);
+  grid-template-columns: minmax(150px, 0.38fr) minmax(0, 1fr) minmax(190px, 0.5fr);
   align-items: center;
   gap: 12px;
   border-bottom: 1px solid rgba(65, 217, 255, 0.18);
@@ -2740,13 +2745,14 @@ body.input-mode-ui #app {
 .ship-dashboard-topbar nav {
   justify-content: center;
   min-width: 0;
+  overflow: hidden;
 }
 
 .ship-dashboard-topbar nav button,
 .ship-dashboard-resources button {
-  padding: 7px 9px;
+  padding: 6px 7px;
   border-width: 1px;
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .ship-dashboard-topbar nav button.active {
@@ -2774,6 +2780,8 @@ body.input-mode-ui #app {
 .ship-stat-panel,
 .ship-alert-rail,
 .ship-mission-panel {
+  min-width: 0;
+  min-height: 0;
   border: 1px solid rgba(65, 217, 255, 0.18);
   border-radius: 8px;
   background: rgba(5, 10, 18, 0.62);
@@ -2784,13 +2792,13 @@ body.input-mode-ui #app {
   grid-area: identity;
   display: grid;
   align-content: start;
-  gap: 14px;
-  padding: 18px;
+  gap: 12px;
+  padding: 15px;
 }
 
 .ship-identity-panel > strong {
   color: #f8fafc;
-  font-size: clamp(30px, 3vw, 48px);
+  font-size: clamp(26px, 2.6vw, 42px);
   line-height: 0.95;
 }
 
@@ -2815,7 +2823,7 @@ body.input-mode-ui #app {
 
 .ship-condition-meter strong {
   color: #e6edf3;
-  font-size: 42px;
+  font-size: 34px;
   line-height: 1;
 }
 
@@ -2858,8 +2866,8 @@ body.input-mode-ui #app {
   grid-area: overview;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto auto;
-  gap: 12px;
-  padding: 18px;
+  gap: 10px;
+  padding: 15px;
   min-width: 0;
 }
 
@@ -2878,13 +2886,13 @@ body.input-mode-ui #app {
 .ship-preview-stage {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) minmax(220px, 0.65fr);
+  grid-template-columns: minmax(230px, 1fr) minmax(190px, 0.62fr);
   align-items: center;
   gap: 18px;
   min-height: 0;
   border: 1px solid rgba(148, 163, 184, 0.12);
   border-radius: 8px;
-  padding: 20px;
+  padding: 16px;
   background:
     radial-gradient(ellipse at 38% 58%, rgba(65, 217, 255, 0.15), transparent 52%),
     linear-gradient(135deg, rgba(15, 23, 42, 0.38), rgba(2, 6, 12, 0.45));
@@ -2892,7 +2900,7 @@ body.input-mode-ui #app {
 
 .kestrel-silhouette {
   position: relative;
-  min-height: 240px;
+  min-height: 210px;
   filter: drop-shadow(0 0 32px rgba(65, 217, 255, 0.18));
 }
 
@@ -2943,6 +2951,46 @@ body.input-mode-ui #app {
   transform: translate(-50%, -50%) skewX(-22deg);
 }
 
+.ship-schematic-label {
+  position: absolute;
+  z-index: 2;
+  display: block;
+  padding: 4px 6px;
+  border: 1px solid rgba(65, 217, 255, 0.28);
+  border-radius: 4px;
+  color: rgba(223, 251, 255, 0.92);
+  background: rgba(2, 6, 12, 0.72);
+  font-size: 10px;
+  font-weight: 950;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ship-schematic-name {
+  left: 50%;
+  top: 16%;
+  transform: translateX(-50%);
+}
+
+.ship-schematic-cargo {
+  left: 50%;
+  bottom: 17%;
+  transform: translateX(-50%);
+}
+
+.ship-schematic-engine {
+  left: 6%;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.ship-schematic-nose {
+  right: 3%;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
 .ship-preview-stage strong {
   display: block;
   margin: 6px 0;
@@ -2959,10 +3007,10 @@ body.input-mode-ui #app {
 .ship-dashboard-module {
   display: grid;
   gap: 6px;
-  min-height: 104px;
+  min-height: 92px;
   border: 1px solid rgba(65, 217, 255, 0.18);
   border-radius: 8px;
-  padding: 12px;
+  padding: 10px;
   background: rgba(2, 6, 12, 0.54);
 }
 
@@ -2986,15 +3034,15 @@ body.input-mode-ui #app {
   grid-area: stats;
   display: grid;
   grid-template-rows: 1fr 1fr auto;
-  gap: 12px;
+  gap: 9px;
   min-height: 0;
-  padding: 14px;
+  padding: 12px;
 }
 
 .ship-stat-panel section {
   display: grid;
   align-content: start;
-  gap: 8px;
+  gap: 6px;
   min-height: 0;
 }
 
@@ -3007,8 +3055,9 @@ body.input-mode-ui #app {
   grid-area: alerts;
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 14px 18px;
+  gap: 12px;
+  padding: 12px 15px;
+  overflow: hidden;
 }
 
 .ship-alert-rail b {
@@ -3033,13 +3082,92 @@ body.input-mode-ui #app {
   display: grid;
   align-content: center;
   gap: 9px;
-  padding: 14px 16px;
+  padding: 12px 14px;
   border-color: rgba(190, 242, 100, 0.24);
 }
 
 .ship-mission-panel strong {
   color: #f8fafc;
   font-size: 20px;
+}
+
+.multiplayer-failure-screen {
+  box-sizing: border-box;
+  width: 100vw;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background:
+    radial-gradient(circle at 50% 20%, rgba(65, 217, 255, 0.14), transparent 32%),
+    linear-gradient(135deg, rgba(2, 6, 12, 0.98), rgba(8, 13, 24, 0.96));
+}
+
+.multiplayer-failure-panel {
+  width: min(820px, 100%);
+  display: grid;
+  gap: 14px;
+  border: 1px solid rgba(65, 217, 255, 0.24);
+  border-radius: 8px;
+  padding: 24px;
+  background: rgba(4, 10, 18, 0.82);
+  box-shadow: inset 0 0 34px rgba(65, 217, 255, 0.06), 0 24px 90px rgba(0, 0, 0, 0.45);
+}
+
+.multiplayer-failure-panel > span,
+.multiplayer-diagnostic-grid span {
+  color: rgba(103, 232, 249, 0.86);
+  font-size: 11px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.multiplayer-failure-panel h2 {
+  margin: 0;
+  color: #f8fafc;
+  font-size: clamp(30px, 5vw, 54px);
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.multiplayer-failure-panel p {
+  max-width: 620px;
+  margin: 0;
+  color: rgba(226, 232, 240, 0.78);
+}
+
+.multiplayer-diagnostic-grid {
+  display: grid;
+  grid-template-columns: minmax(110px, auto) minmax(0, 1fr);
+  gap: 8px 12px;
+  padding: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 8px;
+  background: rgba(2, 6, 12, 0.62);
+}
+
+.multiplayer-diagnostic-grid strong {
+  min-width: 0;
+  color: #e6edf3;
+  overflow-wrap: anywhere;
+}
+
+.multiplayer-failure-panel textarea {
+  width: 100%;
+  min-height: 130px;
+  resize: vertical;
+  border: 1px solid rgba(65, 217, 255, 0.18);
+  border-radius: 8px;
+  padding: 12px;
+  color: #dffbff;
+  background: rgba(0, 0, 0, 0.42);
+  font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+}
+
+.multiplayer-failure-panel footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .ship-mission-panel button {

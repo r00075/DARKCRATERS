@@ -20,7 +20,7 @@ import {
   stopMusic,
   updateCurrentMusicVolume,
 } from "../audio/darkCratersAudio";
-import { classDefinitions, type ClassId } from "../classes/ClassDefinitions";
+import { classDefinitions, getClassSuitModelCandidates, type ClassId } from "../classes/ClassDefinitions";
 import { ClassManager } from "../classes/ClassManager";
 import { AimAssistSystem } from "../combat/AimAssistSystem";
 import type { DamageResult } from "../combat/Damageable";
@@ -294,6 +294,8 @@ export class App {
   private objectiveWasCompleted = false;
   private heavyCargoPressureSpawned = false;
   private heavyCargoBlockedFeedbackCooldown = 0;
+  private heavyCargoInventorySuppressionSeconds = 0;
+  private heavyCargoInventorySuppressionAction: "release" | "pickup" | "drop" | "secure" | null = null;
   private pendingHeavyCargoRequest: "none" | "release" | "pickup" | "drop" | "secure" = "none";
   private activeHeavyCoreNavMarkerCount = 0;
   private lastHeavyCargoRoomId: string | null = null;
@@ -354,6 +356,7 @@ export class App {
   private shipInRange = false;
   private raidBagOpen = false;
   private pendingSharedContainerOpenId: string | null = null;
+  private activeSharedContainerPanelId: string | null = null;
   private lastSharedContainerPanelId: string | null = null;
   private lastSharedContainerPanelItemCount: number | null = null;
   private lastSharedContainerClaimRefresh = "none";
@@ -502,6 +505,10 @@ export class App {
       this.input.update(dt);
       this.gameplayInput = this.input.snapshot;
     this.heavyCargoBlockedFeedbackCooldown = Math.max(0, this.heavyCargoBlockedFeedbackCooldown - dt);
+    this.heavyCargoInventorySuppressionSeconds = Math.max(0, this.heavyCargoInventorySuppressionSeconds - dt);
+    if (this.heavyCargoInventorySuppressionSeconds <= 0) {
+      this.heavyCargoInventorySuppressionAction = null;
+    }
     this.reviveFeedbackCooldown = Math.max(0, this.reviveFeedbackCooldown - dt);
       if (this.tacticalMapOpen) {
         this.gameplayInput = this.suppressGameplayControls(this.gameplayInput);
@@ -923,8 +930,17 @@ export class App {
       return;
     }
 
+    if (this.isInventorySuppressedForHeavyCargo("inventory-navigation")) {
+      this.raidBagOpen = false;
+      this.inventoryManager.setActiveContainer(null);
+      return;
+    }
+
     if (this.tacticalMapOpen) {
       if (this.gameplayInput.raidBagTogglePressed) {
+        if (this.isInventorySuppressedForHeavyCargo("tactical-map-toggle")) {
+          return;
+        }
         this.closeTacticalMap();
         this.raidBagOpen = true;
         this.setInputMode("ui", "raid-bag");
@@ -936,6 +952,13 @@ export class App {
     }
 
     this.raidUiNavigationCooldown = Math.max(0, this.raidUiNavigationCooldown - dt);
+
+    const pendingHeavyCargoAction = this.getPendingHeavyCargoInputAction();
+    if (pendingHeavyCargoAction) {
+      this.suppressInventoryOverlayForHeavyCargo(pendingHeavyCargoAction);
+      console.info(`[Interaction] inventory panel suppressed reason=heavy-cargo action=${pendingHeavyCargoAction}`);
+      return;
+    }
 
     if (this.gameplayInput.raidBagTogglePressed) {
       this.lastInteractConsumedBy = "EVA-Pack";
@@ -963,8 +986,16 @@ export class App {
 
       if (this.gameplayInput.takeAllPressed) {
         this.takeAllLoot(activeContainer.id);
-      } else if (this.gameplayInput.uiConfirmPressed) {
+      } else if (this.gameplayInput.uiConfirmPressed || (this.gameplayInput.interactPressed && activeContainer.items.length > 0 && activeContainer.status !== "loading")) {
         this.takeLootItem(activeContainer.id, this.selectedLootIndex);
+      } else if (this.gameplayInput.interactPressed) {
+        const reason = activeContainer.status === "loading"
+          ? "pending"
+          : activeContainer.items.length > 0
+            ? "has-authority-items"
+            : "authority-empty";
+        console.info(`[ClientLoot] repeated open blocked container=${activeContainer.id} reason=${reason}`);
+        this.lastSharedContainerClaimRefresh = `repeated open blocked ${activeContainer.id} ${reason}`;
       } else if (this.gameplayInput.uiBackPressed) {
         this.closeLootPanel(activeContainer.id);
       } else {
@@ -1211,6 +1242,58 @@ export class App {
     return false;
   }
 
+  private getPendingHeavyCargoInputAction(): "release" | "pickup" | "drop" | "secure" | null {
+    if (this.heavyCargoState.carriedByLocalPlayer && this.gameplayInput.uiDropPressed) {
+      return "drop";
+    }
+
+    if (!this.gameplayInput.interactPressed || this.extractionState.insideZone) {
+      return null;
+    }
+
+    if (this.heavyCargoState.carriedByLocalPlayer && this.heavyCargoState.distanceToShipCargo <= 4) {
+      return "secure";
+    }
+
+    if (
+      (this.heavyCargoState.status === "available" || this.heavyCargoState.status === "dropped") &&
+      this.heavyCargoManager.canPickup(this.player.state.position)
+    ) {
+      return "pickup";
+    }
+
+    if (this.heavyCargoState.status === "locked" && this.heavyCargoManager.canRelease(this.player.state.position)) {
+      return "release";
+    }
+
+    return null;
+  }
+
+  private suppressInventoryOverlayForHeavyCargo(action: "release" | "pickup" | "drop" | "secure"): void {
+    this.heavyCargoInventorySuppressionSeconds = 0.45;
+    this.heavyCargoInventorySuppressionAction = action;
+    this.inventoryManager.setActiveContainer(null);
+    this.inventoryManager.clearWarning();
+    this.raidBagOpen = false;
+    console.info(`[Interaction] heavy cargo route action=${action} target=${heliumDrillCoreHeavyCargoId} blockedInventoryPanel=true`);
+    console.info(`[Interaction] heavyCargoConsumesInput action=${action} suppressInventory=true`);
+    console.info(`[EvaPack] forced closed reason=heavy-cargo action=${action}`);
+    console.info(`[HeavyCargoUI] no inventory overlay action=${action}`);
+  }
+
+  private isInventorySuppressedForHeavyCargo(source: string): boolean {
+    if (this.heavyCargoInventorySuppressionSeconds <= 0 || !this.heavyCargoInventorySuppressionAction) {
+      return false;
+    }
+
+    console.info(`[EvaPack] open blocked reason=heavy-cargo action=${this.heavyCargoInventorySuppressionAction} source=${source}`);
+    return true;
+  }
+
+  private logHeavyCargoUiActionComplete(action: "release" | "pickup" | "drop" | "secure"): void {
+    console.info(`[HeavyCargoUI] completed action=${action} evaPackOpen=${this.raidBagOpen}`);
+  }
+
   private handleRaidHudAction(action: string | undefined): void {
     if (action?.startsWith("loot:")) {
       const fields = action
@@ -1373,7 +1456,7 @@ export class App {
       <span>Audio State: music ${getCurrentMusicState()} | ship ${this.shipAudio.state} | phase ${shipAudioDebug.phase} | impact build ${shipAudioDebug.impactBuildActive ? "true" : "false"} | last ${shipAudioDebug.lastEvent} | raid music ${this.raidMusicStartedForCurrentRun ? "started" : "pending"}</span>
       <span>Progression: assignment ${this.classManager.snapshot.selectedClassId} | skill matrix ${this.skillManager.snapshot.version === 1 ? "ready" : "pending"} | acquired ${this.skillManager.acquiredCount}</span>
       <span>Overlay: ${this.overlayState} | Input Mode: ${this.inputMode} | Panel: ${this.activeInputPanel}</span>
-      <span>UI Panel Open: ${this.getActiveInputPanel()} | Interact consumed by: ${this.lastInteractConsumedBy} | Pending shared open: ${this.pendingSharedContainerOpenId ?? "none"}</span>
+      <span>UI Panel Open: ${this.getActiveInputPanel()} | Interact consumed by: ${this.lastInteractConsumedBy} | Active shared container: ${this.activeSharedContainerPanelId ?? "none"} | Pending shared open: ${this.pendingSharedContainerOpenId ?? "none"}</span>
       <span>Pointer Lock: ${mouse.pointerLocked ? "canvas" : "none"} | Mouse Captured: ${mouse.mouseCaptured ? "true" : "false"}</span>
       <span>Mouse: ${mouse.lastMouseAction} | down ${mouse.lastButtonDown ?? "none"} | up ${mouse.lastButtonUp ?? "none"}</span>
       <span>Mouse Held: fire ${mouse.fireHeld ? "true" : "false"} | ADS ${mouse.adsHeld ? "true" : "false"} | wheel ${Math.round(mouse.wheelDelta)}</span>
@@ -1388,7 +1471,7 @@ export class App {
       <span>Network Lifecycle: connected ${multiplayer.status === "connected" ? "true" : "false"} | room ${multiplayer.roomId ?? "none"} | last ${multiplayer.lastRoomLifecycleEvent} | reset ${multiplayer.lastNetworkStateResetReason} | enemy clear ${multiplayer.lastNetworkEnemyClearReason}</span>
       <span>Local PvE: ${this.multiplayerMode ? "disabled" : "enabled"} | Enemy drops: ${this.multiplayerMode ? "server event credit only" : "local loot table"}</span>
       <span>World Authority: ${multiplayer.worldAuthority} | Containers ${multiplayer.sharedContainersDepleted}/${multiplayer.sharedContainerCount} depleted | Last container ${multiplayer.lastContainerEvent} | Duplicate claims ${multiplayer.duplicateClaimCount}</span>
-      <span>Loot Routing: ${this.getLootRoutingMode(multiplayer)} v${multiplayer.sharedWorldVersion ?? "none"} | nearby ${this.lootDirector.getNearbyContainerId(this.player.state.position) ?? "none"} | pending ${this.pendingSharedContainerOpenId ?? "none"}</span>
+      <span>Loot Routing: ${this.getLootRoutingMode(multiplayer)} v${multiplayer.sharedWorldVersion ?? "none"} | nearby ${this.lootDirector.getNearbyContainerId(this.player.state.position) ?? "none"} | active ${this.activeSharedContainerPanelId ?? "none"} | pending ${this.pendingSharedContainerOpenId ?? "none"}</span>
       <span>Loot Net: open ${multiplayer.lastContainerRequestId ?? "none"} ${multiplayer.lastContainerOpenResult} items ${multiplayer.lastContainerOpenItemCount ?? "none"} | mapping ${multiplayer.lastContainerMapping} | panel ${this.lastSharedContainerPanelId ?? "none"} items ${this.lastSharedContainerPanelItemCount ?? "none"} ${multiplayer.activeLootPanelApplied ? "applied" : "false"} | claim ${multiplayer.lastClaimRequest} ${multiplayer.lastClaimResult}</span>
       <span>Loot Panel Refresh: ${this.lastSharedContainerClaimRefresh}</span>
       <span>Loot Award: claimant ${multiplayer.lastClaimantPlayerId ?? "none"} | local ${multiplayer.lastClaimWasLocal ? "true" : "false"} | inventory add ${multiplayer.lastInventoryAddApplied ? "true" : "false"}</span>
@@ -2138,9 +2221,24 @@ export class App {
     }
     this.previousExtractionStarted = this.extractionState.extracting;
 
+    const pendingHeavyCargoAction = this.getPendingHeavyCargoInputAction();
+    if (pendingHeavyCargoAction) {
+      this.handleHeavyCargoInteractions();
+      return;
+    }
+
     const activeContainer = this.inventoryManager.snapshot.activeContainer;
 
     if (activeContainer) {
+      if (this.gameplayInput.interactPressed) {
+        const reason = activeContainer.status === "loading"
+          ? "pending"
+          : activeContainer.items.length > 0
+            ? "already-open"
+            : "depleted";
+        console.info(`[ClientLoot] repeated open blocked container=${activeContainer.id} reason=${reason}`);
+        this.lastSharedContainerClaimRefresh = `repeated open blocked ${activeContainer.id} ${reason}`;
+      }
       this.handleLootPanelInput(activeContainer.id);
       return;
     }
@@ -2188,7 +2286,7 @@ export class App {
           }
 
           if (this.pendingSharedContainerOpenId === containerId) {
-            console.info(`[ClientLoot] open suppressed container=${containerId} reason=request-pending`);
+            console.info(`[ClientLoot] repeated open blocked container=${containerId} reason=pending`);
             return;
           }
 
@@ -2200,9 +2298,18 @@ export class App {
             this.combatHud.showLootNotification("Cache link unavailable");
           } else {
             this.pendingSharedContainerOpenId = containerId;
+            this.setActiveSharedContainerPanel(containerId, containerId.includes("reward-chest") ? "reward-chest-interact" : "player-open");
             this.raidBagOpen = false;
             this.selectedLootIndex = 0;
-            this.inventoryManager.setActiveContainer(null);
+            this.inventoryManager.setActiveContainer({
+              id: containerId,
+              title: "Recovery Cache",
+              status: "loading",
+              items: [],
+            });
+            this.setInputMode("ui", "loot-panel");
+            console.info(`[ClientLoot] open allowed container=${containerId} reason=new-container`);
+            console.info(`[ClientLoot] open requested container=${containerId} state=idle`);
             this.multiplayerClient.requestContainerOpen(containerId);
             this.noiseSystem.emit("loot", this.player.state.position, this.environmentState.gameplay);
             this.combatHud.showLootNotification("Opening recovery cache...");
@@ -2220,6 +2327,7 @@ export class App {
         this.raidBagOpen = true;
         this.selectedLootIndex = 0;
         this.noiseSystem.emit("loot", this.player.state.position, this.environmentState.gameplay);
+        this.setActiveSharedContainerPanel(container.id, "player-open");
         this.inventoryManager.setActiveContainer(container);
         this.setInputMode("ui", "loot-panel");
         this.combatHud.showLootNotification(container.items.length > 0 ? "Loot cache opened" : "Cache empty");
@@ -2251,6 +2359,7 @@ export class App {
       this.vendorManager.recordExtraction(this.objectiveWasCompleted);
       this.finalizeRaidResult("extracted", "extracted_clean");
       this.inventoryManager.clearRaid();
+      this.clearActiveSharedContainerPanel("extract");
       this.raidBagOpen = false;
       this.selectedRaidBagIndex = 0;
       this.selectedLootIndex = 0;
@@ -2282,6 +2391,7 @@ export class App {
     }
     this.finalizeRaidResult("lost", this.getLostRaidResultKind(reason));
     this.inventoryManager.clearRaid();
+    this.clearActiveSharedContainerPanel("return-habitat");
     this.raidInventory.setBonusSlots(this.calculateRaidBagBonusSlots());
     this.raidBagOpen = false;
     this.selectedRaidBagIndex = 0;
@@ -2302,21 +2412,34 @@ export class App {
       return;
     }
 
+    if (container.status === "loading") {
+      this.lastSharedContainerClaimRefresh = `panel empty blocked container=${containerId} reason=awaiting-authority`;
+      console.info(`[ClientLoot] panel empty blocked container=${containerId} reason=awaiting-authority`);
+      return;
+    }
+
     if (container.items.length === 0) {
-      this.closeLootPanel(containerId);
+      this.lastSharedContainerClaimRefresh = `panel empty container=${containerId} reason=authority-empty`;
     }
   }
 
   private takeLootItem(containerId: string, itemIndex: number): void {
     if (this.multiplayerMode) {
       const item = this.inventoryManager.snapshot.activeContainer?.items[itemIndex];
-      if (!item || !this.raidInventory.canAdd(item.type, item.quantity)) {
-        this.inventoryManager.setWarning("Inventory Full");
-        this.combatHud.showLootNotification("Inventory Full");
+      if (!item) {
+        this.inventoryManager.setWarning("No recoverable contents");
+        this.combatHud.showLootNotification("No recoverable contents");
         return;
       }
+      if (item.known !== false && !this.raidInventory.canAdd(item.type, item.quantity)) {
+        this.inventoryManager.setWarning("EVA Pack full - drop or use items before claiming");
+        this.combatHud.showLootNotification("EVA Pack full - drop or use items before claiming");
+        return;
+      }
+      const expectedType = item.rawType ?? item.type;
+      console.info(`[ClientLoot] claim sent container=${containerId} itemId=${expectedType} rawType=${item.rawType ?? "none"}`);
       this.multiplayerClient.requestContainerClaim(containerId, itemIndex, {
-        type: item.type,
+        type: expectedType,
         quantity: item.quantity,
       });
       return;
@@ -2339,11 +2462,22 @@ export class App {
   private takeAllLoot(containerId: string): void {
     if (this.multiplayerMode) {
       const items = this.inventoryManager.snapshot.activeContainer?.items ?? [];
-      if (items.length === 0 || !this.raidInventory.canAddAll(items)) {
-        this.inventoryManager.setWarning("Inventory Full");
-        this.combatHud.showLootNotification("Inventory Full");
+      if (this.inventoryManager.snapshot.activeContainer?.status === "loading") {
+        this.inventoryManager.setWarning("Loading cache contents");
+        this.combatHud.showLootNotification("Loading cache contents...");
         return;
       }
+      if (items.length === 0) {
+        this.inventoryManager.setWarning("No recoverable contents");
+        this.combatHud.showLootNotification("No recoverable contents");
+        return;
+      }
+      if (!this.raidInventory.canAddAll(items)) {
+        this.inventoryManager.setWarning("EVA Pack full - drop or use items before claiming");
+        this.combatHud.showLootNotification("EVA Pack full - drop or use items before claiming");
+        return;
+      }
+      console.info(`[ClientLoot] claim sent container=${containerId} itemId=all rawType=all`);
       this.multiplayerClient.requestContainerClaim(containerId, "all");
       return;
     }
@@ -2362,11 +2496,30 @@ export class App {
     this.inventoryManager.refreshActiveContainer(this.lootDirector.getContainerView(containerId));
   }
 
+  private setActiveSharedContainerPanel(containerId: string, source: "player-open" | "panel-switch" | "reward-chest-interact"): void {
+    if (this.activeSharedContainerPanelId !== containerId) {
+      console.info(`[ClientLoot] active container set container=${containerId} source=${source}`);
+    }
+    this.activeSharedContainerPanelId = containerId;
+  }
+
+  private clearActiveSharedContainerPanel(reason: "close" | "depleted" | "extract" | "return-habitat" | "reset"): void {
+    if (this.activeSharedContainerPanelId) {
+      console.info(`[ClientLoot] active container cleared reason=${reason}`);
+    }
+    this.activeSharedContainerPanelId = null;
+  }
+
   private closeLootPanel(containerId: string): void {
+    console.info(`[ClientLoot] panel close active=${this.activeSharedContainerPanelId ?? containerId}`);
     this.lootDirector.closeContainer(containerId);
     this.inventoryManager.setActiveContainer(null);
     this.inventoryManager.clearWarning();
     this.raidBagOpen = false;
+    this.clearActiveSharedContainerPanel("close");
+    if (this.pendingSharedContainerOpenId === containerId) {
+      this.pendingSharedContainerOpenId = null;
+    }
     if (this.raidScreen === "raid" && this.raidOutcome === "active" && this.playerHealth.snapshot.alive) {
       this.setInputMode("gameplay", "gameplay");
       this.input.captureGameplayPointer();
@@ -2486,6 +2639,7 @@ export class App {
 
   private handleHeavyCargoInteractions(): boolean {
     if (this.heavyCargoState.carriedByLocalPlayer && this.gameplayInput.uiDropPressed) {
+      this.suppressInventoryOverlayForHeavyCargo("drop");
       const dropPosition = this.getHeavyCargoDropPosition();
       if (this.multiplayerMode) {
         if (!this.canSendHeavyCargoAction()) {
@@ -2503,6 +2657,7 @@ export class App {
       this.lastInteractConsumedBy = "heavy-cargo-drop";
       this.combatHud.showLootNotification("CORE DROPPED - RECOVERABLE | Movement restored");
       this.sfxAudio.playEvent("heavy.drop");
+      this.logHeavyCargoUiActionComplete("drop");
       return true;
     }
 
@@ -2511,6 +2666,7 @@ export class App {
     }
 
     if (this.heavyCargoState.carriedByLocalPlayer && this.heavyCargoState.distanceToShipCargo <= 4) {
+      this.suppressInventoryOverlayForHeavyCargo("secure");
       if (this.multiplayerMode) {
         if (!this.canSendHeavyCargoAction()) {
           return true;
@@ -2522,6 +2678,7 @@ export class App {
         this.onHeavyCargoSecured();
       }
       this.lastInteractConsumedBy = "heavy-cargo-secure";
+      this.logHeavyCargoUiActionComplete("secure");
       return true;
     }
 
@@ -2529,6 +2686,7 @@ export class App {
       (this.heavyCargoState.status === "available" || this.heavyCargoState.status === "dropped") &&
       this.heavyCargoManager.canPickup(this.player.state.position)
     ) {
+      this.suppressInventoryOverlayForHeavyCargo("pickup");
       if (this.multiplayerMode) {
         if (!this.canSendHeavyCargoAction()) {
           return true;
@@ -2540,10 +2698,12 @@ export class App {
         this.onHeavyCargoPickedUp();
       }
       this.lastInteractConsumedBy = "heavy-cargo-pickup";
+      this.logHeavyCargoUiActionComplete("pickup");
       return true;
     }
 
     if (this.heavyCargoState.status === "locked" && this.heavyCargoManager.canRelease(this.player.state.position)) {
+      this.suppressInventoryOverlayForHeavyCargo("release");
       if (this.multiplayerMode) {
         if (!this.canSendHeavyCargoAction()) {
           return true;
@@ -2556,6 +2716,7 @@ export class App {
         this.sfxAudio.playEvent("heavy.release");
       }
       this.lastInteractConsumedBy = "heavy-cargo-release";
+      this.logHeavyCargoUiActionComplete("release");
       return true;
     }
 
@@ -3321,12 +3482,69 @@ export class App {
 
     if (!connected) {
       this.combatHud.showLootNotification("Multiplayer server unavailable");
-      this.showMainMenu();
+      this.showMultiplayerConnectionFailure();
       return;
     }
 
     this.combatHud.showLootNotification("Joined multiplayer room");
     this.startRaid(true);
+  }
+
+  private showMultiplayerConnectionFailure(): void {
+    this.raidScreen = "menu";
+    this.menu.classList.remove("hidden");
+    this.menuContent.classList.remove("hq-command-content", "class-deploy-content", "ship-dashboard-content");
+    const snapshot = this.multiplayerClient.snapshot;
+    const diagnostics = [
+      "DARK CRATERS multiplayer connection failure",
+      `Server endpoint: ${this.multiplayerClient.serverEndpoint}`,
+      `Matchmaking endpoint: ${this.multiplayerClient.matchmakingEndpoint}`,
+      `Status: ${snapshot.status}`,
+      `Room: ${snapshot.roomId ?? "none"}`,
+      `Last lifecycle: ${snapshot.lastRoomLifecycleEvent}`,
+      `Last event: ${snapshot.lastEvent}`,
+      `Last error: ${this.multiplayerClient.lastConnectError}`,
+    ].join("\n");
+
+    this.menuContent.innerHTML = `
+      <div class="multiplayer-failure-screen">
+        <section class="multiplayer-failure-panel">
+          <span>Multiplayer Diagnostics</span>
+          <h2>Connection Failed</h2>
+          <p>The Crater Run server did not accept a room connection. Stay here to retry or copy diagnostics instead of silently returning to Habitat.</p>
+          <div class="multiplayer-diagnostic-grid">
+            <span>Server URL</span><strong>${this.escapeHtml(this.multiplayerClient.serverEndpoint)}</strong>
+            <span>Matchmaking</span><strong>${this.escapeHtml(this.multiplayerClient.matchmakingEndpoint)}</strong>
+            <span>Status</span><strong>${snapshot.status}</strong>
+            <span>Error</span><strong>${this.escapeHtml(this.multiplayerClient.lastConnectError)}</strong>
+          </div>
+          <textarea readonly aria-label="Multiplayer connection diagnostics">${this.escapeHtml(diagnostics)}</textarea>
+          <footer>
+            <button type="button" class="class-primary-action" data-action="multiplayer-retry">Retry Multiplayer</button>
+            <button type="button" data-action="menu">Return to Habitat</button>
+            <button type="button" data-action="multiplayer-copy-diagnostics">Copy Diagnostics</button>
+          </footer>
+        </section>
+      </div>
+    `;
+    this.bindMenuButtons();
+  }
+
+  private copyMultiplayerDiagnostics(): void {
+    const snapshot = this.multiplayerClient.snapshot;
+    const diagnostics = [
+      "DARK CRATERS multiplayer connection failure",
+      `Server endpoint: ${this.multiplayerClient.serverEndpoint}`,
+      `Matchmaking endpoint: ${this.multiplayerClient.matchmakingEndpoint}`,
+      `Status: ${snapshot.status}`,
+      `Room: ${snapshot.roomId ?? "none"}`,
+      `Last lifecycle: ${snapshot.lastRoomLifecycleEvent}`,
+      `Last event: ${snapshot.lastEvent}`,
+      `Last error: ${this.multiplayerClient.lastConnectError}`,
+    ].join("\n");
+    void navigator.clipboard?.writeText(diagnostics)
+      .then(() => this.combatHud.showLootNotification("Multiplayer diagnostics copied"))
+      .catch(() => this.combatHud.showLootNotification("Copy failed - diagnostics remain on screen"));
   }
 
   private resetRaid(): void {
@@ -3346,6 +3564,7 @@ export class App {
       this.contractManager.snapshot.active?.definition.targetPoi ?? null,
     );
     this.inventoryManager.clearRaid();
+    this.clearActiveSharedContainerPanel("reset");
     this.raidBagOpen = false;
     this.selectedRaidBagIndex = 0;
     this.selectedLootIndex = 0;
@@ -3669,6 +3888,7 @@ export class App {
     this.habitatPreview.dispose();
     this.menuContent.classList.remove("class-deploy-content", "ship-dashboard-content");
     this.menuContent.classList.add("hq-command-content");
+    this.cosmeticManager.setActiveClass(this.classManager.snapshot.selectedClassId);
     this.landedShip.setEnabled(false);
     this.orbitalDeploymentScene.setEnabled(false);
     this.shipLandingState = this.shipLandingSequence.reset();
@@ -3780,7 +4000,10 @@ export class App {
       </details>
     `;
     this.bindMenuButtons();
-    this.habitatPreview.mount(this.menuContent.querySelector<HTMLElement>(".hq-runner-preview-host"), "habitat");
+    this.habitatPreview.mount(this.menuContent.querySelector<HTMLElement>(".hq-runner-preview-host"), {
+      variant: "habitat",
+      modelPaths: getClassSuitModelCandidates(this.classManager.snapshot.selectedClassId),
+    });
   }
 
   private showRaidSelectMenu(): void {
@@ -3865,7 +4088,7 @@ export class App {
     ].map(([label, action]) => `<button type="button" class="${action === "ship-systems" ? "active" : ""}" data-action="${action}">${label}</button>`).join("");
     const moduleRows = [
       { label: cargo.name, level: `Level ${cargo.tier}`, effect: cargo.effect || "Cargo Capacity +10%", state: "installed" },
-      { label: "Standard Extraction Beacon", level: "Level 1", effect: "Extraction Speed +5% (staged)", state: "installed" },
+      { label: "Standard Extraction Beacon", level: "Level 1", effect: "Extraction Speed +5%", state: "installed" },
       { label: "Empty Slot", level: "Available", effect: "Available for installation", state: "empty" },
       { label: "Empty Slot", level: "Available", effect: "Available for installation", state: "empty" },
     ].map((module) => `
@@ -3879,12 +4102,12 @@ export class App {
     const statRows = [
       ["Hull Integrity", `${integrityPercent * 10} / 1000`],
       ["Cargo Capacity", `${this.shipState.cargoUsed} / ${this.shipState.cargoCapacity}`],
-      ["Fuel Efficiency", "1.00x staged"],
-      ["Extraction Speed", "1.05x staged"],
-      ["Signal Strength", "1.10x staged"],
+      ["Fuel Efficiency", "1.00x"],
+      ["Extraction Speed", "1.05x"],
+      ["Signal Strength", "1.10x"],
       ["Heat Signature", this.shipState.cargoRisk === "secure" ? "Medium" : "Elevated"],
       ["Upgrade Slots", `${Math.min(upgradeSlotsUsed, 4)} / 4`],
-      ["Drone Capacity", "0 / 2 staged"],
+      ["Drone Capacity", "0 / 2"],
     ].map(([label, value]) => `<div><span>${label}</span><strong>${value}</strong></div>`).join("");
     const resourceRows = [
       ["H3", rareCores],
@@ -3896,9 +4119,9 @@ export class App {
       ["Credits", credits],
     ].map(([label, value]) => `<div><span>${label}</span><strong>${typeof value === "number" ? value.toLocaleString() : value}</strong></div>`).join("");
     const activeEffects = [
-      ["Cargo Capacity", `+${Math.max(0, cargo.cargoCapacityBonus ?? 0) || 10}% ${cargo.cargoCapacityBonus ? "active" : "staged"}`],
-      ["Extraction Speed", "+5% staged"],
-      ["Fuel Efficiency", "+5% staged"],
+      ["Cargo Capacity", `+${Math.max(0, cargo.cargoCapacityBonus ?? 0) || 10}%`],
+      ["Extraction Speed", "+5%"],
+      ["Fuel Efficiency", "+5%"],
     ].map(([label, value]) => `<div><span>${label}</span><strong>${value}</strong></div>`).join("");
     this.menuContent.innerHTML = `
       <div class="ship-dashboard-screen">
@@ -3938,7 +4161,13 @@ export class App {
             <strong>KESTREL-9 // EXTRACTION READY</strong>
           </header>
           <div class="ship-preview-stage">
-            <div class="kestrel-silhouette"><i></i><b></b><em></em></div>
+            <div class="kestrel-silhouette">
+              <i></i><b></b><em></em>
+              <span class="ship-schematic-label ship-schematic-name">KESTREL-9</span>
+              <span class="ship-schematic-label ship-schematic-cargo">CARGO SPINE</span>
+              <span class="ship-schematic-label ship-schematic-engine">TWIN BURN</span>
+              <span class="ship-schematic-label ship-schematic-nose">SURVEY NOSE</span>
+            </div>
             <div>
               <span>Kestrel-9</span>
               <strong>Prospector Extraction Craft</strong>
@@ -4062,6 +4291,7 @@ export class App {
         <section class="class-action-rail">
           <button type="button" data-action="menu">Return to Habitat</button>
           <button type="button" data-action="raid-select">Change Operation</button>
+          <button type="button" data-action="hq-style">Customize Suit</button>
           <button type="button" data-action="class-review-loadout">Review Loadout</button>
           ${mode === "assignment"
             ? `<button type="button" class="class-primary-action" data-action="class-confirm-assignment">Confirm Assignment</button>`
@@ -4073,7 +4303,10 @@ export class App {
       </div>
     `;
     this.bindMenuButtons();
-    this.habitatPreview.mount(this.menuContent.querySelector<HTMLElement>(".class-runner-preview-host .hq-runner-preview-host"), "class-selection");
+    this.habitatPreview.mount(this.menuContent.querySelector<HTMLElement>(".class-runner-preview-host .hq-runner-preview-host"), {
+      variant: "class-selection",
+      modelPaths: getClassSuitModelCandidates(this.classManager.snapshot.selectedClassId),
+    });
   }
 
   private showSkillMatrixMenu(): void {
@@ -4799,6 +5032,7 @@ export class App {
 
   private renderCosmeticsLoadoutScreen(): string {
     const state = this.cosmeticManager.snapshot;
+    const activeClass = this.classManager.selectedClass;
     const selectedDefinition = this.cosmeticManager.definitions.find((definition) => definition.id === state.equipped[state.selectedCategory])
       ?? this.cosmeticManager.definitions.find((definition) => definition.category === state.selectedCategory);
     const categoryTabs = cosmeticCategories
@@ -4847,7 +5081,8 @@ export class App {
         ${this.renderLoadoutHero()}
         ${this.renderPlayerPreviewPanel(true)}
         <section class="equipped-gear-panel cosmetic-equipped-panel">
-          <h3>Style Locker</h3>
+          <h3>Class Suit Cosmetics</h3>
+          <p>${activeClass.displayName} suit identity is class-bound. These are minor cosmetic overlays for the current assignment.</p>
           <div class="cosmetic-equipped-list">${equippedRows}</div>
         </section>
         <section class="stash-inventory-panel cosmetic-browser-panel">
@@ -4856,11 +5091,11 @@ export class App {
           <div class="cosmetic-grid">${cosmetics}</div>
         </section>
         <section class="raid-bag-panel cosmetic-rules-panel">
-          <h3>Favorites</h3>
+          <h3>Minor Enhancements</h3>
           <button type="button" data-action="cosmetics-randomize">Randomize Loadout</button>
           <button type="button" data-action="cosmetics-favorite">Favorite Placeholder</button>
-          <p>Cosmetics never affect stats, are never lost in a Crater Run, and persist through death.</p>
-          <p>Armor and backpack gear still control protection and capacity.</p>
+          <p>Class selection controls the major Obsidian Sentinel suit silhouette. Cosmetics are per-class finishes, trims, helmet variants, visor/mask choices, EVA pack skins, emotes, and banners.</p>
+          <p>Cosmetics never affect stats, are never lost in a Crater Run, and persist through death. Armor and gear still control protection and capacity.</p>
         </section>
         <section class="item-details-panel">
           <h3>Selected Style</h3>
@@ -6184,6 +6419,10 @@ export class App {
       this.startRaid(false);
     } else if (action === "class-deploy-multiplayer") {
       void this.startMultiplayerRaid();
+    } else if (action === "multiplayer-retry") {
+      void this.startMultiplayerRaid();
+    } else if (action === "multiplayer-copy-diagnostics") {
+      this.copyMultiplayerDiagnostics();
     } else if (action === "raid-select") {
       this.hqManager.open("raid-terminal");
       this.showRaidSelectMenu();
@@ -6210,7 +6449,7 @@ export class App {
     } else if (action === "hq-style") {
       this.hqManager.open("style-locker");
       this.loadoutTab = "cosmetics";
-      this.loadingScreen.flash("Opening Style Locker");
+      this.loadingScreen.flash("Opening Class Cosmetics");
       this.showLoadoutMenu();
     } else if (action === "ship-systems") {
       this.hqManager.open("ship-systems");
@@ -6223,6 +6462,8 @@ export class App {
     } else if (action?.startsWith("class-select-")) {
       const classId = action.replace("class-select-", "") as ClassId;
       this.combatHud.showLootNotification(this.classManager.select(classId));
+      this.cosmeticManager.setActiveClass(classId);
+      this.applyCurrentCosmetics();
       this.showPreDeploymentClassMenu(this.preDeploymentMode);
     } else if (action === "class-confirm-assignment") {
       this.combatHud.showLootNotification(`${this.classManager.selectedClass.displayName} assignment confirmed`);
@@ -6478,7 +6719,7 @@ export class App {
       this.showLoadoutMenu();
     } else if (action === "loadout-tab-cosmetics") {
       this.loadoutTab = "cosmetics";
-      this.loadingScreen.flash("Opening Style Locker");
+      this.loadingScreen.flash("Opening Class Cosmetics");
       this.showLoadoutMenu();
     } else if (action?.startsWith("cosmetic-category-")) {
       this.cosmeticManager.setCategory(action.replace("cosmetic-category-", "") as CosmeticCategory);
@@ -6848,6 +7089,7 @@ export class App {
     if (!state) {
       this.pendingSharedContainerOpenId = null;
       this.raidBagOpen = false;
+      this.clearActiveSharedContainerPanel("close");
       this.inventoryManager.setWarning("Recovery cache unavailable");
       this.combatHud.showLootNotification("Recovery cache unavailable");
       return;
@@ -6857,12 +7099,39 @@ export class App {
     this.multiplayerClient.markContainerMapping(view !== null, false);
     const activeContainer = this.inventoryManager.snapshot.activeContainer;
     const isPendingOpenResponse = this.pendingSharedContainerOpenId === state.id;
+    const serverItemCount = state.items.filter((item) => item.quantity > 0).length;
+    const renderedItemCount = view?.items.length ?? 0;
+    const activePanelId = activeContainer?.id ?? this.activeSharedContainerPanelId;
+    const activeMatchesState = activePanelId === state.id;
+    const stateCanRenderPanel = state.opened || state.depleted || serverItemCount > 0;
 
-    if (activeContainer?.id === state.id) {
+    if (!stateCanRenderPanel) {
+      const reason = state.id.includes("reward-chest") ? "objective-unlock" : activePanelId ? "non-active" : "no-panel";
+      console.info(`[ClientLoot] visible empty ignored container=${state.id} active=${activePanelId ?? "none"} reason=non-active-empty`);
+      console.info(`[ClientLoot] background container update ignored container=${state.id} active=${activePanelId ?? "none"} reason=${reason} serverItems=${serverItemCount} renderedItems=${renderedItemCount}`);
+      return;
+    }
+
+    if ((activeMatchesState || isPendingOpenResponse) && view) {
+      const reason = isPendingOpenResponse ? "pending-match" : "active-match";
+      if (isPendingOpenResponse) {
+        this.pendingSharedContainerOpenId = null;
+        this.raidBagOpen = true;
+        this.selectedLootIndex = 0;
+        this.setInputMode("ui", "loot-panel");
+        this.combatHud.showLootNotification(view.items.length > 0 ? "Recovery cache opened" : "Cache empty");
+        this.sfxAudio.playEvent(view.items.length > 0 ? "loot.open" : "loot.empty");
+      }
+      this.setActiveSharedContainerPanel(state.id, isPendingOpenResponse ? "player-open" : "panel-switch");
       this.inventoryManager.refreshActiveContainer(view);
+      if (!activeContainer || activeContainer.id !== state.id) {
+        this.inventoryManager.setActiveContainer(view);
+      }
+      this.multiplayerClient.markContainerMapping(true, true);
       this.lastSharedContainerPanelId = state.id;
       this.lastSharedContainerPanelItemCount = state.items.length;
-      this.lastSharedContainerClaimRefresh = `state refresh ${state.id} items=${state.items.length}`;
+      this.lastSharedContainerClaimRefresh = `state refresh ${state.id} items=${state.items.length} reason=${reason}`;
+      console.info(`[ClientLoot] visible panel update accepted container=${state.id} reason=${reason}`);
       if (state.depleted) {
         this.inventoryManager.setWarning("Recovery cache depleted");
         this.combatHud.showLootNotification("Recovery cache depleted");
@@ -6870,25 +7139,15 @@ export class App {
       return;
     }
 
-    if ((state.lastInteractionPlayerId === this.multiplayerClient.localPlayerId || isPendingOpenResponse) && view) {
-      this.pendingSharedContainerOpenId = null;
-      this.raidBagOpen = true;
-      this.selectedLootIndex = 0;
-      this.inventoryManager.setActiveContainer(view);
-      this.setInputMode("ui", "loot-panel");
-      this.multiplayerClient.markContainerMapping(true, true);
-      this.lastSharedContainerPanelId = state.id;
-      this.lastSharedContainerPanelItemCount = state.items.length;
-      this.lastSharedContainerClaimRefresh = `${isPendingOpenResponse ? "pending open applied" : "local open applied"} ${state.id} items=${state.items.length}`;
-      this.combatHud.showLootNotification(view.items.length > 0 ? "Recovery cache opened" : "Cache empty");
-      this.sfxAudio.playEvent(view.items.length > 0 ? "loot.open" : "loot.empty");
-      return;
-    }
-
     if (this.pendingSharedContainerOpenId === state.id) {
       this.pendingSharedContainerOpenId = null;
       this.lastSharedContainerClaimRefresh = `pending open cleared ${state.id}`;
     }
+    const ignoredReason = activePanelId ? "non-active" : "no-panel";
+    if (serverItemCount === 0) {
+      console.info(`[ClientLoot] visible empty ignored container=${state.id} active=${activePanelId ?? "none"} reason=non-active-empty`);
+    }
+    console.info(`[ClientLoot] background container update ignored container=${state.id} active=${activePanelId ?? "none"} reason=${ignoredReason} serverItems=${serverItemCount} renderedItems=${renderedItemCount}`);
   };
 
   private readonly handleNetworkContainerClaimResult = (result: NetworkContainerClaimResult): void => {
@@ -6898,13 +7157,25 @@ export class App {
 
     if (result.container) {
       const view = this.lootDirector.applyNetworkContainerState(result.container);
-      if (this.inventoryManager.snapshot.activeContainer?.id === result.container.id) {
+      const activeContainer = this.inventoryManager.snapshot.activeContainer;
+      const activePanelId = activeContainer?.id ?? this.activeSharedContainerPanelId;
+      if (activePanelId === result.container.id) {
+        this.setActiveSharedContainerPanel(result.container.id, "panel-switch");
         this.inventoryManager.refreshActiveContainer(view);
+        if (!activeContainer || activeContainer.id !== result.container.id) {
+          this.inventoryManager.setActiveContainer(view);
+        }
         this.lastSharedContainerPanelId = result.container.id;
         this.lastSharedContainerPanelItemCount = result.container.items.length;
         this.lastSharedContainerClaimRefresh = `claim result refresh ${result.container.id} items=${result.container.items.length} ok=${result.ok}`;
+        console.info(`[ClientLoot] visible panel update accepted container=${result.container.id} reason=claim-result`);
+      } else {
+        const serverItemCount = result.container.items.filter((item) => item.quantity > 0).length;
+        console.info(`[ClientLoot] background container update ignored container=${result.container.id} active=${activePanelId ?? "none"} reason=non-active serverItems=${serverItemCount} renderedItems=${view?.items.length ?? 0}`);
       }
     }
+    const remaining = result.container?.items.filter((item) => item.quantity > 0).length ?? 0;
+    console.info(`[ClientLoot] claim result container=${result.containerId} ok=${result.ok} reason=${result.reason} remaining=${remaining}`);
 
     if (!result.ok) {
       const message = result.reason === "depleted" ? "Item no longer available" : "Recovery claim failed";
@@ -6956,6 +7227,7 @@ export class App {
     const changed = this.poiObjectiveManager.completeFromNetwork(state.id);
     if (changed) {
       this.networkAppliedPoiObjectiveIds.add(state.id);
+      console.info(`[ClientLoot] objective reward unlock notification chest=${state.id}-reward-chest autoOpen=false`);
     }
     if (
       state.extractionUnlocked &&
@@ -6976,6 +7248,9 @@ export class App {
   };
 
   private readonly handleNetworkHeavyCargoState = (state: NetworkHeavyCargoState): void => {
+    if (this.heavyCargoInventorySuppressionSeconds > 0 && this.heavyCargoInventorySuppressionAction) {
+      this.suppressInventoryOverlayForHeavyCargo(this.heavyCargoInventorySuppressionAction);
+    }
     this.heavyCargoManager.applyNetworkState(state, this.multiplayerClient.localPlayerId);
     this.lastHeavyCargoRoomId = this.multiplayerClient.snapshot.roomId;
     this.pendingHeavyCargoRequest = "none";
@@ -6998,6 +7273,9 @@ export class App {
   private readonly handleNetworkHeavyCargoActionResult = (result: NetworkHeavyCargoActionResult): void => {
     if (!this.multiplayerMode) {
       return;
+    }
+    if (this.heavyCargoInventorySuppressionSeconds > 0 && this.heavyCargoInventorySuppressionAction) {
+      this.suppressInventoryOverlayForHeavyCargo(this.heavyCargoInventorySuppressionAction);
     }
     if (result.cargo) {
       this.heavyCargoManager.applyNetworkState(result.cargo, this.multiplayerClient.localPlayerId);

@@ -1,4 +1,5 @@
 import { Color3 } from "@babylonjs/core";
+import type { ClassId } from "../classes/ClassDefinitions";
 import type { LootRarity } from "../theme/ThemeConfig";
 
 export type CosmeticCategory =
@@ -71,6 +72,8 @@ export type CosmeticLoadout = Readonly<Record<CosmeticCategory, CosmeticId>>;
 export type CosmeticManagerState = Readonly<{
   selectedCategory: CosmeticCategory;
   equipped: CosmeticLoadout;
+  activeClass: ClassId;
+  perClassCosmetics: Record<ClassId, CosmeticLoadout>;
   previewRotation: number;
 }>;
 
@@ -98,11 +101,11 @@ export const cosmeticCategories: CosmeticCategory[] = [
 ];
 
 export const cosmeticCategoryLabels: Record<CosmeticCategory, string> = {
-  outfit: "Skins",
-  headgear: "Headgear",
-  mask: "Mask",
-  backpack: "Back Bling",
-  weaponWrap: "Wraps",
+  outfit: "Suit Finish",
+  headgear: "Helmet Variant",
+  mask: "Visor / Mask",
+  backpack: "EVA Pack Skin",
+  weaponWrap: "Weapon Trim",
   emote: "Emotes",
   banner: "Banners",
 };
@@ -501,6 +504,13 @@ export const cosmeticDefinitions: Record<CosmeticId, CosmeticDefinition> = {
 const defaultState: CosmeticManagerState = {
   selectedCategory: "outfit",
   equipped: defaultCosmetics,
+  activeClass: "surveyor",
+  perClassCosmetics: {
+    surveyor: defaultCosmetics,
+    security: defaultCosmetics,
+    salvager: defaultCosmetics,
+    "systems-specialist": defaultCosmetics,
+  },
   previewRotation: 0,
 };
 
@@ -510,8 +520,18 @@ export class CosmeticManager {
   public get snapshot(): CosmeticManagerState {
     return {
       ...this.state,
-      equipped: { ...this.state.equipped },
+      equipped: { ...this.activeLoadout },
+      perClassCosmetics: this.clonePerClassCosmetics(this.state.perClassCosmetics),
     };
+  }
+
+  public setActiveClass(classId: ClassId): void {
+    this.state = {
+      ...this.state,
+      activeClass: classId,
+      equipped: { ...this.state.perClassCosmetics[classId] },
+    };
+    this.save();
   }
 
   public get definitions(): CosmeticDefinition[] {
@@ -547,8 +567,15 @@ export class CosmeticManager {
       ...this.state,
       selectedCategory: definition.category,
       equipped: {
-        ...this.state.equipped,
+        ...this.activeLoadout,
         [definition.category]: id,
+      },
+      perClassCosmetics: {
+        ...this.state.perClassCosmetics,
+        [this.state.activeClass]: {
+          ...this.activeLoadout,
+          [definition.category]: id,
+        },
       },
     };
     this.save();
@@ -558,6 +585,12 @@ export class CosmeticManager {
   public resetToDefault(): void {
     this.state = {
       ...defaultState,
+      activeClass: this.state.activeClass,
+      perClassCosmetics: {
+        ...this.state.perClassCosmetics,
+        [this.state.activeClass]: defaultCosmetics,
+      },
+      equipped: defaultCosmetics,
       previewRotation: this.state.previewRotation,
     };
     this.save();
@@ -576,16 +609,20 @@ export class CosmeticManager {
     this.state = {
       ...this.state,
       equipped,
+      perClassCosmetics: {
+        ...this.state.perClassCosmetics,
+        [this.state.activeClass]: equipped,
+      },
     };
     this.save();
     return "Unlocked cosmetics randomized";
   }
 
   public getEquippedName(category: CosmeticCategory): string {
-    return cosmeticDefinitions[this.state.equipped[category]]?.name ?? cosmeticDefinitions[defaultCosmetics[category]].name;
+    return cosmeticDefinitions[this.activeLoadout[category]]?.name ?? cosmeticDefinitions[defaultCosmetics[category]].name;
   }
 
-  public getPalette(loadout: CosmeticLoadout = this.state.equipped): CosmeticPalette {
+  public getPalette(loadout: CosmeticLoadout = this.activeLoadout): CosmeticPalette {
     const palette = { ...defaultCosmeticPalette };
 
     for (const id of Object.values(loadout)) {
@@ -618,16 +655,19 @@ export class CosmeticManager {
   }
 
   private sanitizeState(candidate: Partial<CosmeticManagerState>): CosmeticManagerState {
-    const equipped = { ...defaultCosmetics };
-
-    for (const category of cosmeticCategories) {
-      const id = candidate.equipped?.[category];
-      const definition = id ? cosmeticDefinitions[id] : null;
-
-      if (definition?.category === category && definition.unlocked) {
-        equipped[category] = definition.id;
-      }
-    }
+    const activeClass: ClassId = candidate.activeClass === "security" ||
+      candidate.activeClass === "salvager" ||
+      candidate.activeClass === "systems-specialist" ||
+      candidate.activeClass === "surveyor"
+      ? candidate.activeClass
+      : "surveyor";
+    const equipped = this.sanitizeLoadout(candidate.perClassCosmetics?.[activeClass] ?? candidate.equipped);
+    const perClassCosmetics: Record<ClassId, CosmeticLoadout> = {
+      surveyor: this.sanitizeLoadout(candidate.perClassCosmetics?.surveyor ?? candidate.equipped),
+      security: this.sanitizeLoadout(candidate.perClassCosmetics?.security ?? candidate.equipped),
+      salvager: this.sanitizeLoadout(candidate.perClassCosmetics?.salvager ?? candidate.equipped),
+      "systems-specialist": this.sanitizeLoadout(candidate.perClassCosmetics?.["systems-specialist"] ?? candidate.equipped),
+    };
 
     const selectedCategory = candidate.selectedCategory && cosmeticCategories.includes(candidate.selectedCategory)
       ? candidate.selectedCategory
@@ -635,8 +675,37 @@ export class CosmeticManager {
 
     return {
       selectedCategory,
+      activeClass,
+      perClassCosmetics,
       equipped,
       previewRotation: Number.isFinite(candidate.previewRotation) ? candidate.previewRotation ?? 0 : 0,
+    };
+  }
+
+  private sanitizeLoadout(candidate: Partial<CosmeticLoadout> | undefined): CosmeticLoadout {
+    const equipped = { ...defaultCosmetics };
+    for (const category of cosmeticCategories) {
+      const id = candidate?.[category];
+      const definition = id ? cosmeticDefinitions[id] : null;
+
+      if (definition?.category === category && definition.unlocked) {
+        equipped[category] = definition.id;
+      }
+    }
+
+    return equipped;
+  }
+
+  private get activeLoadout(): CosmeticLoadout {
+    return this.state.perClassCosmetics[this.state.activeClass] ?? this.state.equipped ?? defaultCosmetics;
+  }
+
+  private clonePerClassCosmetics(source: Record<ClassId, CosmeticLoadout>): Record<ClassId, CosmeticLoadout> {
+    return {
+      surveyor: { ...source.surveyor },
+      security: { ...source.security },
+      salvager: { ...source.salvager },
+      "systems-specialist": { ...source["systems-specialist"] },
     };
   }
 

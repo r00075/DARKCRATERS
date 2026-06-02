@@ -24,3 +24,5 @@ private/
 secrets/
 docs/private/
 notes/
+# Raw model source packages
+public/models/**/*.zip

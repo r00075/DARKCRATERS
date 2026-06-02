@@ -3,7 +3,7 @@ title DARK CRATERS - Public Multiplayer Stack
 
 set PROJECT=C:\Users\copai\Documents\Codex\2026-05-13\create-a-browser-based-third-person
 
-set CLIENT_DOMAIN=https://editor-saddled-surrogate.ngrok-free.dev
+set CLIENT_DOMAIN=https://astute-tranquil-tinderbox.ngrok-free.dev
 set SERVER_WS=wss://cannot-skirt-engulf.ngrok-free.dev
 
 set CLIENT_NGROK_CONFIG=C:\ngrok-configs\client.yml
@@ -38,8 +38,8 @@ start "DARK CRATERS CLIENT 5173" powershell -NoExit -Command "cd /d '%PROJECT%';
 
 timeout /t 5
 
-echo Starting CLIENT ngrok tunnel with manemzues config...
-start "NGROK CLIENT 5173" powershell -NoExit -Command "ngrok http 5173 --url=editor-saddled-surrogate.ngrok-free.dev --config '%CLIENT_NGROK_CONFIG%'"
+echo Starting CLIENT ngrok tunnel with jer0075ba config...
+start "NGROK CLIENT 5173" powershell -NoExit -Command "ngrok http 5173 --url=astute-tranquil-tinderbox.ngrok-free.dev --config '%CLIENT_NGROK_CONFIG%'"
 
 timeout /t 5
 

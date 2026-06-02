@@ -16,6 +16,10 @@ import { themeConfig } from "../theme/ThemeConfig";
 const previewModelPath = "/models/player/obsidianSentinelPlayer.glb";
 
 export type HabitatRunnerPreviewVariant = "habitat" | "class-selection";
+export type HabitatRunnerPreviewOptions = Readonly<{
+  variant?: HabitatRunnerPreviewVariant;
+  modelPaths?: readonly string[];
+}>;
 
 export class HabitatRunnerPreview {
   private canvas: HTMLCanvasElement | null = null;
@@ -24,11 +28,17 @@ export class HabitatRunnerPreview {
   private host: HTMLElement | null = null;
   private loaded = false;
 
-  public mount(host: HTMLElement | null, variant: HabitatRunnerPreviewVariant = "habitat"): void {
+  public mount(host: HTMLElement | null, options: HabitatRunnerPreviewVariant | HabitatRunnerPreviewOptions = "habitat"): void {
     this.dispose();
 
     if (!host) {
       return;
+    }
+
+    const variant = typeof options === "string" ? options : options.variant ?? "habitat";
+    const modelPaths = [...(typeof options === "string" ? [previewModelPath] : options.modelPaths ?? [previewModelPath])];
+    if (!modelPaths.includes(previewModelPath)) {
+      modelPaths.push(previewModelPath);
     }
 
     this.host = host;
@@ -46,10 +56,10 @@ export class HabitatRunnerPreview {
     this.scene = new Scene(this.engine);
     this.scene.clearColor.set(0, 0, 0, 0);
 
-    const cameraRadius = variant === "class-selection" ? 3.05 : 3.55;
-    const cameraTargetY = variant === "class-selection" ? 1.08 : 1.18;
-    const targetHeight = variant === "class-selection" ? 1.82 : 1.52;
-    const verticalLift = variant === "class-selection" ? 0.12 : 0.22;
+    const cameraRadius = variant === "class-selection" ? 3.12 : 3.85;
+    const cameraTargetY = variant === "class-selection" ? 1.08 : 1.16;
+    const targetHeight = variant === "class-selection" ? 1.78 : 1.38;
+    const verticalLift = variant === "class-selection" ? 0.14 : 0.32;
 
     const camera = new ArcRotateCamera(
       "habitat-runner-preview-camera",
@@ -86,7 +96,9 @@ export class HabitatRunnerPreview {
     pad.position.y = -0.02;
     pad.material = padMaterial;
 
-    void SceneLoader.ImportMeshAsync("", "", previewModelPath, this.scene)
+    const loadPreviewModel = (candidateIndex: number): void => {
+      const modelPath = modelPaths[candidateIndex] ?? previewModelPath;
+      void SceneLoader.ImportMeshAsync("", "", modelPath, this.scene)
       .then((result) => {
         if (!this.scene || this.scene.isDisposed) {
           return;
@@ -115,14 +127,20 @@ export class HabitatRunnerPreview {
         root.position.y -= aggregate.min.y * scale;
         root.position.y += verticalLift;
         root.rotationQuaternion = null;
-        root.rotation.y = Math.PI * 0.94;
+        root.rotation.y = Math.PI * 1.5;
         this.loaded = true;
         this.host?.classList.add("model-loaded");
       })
       .catch((error) => {
-        console.warn("[HabitatRunnerPreview] Obsidian Sentinel preview failed; CSS fallback remains active.", error);
+        if (candidateIndex + 1 < modelPaths.length) {
+          loadPreviewModel(candidateIndex + 1);
+          return;
+        }
+        console.warn("[HabitatRunnerPreview] runner preview failed; CSS fallback remains active.", error);
         this.host?.classList.add("model-fallback");
       });
+    };
+    loadPreviewModel(0);
 
     this.engine.runRenderLoop(() => {
       if (!this.scene) {

@@ -50,3 +50,29 @@ export const classDefinitions: readonly ClassDefinition[] = [
 ] as const;
 
 export const defaultClassId: ClassId = "surveyor";
+
+export const defaultClassSuitModelPath = "/models/player/obsidianSentinelPlayer.glb";
+
+export const classSuitModelPaths: Readonly<Record<ClassId, readonly string[]>> = {
+  surveyor: [
+    "/models/player/classes/obsidianSentinelPlayerSurveyor.glb",
+    "/models/player/obsidianSentinelPlayerSurveyor.glb",
+  ],
+  security: [
+    "/models/player/classes/obsidianSentinelPlayerSecurity.glb",
+    "/models/player/obsidianSentinelPlayerSecurity.glb",
+  ],
+  salvager: [
+    "/models/player/classes/obsidianSentinelPlayerSalvager.glb",
+    "/models/player/obsidianSentinelPlayerSalvager.glb",
+  ],
+  "systems-specialist": [
+    "/models/player/classes/obsidianSentinelPlayerSystemsSpecialist.glb",
+    "/models/player/obsidianSentinelPlayerSystemsSpecialist.glb",
+  ],
+};
+
+export const getClassSuitModelCandidates = (classId: ClassId): readonly string[] => [
+  ...classSuitModelPaths[classId],
+  defaultClassSuitModelPath,
+];
