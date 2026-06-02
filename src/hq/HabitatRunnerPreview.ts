@@ -4,22 +4,36 @@ import {
   DirectionalLight,
   Engine,
   HemisphericLight,
-  MeshBuilder,
   Scene,
   SceneLoader,
-  StandardMaterial,
   Vector3,
 } from "@babylonjs/core";
 import "@babylonjs/loaders/glTF";
+import type { ClassId } from "../classes/ClassDefinitions";
 import { themeConfig } from "../theme/ThemeConfig";
 
 const previewModelPath = "/models/player/obsidianSentinelPlayer.glb";
 
 export type HabitatRunnerPreviewVariant = "habitat" | "class-selection";
+export type HabitatRunnerPreviewFraming = "fullBody" | "upperBody";
 export type HabitatRunnerPreviewOptions = Readonly<{
   variant?: HabitatRunnerPreviewVariant;
+  framingMode?: HabitatRunnerPreviewFraming;
   modelPaths?: readonly string[];
+  classId?: ClassId;
+  verticalLift?: number;
+  targetHeight?: number;
+  cameraRadius?: number;
+  cameraTargetY?: number;
+  yaw?: number;
 }>;
+
+const classPreviewTuning: Partial<Record<ClassId, Partial<HabitatRunnerPreviewOptions>>> = {
+  surveyor: { targetHeight: 1.5, verticalLift: 0.02, yaw: Math.PI * 1.5 },
+  salvager: { targetHeight: 1.48, verticalLift: 0.02, yaw: Math.PI * 1.5 },
+  security: { targetHeight: 1.42, verticalLift: 0.02, yaw: Math.PI * 1.5 },
+  "systems-specialist": { targetHeight: 1.46, verticalLift: 0.02, yaw: Math.PI * 1.5 },
+};
 
 export class HabitatRunnerPreview {
   private canvas: HTMLCanvasElement | null = null;
@@ -36,6 +50,10 @@ export class HabitatRunnerPreview {
     }
 
     const variant = typeof options === "string" ? options : options.variant ?? "habitat";
+    const framingMode = typeof options === "string" ? "fullBody" : options.framingMode ?? "fullBody";
+    const tuning = typeof options === "string" || variant !== "class-selection" || !options.classId
+      ? {}
+      : classPreviewTuning[options.classId] ?? {};
     const modelPaths = [...(typeof options === "string" ? [previewModelPath] : options.modelPaths ?? [previewModelPath])];
     if (!modelPaths.includes(previewModelPath)) {
       modelPaths.push(previewModelPath);
@@ -56,10 +74,28 @@ export class HabitatRunnerPreview {
     this.scene = new Scene(this.engine);
     this.scene.clearColor.set(0, 0, 0, 0);
 
-    const cameraRadius = variant === "class-selection" ? 3.12 : 3.85;
-    const cameraTargetY = variant === "class-selection" ? 1.08 : 1.16;
-    const targetHeight = variant === "class-selection" ? 1.78 : 1.38;
-    const verticalLift = variant === "class-selection" ? 0.14 : 0.32;
+    const fullBodyDefaults = variant === "class-selection"
+      ? { cameraRadius: 5.4, cameraTargetY: 0.76, targetHeight: 1.46, verticalLift: 0.02 }
+      : { cameraRadius: 5.24, cameraTargetY: 0.72, targetHeight: 1.44, verticalLift: 0.02 };
+    const upperBodyDefaults = variant === "class-selection"
+      ? { cameraRadius: 3.5, cameraTargetY: 1.36, targetHeight: 1.56, verticalLift: 0.48 }
+      : { cameraRadius: 3.95, cameraTargetY: 1.34, targetHeight: 1.26, verticalLift: 0.54 };
+    const defaults = framingMode === "fullBody" ? fullBodyDefaults : upperBodyDefaults;
+    let cameraRadius = typeof options === "string"
+      ? defaults.cameraRadius
+      : options.cameraRadius ?? tuning.cameraRadius ?? defaults.cameraRadius;
+    let cameraTargetY = typeof options === "string"
+      ? defaults.cameraTargetY
+      : options.cameraTargetY ?? tuning.cameraTargetY ?? defaults.cameraTargetY;
+    const targetHeight = typeof options === "string"
+      ? defaults.targetHeight
+      : options.targetHeight ?? tuning.targetHeight ?? defaults.targetHeight;
+    const verticalLift = typeof options === "string"
+      ? defaults.verticalLift
+      : options.verticalLift ?? tuning.verticalLift ?? defaults.verticalLift;
+    const modelYaw = typeof options === "string"
+      ? Math.PI * 1.5
+      : options.yaw ?? tuning.yaw ?? Math.PI * 1.5;
 
     const camera = new ArcRotateCamera(
       "habitat-runner-preview-camera",
@@ -88,14 +124,6 @@ export class HabitatRunnerPreview {
     rim.diffuse = themeConfig.colors.orange;
     rim.intensity = 0.7;
 
-    const padMaterial = new StandardMaterial("habitat-preview-pad-material", this.scene);
-    padMaterial.diffuseColor = new Color3(0.025, 0.042, 0.055);
-    padMaterial.emissiveColor = themeConfig.colors.cyan.scale(0.12);
-    padMaterial.specularColor = themeConfig.colors.cyan.scale(0.2);
-    const pad = MeshBuilder.CreateCylinder("habitat-preview-pad", { diameter: 2.15, height: 0.04, tessellation: 64 }, this.scene);
-    pad.position.y = -0.02;
-    pad.material = padMaterial;
-
     const loadPreviewModel = (candidateIndex: number): void => {
       const modelPath = modelPaths[candidateIndex] ?? previewModelPath;
       void SceneLoader.ImportMeshAsync("", "", modelPath, this.scene)
@@ -123,11 +151,29 @@ export class HabitatRunnerPreview {
         const center = aggregate.min.add(size.scale(0.5));
         const scale = targetHeight / height;
         root.scaling.setAll(scale);
-        root.position.subtractInPlace(center.scale(scale));
-        root.position.y -= aggregate.min.y * scale;
-        root.position.y += verticalLift;
+        root.position.set(
+          -center.x * scale,
+          -aggregate.min.y * scale + verticalLift,
+          -center.z * scale,
+        );
         root.rotationQuaternion = null;
-        root.rotation.y = Math.PI * 1.5;
+        root.rotation.y = modelYaw;
+        root.computeWorldMatrix(true);
+        const transformedBounds = meshes.reduce((bounds, mesh) => {
+          mesh.computeWorldMatrix(true);
+          const bounding = mesh.getBoundingInfo().boundingBox;
+          return {
+            min: Vector3.Minimize(bounds.min, bounding.minimumWorld),
+            max: Vector3.Maximize(bounds.max, bounding.maximumWorld),
+          };
+        }, { min: new Vector3(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY), max: new Vector3(Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY) });
+        const transformedSize = transformedBounds.max.subtract(transformedBounds.min);
+        const transformedCenter = transformedBounds.min.add(transformedSize.scale(0.5));
+        const verticalFitRadius = (transformedSize.y * 0.62) / Math.max(0.1, Math.tan(camera.fov * 0.5));
+        cameraRadius = Math.max(cameraRadius, verticalFitRadius * 1.22);
+        cameraTargetY = transformedCenter.y + (framingMode === "fullBody" ? 0.02 : 0.16);
+        camera.setTarget(new Vector3(transformedCenter.x, cameraTargetY, transformedCenter.z));
+        camera.radius = cameraRadius;
         this.loaded = true;
         this.host?.classList.add("model-loaded");
       })

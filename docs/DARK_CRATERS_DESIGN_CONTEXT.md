@@ -218,6 +218,12 @@ Future multiplayer ship direction is documented only, not implemented in Phase 1
 
 ## 17. June 1 HQ Stabilization Notes
 
+Phase 10.2.2 modernizes Loadout and Arsenal as presentation/management screens only. Loadout now frames equipped gear as a locker dashboard with Primary, Sidearm, Melee/Tool, Utility, Armor/Suit Module, and EVA Pack readiness slots, while Arsenal becomes a Weapon Workbench for current weapon definitions, repair, upgrade, attachment, compare, and preview staging. Weapon display names may use DARK CRATERS field identities such as MK-3 Survey Pistol, PR4 Pulse Rifle, Breach-12 Scattergun, and Longline Marksman Rifle, but stable weapon IDs and save keys remain unchanged.
+
+Weapon GLB previews are HQ/Workbench-only and must remain isolated from gameplay player weapons, collision, multiplayer replication, and combat rendering. Missing weapon GLBs should fall back to a schematic preview instead of breaking the screen.
+
+Phase 11.0 is the proper milestone for the in-raid EVA Pack / weapon equip-swap loop: equip a weapon from EVA Pack into Primary or Sidearm, move the previous weapon into the EVA Pack if space exists, block while downed, block while carrying heavy cargo, and preserve weapon instance/durability data. Phase 10.2.2 must not implement that runtime swap loop.
+
 The class assignment now owns the major Obsidian Sentinel suit identity in HQ presentation. `ClassDefinitions` maps Surveyor, Security, Salvager, and Systems Specialist to class-specific preview GLB candidates under `public/models/player`, with `/models/player/obsidianSentinelPlayer.glb` as the final fallback. This remains Habitat/Class preview only; gameplay player scale, collision, remote-player rendering, GLB source assets, revive/downed animation, and weapon attachment systems are not replaced by this mapping.
 
 Cosmetics are class-scoped minor overlays instead of the primary character identity. The Style route remains a stable internal navigation key, but player-facing copy should describe suit finishes, helmet variants, visor/mask choices, EVA pack skins, weapon trim, emotes, and banners. Cosmetic choices do not affect stats, class assignment, gear capacity, multiplayer authority, or extraction rewards.

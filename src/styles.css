@@ -1443,12 +1443,14 @@ body.input-mode-ui #app {
 }
 
 .main-menu-content {
-  width: min(1220px, calc(100vw - 24px));
+  width: min(1280px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
   max-height: calc(100vh - 28px);
   display: grid;
   place-items: center;
   gap: 12px;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: 4px 0;
 }
 
@@ -1461,6 +1463,14 @@ body.input-mode-ui #app {
 }
 
 .main-menu-content.ship-dashboard-content {
+  width: 100vw;
+  max-height: none;
+  height: 100vh;
+  overflow: hidden;
+  padding: 0;
+}
+
+.main-menu-content.arsenal-workbench-content {
   width: 100vw;
   max-height: none;
   height: 100vh;
@@ -1703,7 +1713,10 @@ body.input-mode-ui #app {
   flex-wrap: wrap;
   justify-content: center;
   gap: 10px;
+  width: min(1188px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
   margin-top: 8px;
+  overflow-x: hidden;
 }
 
 .hq-quick-actions {
@@ -1929,24 +1942,25 @@ body.input-mode-ui #app {
 .hq-stage-ring {
   position: absolute;
   left: 50%;
-  bottom: 13%;
+  bottom: 4%;
   width: min(460px, 64vw);
-  height: 84px;
+  height: 56px;
   border: 1px solid rgba(65, 217, 255, 0.28);
   border-radius: 50%;
   transform: translateX(-50%);
-  background: radial-gradient(ellipse at center, rgba(65, 217, 255, 0.16), transparent 62%);
-  box-shadow: 0 0 44px rgba(65, 217, 255, 0.16);
+  background: radial-gradient(ellipse at center, rgba(65, 217, 255, 0.08), transparent 68%);
+  box-shadow: 0 0 34px rgba(65, 217, 255, 0.1);
+  pointer-events: none;
 }
 
 .hq-runner-preview-host {
   z-index: 1;
   position: relative;
-  width: min(340px, 30vw);
-  height: min(460px, 58vh);
+  width: min(320px, 29vw);
+  height: min(430px, 55vh);
   display: grid;
   place-items: center;
-  margin: 0 auto 8px;
+  margin: -12px auto 2px;
   filter: drop-shadow(0 26px 38px rgba(0, 0, 0, 0.58));
 }
 
@@ -2083,9 +2097,9 @@ body.input-mode-ui #app {
   }
 
   .hq-runner-preview-host {
-    width: min(280px, 27vw);
-    height: min(340px, 44vh);
-    margin-bottom: 4px;
+    width: min(260px, 26vw);
+    height: min(315px, 41vh);
+    margin: -10px auto 0;
   }
 
   .hq-runner-summary {
@@ -2231,17 +2245,705 @@ body.input-mode-ui #app {
   padding: 12px 0;
 }
 
-.loadout-screen {
-  width: min(1180px, calc(100vw - 42px));
-  max-height: min(780px, calc(100vh - 118px));
+.hq-dashboard-shell {
+  box-sizing: border-box;
+  text-align: left;
+  color: #e5edf6;
+}
+
+.hq-dashboard-shell *,
+.hq-panel *,
+.hq-action-bar * {
+  box-sizing: border-box;
+}
+
+.hq-panel {
+  min-width: 0;
+  border: 1px solid rgba(65, 217, 255, 0.18);
+  border-radius: 8px;
+  background:
+    linear-gradient(145deg, rgba(6, 13, 24, 0.88), rgba(7, 18, 30, 0.68)),
+    rgba(2, 6, 12, 0.86);
+  box-shadow: inset 0 0 24px rgba(65, 217, 255, 0.035), 0 18px 46px rgba(0, 0, 0, 0.22);
+}
+
+.hq-panel-header {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.hq-panel-header > * {
+  min-width: 0;
+}
+
+.hq-panel-header.compact {
+  align-items: flex-start;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(65, 217, 255, 0.12);
+}
+
+.hq-panel-header span,
+.hq-panel > span,
+.hq-detail-panel span,
+.hq-preview-panel span,
+.hq-resource-strip span {
+  color: #67e8f9;
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.hq-panel-header h2,
+.hq-panel-header h3 {
+  margin: 0;
+  color: #f8fafc;
+  letter-spacing: 0;
+}
+
+.hq-panel-header p,
+.hq-panel p,
+.hq-panel small,
+.hq-muted-card p {
+  color: rgba(203, 213, 225, 0.86);
+}
+
+.hq-resource-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.hq-resource-strip span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgba(65, 217, 255, 0.16);
+  border-radius: 999px;
+  padding: 6px 9px;
+  background: rgba(2, 6, 12, 0.48);
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.hq-resource-strip strong {
+  color: #f8fafc;
+}
+
+.hq-action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.hq-action-bar button,
+.hq-panel button {
+  border: 1px solid rgba(65, 217, 255, 0.2);
+  border-radius: 7px;
+  background: rgba(15, 23, 42, 0.72);
+  color: #e5edf6;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.hq-action-bar button:disabled,
+.hq-panel button:disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+}
+
+.hq-action-bar .class-primary-action {
+  border-color: rgba(190, 242, 100, 0.7);
+  background: linear-gradient(135deg, rgba(20, 83, 45, 0.84), rgba(34, 197, 94, 0.28));
+  color: #ecfccb;
+}
+
+.hq-grid {
   display: grid;
-  grid-template-columns: 240px minmax(260px, 1fr) minmax(300px, 1.1fr);
+  gap: 10px;
+}
+
+.hq-list-row,
+.hq-slot-card {
+  min-width: 0;
+}
+
+.hq-muted-card {
+  border-color: rgba(148, 163, 184, 0.24);
+}
+
+.hq-warning-text,
+.hq-amber-accent {
+  color: #fed7aa;
+}
+
+.hq-cyan-accent {
+  color: #67e8f9;
+}
+
+.loadout-locker-screen {
+  width: min(1280px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  height: min(732px, calc(100vh - 112px));
+  display: grid;
+  grid-template:
+    "top top top" auto
+    "runner slots details" minmax(0, 1fr)
+    "runner eva details" minmax(150px, 0.3fr)
+    "rail rail rail" auto / minmax(300px, 0.82fr) minmax(0, 1.05fr) minmax(292px, 0.86fr);
+  gap: 8px;
+  overflow: hidden;
+  overflow-x: hidden;
+}
+
+.loadout-locker-screen > *,
+.loadout-screen > *,
+.cosmetics-loadout-screen > *,
+.loadout-compat-modal > *,
+.arsenal-workbench-screen > * {
+  min-width: 0;
+  min-height: 0;
+}
+
+.loadout-locker-top {
+  grid-area: top;
+  border-bottom: 1px solid rgba(65, 217, 255, 0.2);
+  padding-bottom: 6px;
+}
+
+.loadout-locker-top h2,
+.arsenal-workbench-top h2 {
+  font-size: 26px;
+  font-weight: 950;
+}
+
+.loadout-locker-top p,
+.arsenal-workbench-top p {
+  margin: 2px 0 0;
+  font-size: 12px;
+}
+
+.loadout-runner-panel {
+  grid-area: runner;
+  display: grid;
+  grid-template-rows: auto minmax(430px, 1fr) auto;
+  gap: 7px;
+  padding: 9px;
+  overflow: hidden;
+}
+
+.loadout-runner-preview-host {
+  position: relative;
+  min-height: 430px;
+  width: min(320px, 100%);
+  margin: 0 auto;
+  border-radius: 8px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 70%, rgba(65, 217, 255, 0.22), transparent 28%),
+    linear-gradient(180deg, rgba(8, 17, 29, 0.2), rgba(2, 6, 12, 0.65));
+}
+
+.loadout-runner-preview-host .hq-runner-preview-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.loadout-runner-meta {
+  border-top: 1px solid rgba(65, 217, 255, 0.12);
+  padding-top: 6px;
+}
+
+.loadout-equipped-panel {
+  grid-area: slots;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
+  padding: 9px;
+  overflow: hidden;
+}
+
+.loadout-slot-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 2px;
+}
+
+.gear-slot.hq-slot-card button {
+  width: 100%;
+  min-height: 68px;
+  border-width: 1px;
+  border-color: color-mix(in srgb, var(--rarity-color, #67e8f9), transparent 35%);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--rarity-color, #67e8f9), transparent 90%), rgba(15, 23, 42, 0.58)),
+    rgba(2, 6, 12, 0.62);
+}
+
+.gear-slot.hq-slot-card.selected button {
+  border-color: #67e8f9;
+  box-shadow: inset 0 0 0 1px rgba(103, 232, 249, 0.28), 0 0 24px rgba(34, 211, 238, 0.12);
+}
+
+.loadout-detail-panel {
+  grid-area: details;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
+  padding: 9px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.loadout-eva-panel {
+  grid-area: eva;
+  display: grid;
+  grid-template-rows: auto minmax(44px, auto) auto;
+  gap: 6px;
+  padding: 9px;
+  overflow: hidden;
+}
+
+.loadout-eva-panel .raid-bag-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  min-height: 0;
+  max-height: 48px;
+  overflow: auto;
+}
+
+.loadout-stash-access {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 0;
+  overflow: hidden;
+  border-top: 1px solid rgba(65, 217, 255, 0.12);
+  padding-top: 6px;
+  color: rgba(203, 213, 225, 0.86);
+}
+
+.loadout-stash-access span {
+  display: block;
+  color: #67e8f9;
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.loadout-stash-access strong {
+  display: block;
+  color: #f8fafc;
+  font-size: 12px;
+}
+
+.loadout-stash-access p {
+  margin: 2px 0 0;
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.loadout-stash-access button,
+.loadout-compat-close {
+  border: 1px solid rgba(103, 232, 249, 0.42);
+  border-radius: 8px;
+  color: #e0faff;
+  background: rgba(8, 47, 73, 0.52);
+}
+
+.loadout-stash-open-button {
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 12px;
+  font-size: 12px;
+  font-weight: 950;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  box-shadow: 0 0 22px rgba(34, 211, 238, 0.12);
+}
+
+.loadout-compat-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 39;
+  background: rgba(0, 0, 0, 0.58);
+  backdrop-filter: blur(2px);
+}
+
+.loadout-compat-modal {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  width: min(1100px, calc(100vw - 48px));
+  max-width: calc(100vw - 48px);
+  height: min(720px, calc(100vh - 96px));
+  max-height: calc(100vh - 96px);
+  transform: translate(-50%, -50%);
+  z-index: 40;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+  padding: 14px;
+  border: 1px solid rgba(65, 217, 255, 0.34);
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at 20% 12%, rgba(65, 217, 255, 0.12), transparent 32%),
+    linear-gradient(145deg, rgba(2, 6, 12, 0.97), rgba(8, 15, 28, 0.96));
+  box-shadow: 0 26px 80px rgba(0, 0, 0, 0.66), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  overflow: hidden;
+}
+
+.loadout-compat-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.loadout-compat-filters button {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  color: #cbd5e1;
+  background: rgba(15, 23, 42, 0.72);
+}
+
+.loadout-compat-filters button.active {
+  border-color: #67e8f9;
+  color: #ecfeff;
+  background: rgba(34, 211, 238, 0.2);
+}
+
+.loadout-compat-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.42fr);
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.loadout-compat-list.loadout-stash-grid {
+  grid-template-columns: repeat(auto-fit, minmax(178px, 1fr));
+  align-content: start;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+}
+
+.loadout-compat-detail {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.loadout-stash-drawer {
+  min-height: 0;
+  overflow: hidden;
+  border-top: 1px solid rgba(65, 217, 255, 0.12);
+  padding-top: 6px;
+  color: rgba(203, 213, 225, 0.86);
+}
+
+.loadout-stash-drawer summary {
+  cursor: pointer;
+  color: #67e8f9;
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.loadout-stash-drawer nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.loadout-stash-drawer .loadout-stash-grid {
+  max-height: 144px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: auto;
+}
+
+.loadout-action-rail {
+  grid-area: rail;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+  align-items: center;
+  gap: 8px;
+  padding: 9px;
+  overflow: hidden;
+}
+
+.loadout-action-rail .hq-action-bar,
+.arsenal-action-rail .hq-action-bar {
+  max-width: 100%;
+}
+
+.loadout-action-rail p {
+  margin: 2px 0 0;
+  font-size: 12px;
+}
+
+.arsenal-workbench-screen {
+  width: 100vw;
+  max-width: 100vw;
+  height: 100vh;
+  display: grid;
+  grid-template:
+    "top top top" 74px
+    "list preview details" minmax(0, 1fr)
+    "list mods service" minmax(176px, 0.44fr)
+    "rail rail rail" 90px / minmax(0, 0.64fr) minmax(0, 1.18fr) minmax(0, 0.9fr);
+  gap: 10px;
+  padding: 12px 14px;
+  overflow: hidden;
+  overflow-x: clip;
+  background:
+    radial-gradient(circle at 48% 22%, rgba(65, 217, 255, 0.11), transparent 32%),
+    radial-gradient(circle at 82% 75%, rgba(250, 204, 21, 0.08), transparent 28%),
+    linear-gradient(135deg, rgba(2, 6, 12, 0.98), rgba(5, 14, 25, 0.96));
+}
+
+.arsenal-workbench-top {
+  grid-area: top;
+  border-bottom: 1px solid rgba(65, 217, 255, 0.18);
+  min-width: 0;
+}
+
+.arsenal-resource-strip {
+  justify-content: flex-end;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.arsenal-list-panel,
+.arsenal-preview-panel,
+.arsenal-details-panel,
+.arsenal-mod-panel,
+.arsenal-service-panel,
+.arsenal-action-rail {
+  padding: 12px;
+  overflow: hidden;
+}
+
+.arsenal-list-panel {
+  grid-area: list;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 10px;
+}
+
+.arsenal-weapon-list {
+  display: grid;
+  gap: 8px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.arsenal-weapon-row {
+  width: 100%;
+  display: grid;
+  gap: 3px;
+  border-color: color-mix(in srgb, var(--rarity-color, #67e8f9), transparent 35%);
+  text-align: left;
+}
+
+.arsenal-weapon-row.selected {
+  border-color: #67e8f9;
+  background: rgba(34, 211, 238, 0.16);
+}
+
+.arsenal-weapon-row.prototype {
+  opacity: 0.72;
+}
+
+.arsenal-preview-panel {
+  grid-area: preview;
+  display: grid;
+  grid-template-rows: auto minmax(196px, 1fr) auto;
+  gap: 8px;
+}
+
+.weapon-bench-preview-host {
+  position: relative;
+  min-height: 196px;
+  overflow: hidden;
+  border: 1px solid rgba(65, 217, 255, 0.14);
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, rgba(65, 217, 255, 0.07) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(65, 217, 255, 0.05) 1px, transparent 1px),
+    radial-gradient(circle at 50% 60%, rgba(65, 217, 255, 0.18), transparent 36%),
+    rgba(2, 6, 12, 0.58);
+  background-size: 28px 28px, 28px 28px, auto, auto;
+}
+
+.weapon-bench-preview-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+}
+
+.weapon-bench-preview-host.model-loaded .weapon-schematic-fallback {
+  opacity: 0;
+}
+
+.weapon-schematic-fallback {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.weapon-schematic-fallback em {
+  position: absolute;
+  left: 50%;
+  top: 54px;
+  width: 170px;
+  transform: translateX(-50%);
+  color: rgba(203, 213, 225, 0.62);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.arsenal-details-panel {
+  grid-area: details;
+  overflow: auto;
+}
+
+.arsenal-details-panel .inspect-card,
+.arsenal-mod-panel .inspect-card,
+.arsenal-service-panel .inspect-card {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+}
+
+.arsenal-mod-panel {
+  grid-area: mods;
+  overflow: auto;
+}
+
+.arsenal-service-panel {
+  grid-area: service;
+  display: grid;
+  gap: 10px;
+  overflow: auto;
+}
+
+.arsenal-action-rail {
+  grid-area: rail;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+  align-items: center;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.arsenal-action-rail p {
+  margin: 2px 0 0;
+  font-size: 12px;
+}
+
+.arsenal-action-rail .hq-action-bar {
+  max-width: 680px;
+}
+
+@media (max-width: 1420px), (max-height: 820px) {
+  .loadout-locker-screen {
+    width: min(1240px, calc(100vw - 24px));
+    max-width: calc(100vw - 24px);
+    height: min(684px, calc(100vh - 104px));
+    grid-template:
+      "top top top" auto
+      "runner slots details" minmax(0, 1fr)
+      "runner eva details" minmax(136px, 0.32fr)
+      "rail rail rail" auto / minmax(270px, 0.78fr) minmax(0, 1.04fr) minmax(260px, 0.82fr);
+    gap: 7px;
+  }
+
+  .loadout-runner-panel,
+  .loadout-equipped-panel,
+  .loadout-detail-panel,
+  .loadout-eva-panel,
+  .loadout-action-rail,
+  .arsenal-list-panel,
+  .arsenal-preview-panel,
+  .arsenal-details-panel,
+  .arsenal-mod-panel,
+  .arsenal-service-panel,
+  .arsenal-action-rail {
+    padding: 9px;
+  }
+
+  .loadout-runner-preview-host {
+    min-height: 372px;
+    width: min(292px, 100%);
+  }
+
+  .gear-slot.hq-slot-card button {
+    min-height: 58px;
+    padding: 7px 9px;
+  }
+
+  .loadout-eva-panel .raid-bag-grid {
+    max-height: 44px;
+  }
+
+  .loadout-stash-access p {
+    display: none;
+  }
+
+  .arsenal-workbench-screen {
+    grid-template:
+      "top top top" 64px
+      "list preview details" minmax(0, 1fr)
+      "list mods service" 156px
+      "rail rail rail" 80px / minmax(0, 0.6fr) minmax(0, 1.14fr) minmax(0, 0.84fr);
+    gap: 8px;
+    padding: 9px 10px;
+  }
+
+  .weapon-bench-preview-host {
+    min-height: 164px;
+  }
+
+  .hq-resource-strip span {
+    padding: 5px 7px;
+    font-size: 10px;
+  }
+}
+
+.loadout-screen {
+  width: min(1280px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  max-height: min(780px, calc(100vh - 112px));
+  display: grid;
+  grid-template-columns: minmax(0, 280px) minmax(0, 1fr) minmax(0, 1.05fr);
   grid-template-areas:
     "hero hero hero"
     "preview gear details"
     "stash stash bag";
   gap: 12px;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   text-align: left;
 }
 
@@ -2251,8 +2953,15 @@ body.input-mode-ui #app {
   align-items: end;
   justify-content: space-between;
   gap: 18px;
+  min-width: 0;
+  max-width: 100%;
   border-bottom: 2px solid rgba(190, 242, 100, 0.32);
   padding-bottom: 10px;
+  overflow-x: hidden;
+}
+
+.loadout-hero > * {
+  min-width: 0;
 }
 
 .loadout-hero span {
@@ -2288,8 +2997,11 @@ body.input-mode-ui #app {
 
 .loadout-mode-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-left: auto;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .loadout-mode-tabs button,
@@ -2557,22 +3269,99 @@ body.input-mode-ui #app {
 }
 
 .cosmetics-loadout-screen {
+  width: min(1200px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  height: min(736px, calc(100vh - 108px));
+  max-height: calc(100vh - 112px);
+  grid-template-columns: minmax(250px, 0.74fr) minmax(0, 1.16fr) minmax(250px, 0.74fr);
+  grid-template-rows: auto minmax(0, 1fr) minmax(118px, 0.24fr);
   grid-template-areas:
     "hero hero hero"
-    "preview gear details"
-    "stash stash bag";
+    "preview stash details"
+    "gear bag details";
+  overflow: hidden;
+}
+
+.cosmetic-runner-panel {
+  display: grid;
+  grid-template-rows: auto minmax(386px, 1fr) auto auto auto;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.cosmetic-runner-preview-host {
+  position: relative;
+  width: min(278px, 100%);
+  min-height: 386px;
+  margin: 0 auto;
+  border: 1px solid rgba(65, 217, 255, 0.14);
+  border-radius: 8px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 72%, rgba(65, 217, 255, 0.2), transparent 34%),
+    linear-gradient(180deg, rgba(8, 17, 29, 0.22), rgba(2, 6, 12, 0.7));
+}
+
+.cosmetic-runner-preview-host .hq-runner-preview-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.cosmetic-runner-preview-host.model-loaded .hq-runner-fallback {
+  opacity: 0;
+}
+
+.cosmetic-preview-note {
+  color: rgba(148, 163, 184, 0.84);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .cosmetic-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(154px, 1fr));
   gap: 8px;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.cosmetic-equipped-panel,
+.cosmetic-browser-panel,
+.cosmetic-rules-panel,
+.cosmetics-loadout-screen .item-details-panel {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.cosmetic-browser-panel {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 8px;
+}
+
+.cosmetic-browser-panel nav {
+  min-width: 0;
+}
+
+.cosmetic-rules-panel {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.cosmetic-rules-panel button {
+  min-width: 0;
+  white-space: normal;
 }
 
 .cosmetic-card {
   display: grid;
-  grid-template-columns: 46px minmax(0, 1fr);
+  grid-template-columns: 40px minmax(0, 1fr);
   gap: 3px 8px;
+  min-width: 0;
   min-height: 78px;
   border: 2px solid var(--rarity-color, rgba(255, 255, 255, 0.22));
   border-radius: 8px;
@@ -2585,8 +3374,8 @@ body.input-mode-ui #app {
 .cosmetic-card i {
   grid-row: 1 / span 3;
   display: block;
-  width: 42px;
-  height: 54px;
+  width: 38px;
+  height: 50px;
   border: 1px solid color-mix(in srgb, var(--rarity-color, #f8fafc), transparent 35%);
   border-radius: 8px;
   background:
@@ -2605,6 +3394,8 @@ body.input-mode-ui #app {
 
 .cosmetic-card strong {
   color: var(--rarity-color, #f8fafc);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .cosmetic-card span,
@@ -2612,6 +3403,8 @@ body.input-mode-ui #app {
 .cosmetic-equipped-list span {
   color: #cbd5e1;
   font-size: 12px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .cosmetic-equipped-list {
@@ -2621,7 +3414,7 @@ body.input-mode-ui #app {
 
 .cosmetic-equipped-list div {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto);
   gap: 8px;
   padding-bottom: 7px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.12);
@@ -2630,6 +3423,8 @@ body.input-mode-ui #app {
 .cosmetic-equipped-list strong {
   color: #f8fafc;
   text-align: right;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .raid-bag-grid {
@@ -2639,16 +3434,26 @@ body.input-mode-ui #app {
 .loadout-details-card {
   display: grid;
   gap: 8px;
+  min-width: 0;
   border-left: 5px solid var(--rarity-color, #f8fafc);
   padding-left: 10px;
+  overflow-x: hidden;
 }
 
 .loadout-details-card div {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto);
   gap: 8px;
   border-top: 1px solid rgba(255, 255, 255, 0.12);
   padding-top: 5px;
+}
+
+.loadout-details-card strong,
+.loadout-details-card span,
+.loadout-details-card p,
+.loadout-details-card em {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .loadout-details-card em {
@@ -2662,6 +3467,13 @@ body.input-mode-ui #app {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  min-width: 0;
+}
+
+.loadout-details-card footer button {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
 }
 
 .ship-module-grid {
@@ -2676,11 +3488,11 @@ body.input-mode-ui #app {
   height: 100vh;
   display: grid;
   grid-template:
-    "top top top" 70px
+    "top top top" 58px
     "identity overview stats" minmax(0, 1fr)
-    "alerts alerts mission" 118px / minmax(198px, 0.62fr) minmax(390px, 1.36fr) minmax(248px, 0.82fr);
-  gap: 12px;
-  padding: 14px 16px;
+    "alerts alerts mission" 112px / minmax(186px, 0.58fr) minmax(370px, 1.38fr) minmax(246px, 0.82fr);
+  gap: 8px;
+  padding: 10px 12px;
   overflow: hidden;
   text-align: left;
   background:
@@ -2702,7 +3514,7 @@ body.input-mode-ui #app {
   display: grid;
   grid-template-columns: minmax(150px, 0.38fr) minmax(0, 1fr) minmax(190px, 0.5fr);
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   border-bottom: 1px solid rgba(65, 217, 255, 0.18);
 }
 
@@ -2739,7 +3551,7 @@ body.input-mode-ui #app {
 
 .ship-dashboard-brand strong {
   color: #f8fafc;
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .ship-dashboard-topbar nav {
@@ -2769,7 +3581,7 @@ body.input-mode-ui #app {
 .ship-dashboard-resources span {
   border: 1px solid rgba(65, 217, 255, 0.18);
   border-radius: 999px;
-  padding: 5px 8px;
+  padding: 4px 7px;
   color: #dffbff;
   font-size: 11px;
   font-weight: 850;
@@ -2792,13 +3604,14 @@ body.input-mode-ui #app {
   grid-area: identity;
   display: grid;
   align-content: start;
-  gap: 12px;
-  padding: 15px;
+  gap: 9px;
+  padding: 11px;
+  overflow: auto;
 }
 
 .ship-identity-panel > strong {
   color: #f8fafc;
-  font-size: clamp(26px, 2.6vw, 42px);
+  font-size: clamp(24px, 2.35vw, 36px);
   line-height: 0.95;
 }
 
@@ -2823,7 +3636,7 @@ body.input-mode-ui #app {
 
 .ship-condition-meter strong {
   color: #e6edf3;
-  font-size: 34px;
+  font-size: 28px;
   line-height: 1;
 }
 
@@ -2866,8 +3679,8 @@ body.input-mode-ui #app {
   grid-area: overview;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto auto;
-  gap: 10px;
-  padding: 15px;
+  gap: 8px;
+  padding: 11px;
   min-width: 0;
 }
 
@@ -2886,13 +3699,13 @@ body.input-mode-ui #app {
 .ship-preview-stage {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(230px, 1fr) minmax(190px, 0.62fr);
+  grid-template-columns: minmax(230px, 1fr) minmax(170px, 0.58fr);
   align-items: center;
-  gap: 18px;
+  gap: 12px;
   min-height: 0;
   border: 1px solid rgba(148, 163, 184, 0.12);
   border-radius: 8px;
-  padding: 16px;
+  padding: 10px;
   background:
     radial-gradient(ellipse at 38% 58%, rgba(65, 217, 255, 0.15), transparent 52%),
     linear-gradient(135deg, rgba(15, 23, 42, 0.38), rgba(2, 6, 12, 0.45));
@@ -2900,8 +3713,25 @@ body.input-mode-ui #app {
 
 .kestrel-silhouette {
   position: relative;
-  min-height: 210px;
+  min-height: 168px;
   filter: drop-shadow(0 0 32px rgba(65, 217, 255, 0.18));
+}
+
+.ship-dashboard-preview-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  width: 100%;
+  height: 100%;
+  outline: none;
+}
+
+.ship-dashboard-preview-host.model-loaded::before,
+.ship-dashboard-preview-host.model-loaded i,
+.ship-dashboard-preview-host.model-loaded b,
+.ship-dashboard-preview-host.model-loaded em,
+.ship-dashboard-preview-host.model-loaded .ship-schematic-label {
+  opacity: 0;
 }
 
 .kestrel-silhouette::before {
@@ -2993,24 +3823,24 @@ body.input-mode-ui #app {
 
 .ship-preview-stage strong {
   display: block;
-  margin: 6px 0;
+  margin: 4px 0;
   color: #f8fafc;
-  font-size: 24px;
+  font-size: 20px;
 }
 
 .ship-dashboard-modules {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  gap: 7px;
 }
 
 .ship-dashboard-module {
   display: grid;
-  gap: 6px;
-  min-height: 92px;
+  gap: 4px;
+  min-height: 70px;
   border: 1px solid rgba(65, 217, 255, 0.18);
   border-radius: 8px;
-  padding: 10px;
+  padding: 8px;
   background: rgba(2, 6, 12, 0.54);
 }
 
@@ -3021,7 +3851,7 @@ body.input-mode-ui #app {
 
 .ship-dashboard-module strong {
   color: #e6edf3;
-  font-size: 14px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 
@@ -3033,37 +3863,39 @@ body.input-mode-ui #app {
 .ship-stat-panel {
   grid-area: stats;
   display: grid;
-  grid-template-rows: 1fr 1fr auto;
-  gap: 9px;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 0.85fr) auto;
+  gap: 7px;
   min-height: 0;
-  padding: 12px;
+  padding: 9px;
+  overflow: hidden;
 }
 
 .ship-stat-panel section {
   display: grid;
   align-content: start;
-  gap: 6px;
+  gap: 4px;
   min-height: 0;
+  overflow: auto;
 }
 
 .ship-stat-panel section + section {
   border-top: 1px solid rgba(148, 163, 184, 0.14);
-  padding-top: 10px;
+  padding-top: 7px;
 }
 
 .ship-alert-rail {
   grid-area: alerts;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 15px;
+  gap: 10px;
+  padding: 9px 12px;
   overflow: hidden;
 }
 
 .ship-alert-rail b {
   position: relative;
   color: #ffcf6d;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .ship-alert-rail b::before {
@@ -3080,15 +3912,23 @@ body.input-mode-ui #app {
 .ship-mission-panel {
   grid-area: mission;
   display: grid;
-  align-content: center;
-  gap: 9px;
-  padding: 12px 14px;
+  grid-template-rows: auto auto auto auto minmax(28px, auto);
+  align-content: stretch;
+  gap: 3px;
+  padding: 6px 8px;
   border-color: rgba(190, 242, 100, 0.24);
+  overflow: hidden;
 }
 
 .ship-mission-panel strong {
   color: #f8fafc;
-  font-size: 20px;
+  font-size: 15px;
+  line-height: 1.05;
+}
+
+.ship-mission-panel div {
+  gap: 6px;
+  line-height: 1.05;
 }
 
 .multiplayer-failure-screen {
@@ -3174,22 +4014,26 @@ body.input-mode-ui #app {
   border-color: rgba(190, 242, 100, 0.72);
   color: #04111a;
   background: #bef264;
+  align-self: end;
+  min-height: 28px;
+  padding: 6px 9px;
+  line-height: 1;
 }
 
 @media (max-width: 1320px), (max-height: 820px) {
   .ship-dashboard-screen {
     grid-template:
-      "top top top" 62px
+      "top top top" 54px
       "identity overview stats" minmax(0, 1fr)
-      "alerts alerts mission" 112px / minmax(210px, 0.68fr) minmax(440px, 1.3fr) minmax(280px, 0.82fr);
-    gap: 10px;
-    padding: 12px;
+      "alerts alerts mission" 104px / minmax(184px, 0.62fr) minmax(390px, 1.32fr) minmax(252px, 0.82fr);
+    gap: 7px;
+    padding: 8px 10px;
   }
 
   .ship-identity-panel,
   .ship-overview-panel,
   .ship-stat-panel {
-    padding: 12px;
+    padding: 8px;
   }
 
   .ship-dashboard-topbar nav button {
@@ -3198,12 +4042,26 @@ body.input-mode-ui #app {
   }
 
   .kestrel-silhouette {
-    min-height: 190px;
+    min-height: 142px;
   }
 
   .ship-dashboard-module {
-    min-height: 88px;
-    padding: 9px;
+    min-height: 58px;
+    padding: 7px;
+  }
+
+  .ship-dashboard-module p,
+  .ship-preview-stage p {
+    font-size: 11px;
+    line-height: 1.28;
+  }
+
+  .ship-mission-panel {
+    padding: 5px 8px;
+  }
+
+  .ship-mission-panel strong {
+    font-size: 14px;
   }
 }
 
@@ -3307,16 +4165,16 @@ body.input-mode-ui #app {
 }
 
 .class-deploy-screen {
-  min-height: 100vh;
+  height: 100vh;
   display: grid;
   grid-template:
-    "top top top" 72px
+    "top top top" 64px
     "brief stage detail" minmax(0, 1fr)
     "choices choices choices" auto
     "actions actions actions" auto
-    "steps steps steps" 34px / minmax(250px, 0.72fr) minmax(420px, 1.25fr) minmax(270px, 0.78fr);
-  gap: 14px;
-  padding: 18px 22px 16px;
+    "steps steps steps" 30px / minmax(250px, 0.72fr) minmax(420px, 1.25fr) minmax(270px, 0.78fr);
+  gap: 10px;
+  padding: 14px 18px 12px;
   overflow: hidden;
   background:
     radial-gradient(circle at 50% 25%, rgba(65, 217, 255, 0.16), transparent 34%),
@@ -3363,10 +4221,10 @@ body.input-mode-ui #app {
 .class-deploy-detail {
   display: grid;
   align-content: center;
-  gap: 12px;
+  gap: 10px;
   border: 1px solid rgba(148, 163, 184, 0.16);
   border-radius: 8px;
-  padding: 16px;
+  padding: 14px;
   background: rgba(5, 10, 18, 0.56);
 }
 
@@ -3382,8 +4240,9 @@ body.input-mode-ui #app {
 .class-deploy-detail strong,
 .class-selected-copy strong {
   color: #f8fafc;
-  font-size: clamp(24px, 3vw, 44px);
-  line-height: 1;
+  font-size: clamp(20px, 2.1vw, 30px);
+  line-height: 1.05;
+  overflow-wrap: anywhere;
 }
 
 .class-deploy-brief p,
@@ -3414,12 +4273,12 @@ body.input-mode-ui #app {
   place-items: center;
   align-content: center;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .class-stage-light {
   position: absolute;
-  inset: 2% 14% 16%;
+  inset: 0 14% 20%;
   background:
     linear-gradient(180deg, rgba(103, 232, 249, 0.18), transparent 48%),
     radial-gradient(ellipse at 50% 88%, rgba(65, 217, 255, 0.22), transparent 58%);
@@ -3429,10 +4288,11 @@ body.input-mode-ui #app {
 .class-runner-preview-host {
   position: relative;
   z-index: 1;
-  width: min(430px, 34vw);
-  height: min(610px, 64vh);
+  width: min(360px, 29vw);
+  height: min(500px, 56vh);
   display: grid;
   place-items: center;
+  transform: translateY(-42px);
 }
 
 .class-runner-preview-host .hq-runner-preview-host {
@@ -3449,17 +4309,26 @@ body.input-mode-ui #app {
   position: absolute;
   z-index: 2;
   left: 50%;
-  bottom: 4%;
+  bottom: 0;
   width: min(520px, 90%);
   transform: translateX(-50%);
   display: grid;
-  gap: 6px;
+  gap: 5px;
+  border-radius: 10px;
+  padding: 9px 14px 8px;
+  background: linear-gradient(180deg, transparent, rgba(2, 6, 12, 0.58) 18%, rgba(2, 6, 12, 0.88));
   text-align: center;
   pointer-events: none;
 }
 
+.class-selected-copy p {
+  font-size: 12px;
+  line-height: 1.28;
+}
+
 .class-selected-copy small {
   color: #facc15;
+  font-size: 11px;
   font-weight: 850;
 }
 
@@ -3473,7 +4342,8 @@ body.input-mode-ui #app {
 .class-choice {
   display: grid;
   gap: 5px;
-  min-height: 82px;
+  min-height: 72px;
+  padding: 8px 10px;
   border-color: rgba(65, 217, 255, 0.18);
   background: rgba(5, 10, 18, 0.72);
   text-align: left;
@@ -3486,7 +4356,9 @@ body.input-mode-ui #app {
 
 .class-choice strong {
   color: #f8fafc;
-  font-size: 18px;
+  font-size: clamp(15px, 1.1vw, 18px);
+  line-height: 1.08;
+  overflow-wrap: anywhere;
 }
 
 .class-choice small {
@@ -3505,7 +4377,8 @@ body.input-mode-ui #app {
 }
 
 .class-action-rail button {
-  min-width: 170px;
+  min-width: 148px;
+  padding: 8px 10px;
 }
 
 .class-action-rail .class-primary-action {
@@ -3522,7 +4395,7 @@ body.input-mode-ui #app {
 .class-progression-strip b {
   border: 1px solid rgba(65, 217, 255, 0.2);
   border-radius: 999px;
-  padding: 5px 12px;
+  padding: 4px 10px;
   color: #e0f2fe;
   font-size: 11px;
   text-transform: uppercase;
@@ -3531,18 +4404,29 @@ body.input-mode-ui #app {
 @media (max-width: 1180px), (max-height: 780px) {
   .class-deploy-screen {
     grid-template:
-      "top top" 62px
+      "top top" 56px
       "stage detail" minmax(0, 1fr)
       "brief brief" auto
       "choices choices" auto
       "actions actions" auto
-      "steps steps" 30px / minmax(360px, 1fr) minmax(260px, 0.82fr);
-    gap: 10px;
-    padding: 12px 14px;
+      "steps steps" 28px / minmax(340px, 1fr) minmax(250px, 0.82fr);
+    gap: 8px;
+    padding: 10px 12px;
   }
 
   .class-runner-preview-host {
-    height: min(460px, 54vh);
+    width: min(300px, 31vw);
+    height: min(380px, 49vh);
+    transform: translateY(-32px);
+  }
+
+  .class-selected-copy {
+    width: min(430px, 92%);
+    padding: 8px 12px 7px;
+  }
+
+  .class-selected-copy strong {
+    font-size: clamp(18px, 2vw, 26px);
   }
 
   .class-deploy-brief,
@@ -3555,7 +4439,7 @@ body.input-mode-ui #app {
   }
 
   .class-choice {
-    min-height: 70px;
+    min-height: 62px;
   }
 }
 

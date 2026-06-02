@@ -50,6 +50,8 @@ import {
 import { EnvironmentManager, type EnvironmentState } from "../environment/EnvironmentManager";
 import { HQManager, type HQStationId } from "../hq/HQManager";
 import { HabitatRunnerPreview } from "../hq/HabitatRunnerPreview";
+import { ShipDashboardPreview } from "../hq/ShipDashboardPreview";
+import { getWeaponPreviewConfig, WeaponBenchPreview } from "../hq/WeaponBenchPreview";
 import type { DynamicEventState } from "../raid/DynamicEventDirector";
 import { DynamicEventDirector } from "../raid/DynamicEventDirector";
 import type { ExtractionState } from "../raid/ExtractionController";
@@ -64,6 +66,7 @@ import {
   LoadoutManager,
   type EquipmentSlot,
   type LoadoutFilter,
+  type LoadoutManagerState,
 } from "../raid/LoadoutManager";
 import { LootDirector } from "../raid/LootDirector";
 import type { ObjectiveState } from "../raid/ObjectiveDirector";
@@ -245,6 +248,8 @@ export class App {
   private readonly shipAudio = new ShipAudioManager();
   private readonly sfxAudio = new PlaceholderWeaponAudio();
   private readonly habitatPreview = new HabitatRunnerPreview();
+  private readonly shipDashboardPreview = new ShipDashboardPreview();
+  private readonly weaponBenchPreview = new WeaponBenchPreview();
   private preDeploymentMode: "assignment" | "solo" | "multiplayer" = "assignment";
   private readonly shipLandingSequence = new OrbitalDeploymentSequence();
   private readonly orbitalDeploymentScene: OrbitalDeploymentScene;
@@ -372,6 +377,8 @@ export class App {
   private boundaryWarningCooldown = 0;
   private inspectedWeaponId: WeaponId | null = null;
   private inspectWeaponContext: "inspect" | "arsenal" | "habitat" = "inspect";
+  private selectedLoadoutSlot: EquipmentSlot = "primary";
+  private loadoutStashCompatibilityOpen = false;
   private stashFilter: StashFilter = "all";
   private stashSort: StashSort = "rarity";
   private stashSearch = "";
@@ -739,6 +746,8 @@ export class App {
     this.combatHud.dispose();
     this.loadingScreen.dispose();
     this.habitatPreview.dispose();
+    this.shipDashboardPreview.dispose();
+    this.weaponBenchPreview.dispose();
     this.environmentManager.dispose();
     this.landedShip.dispose();
     this.orbitalDeploymentScene.dispose();
@@ -3493,7 +3502,7 @@ export class App {
   private showMultiplayerConnectionFailure(): void {
     this.raidScreen = "menu";
     this.menu.classList.remove("hidden");
-    this.menuContent.classList.remove("hq-command-content", "class-deploy-content", "ship-dashboard-content");
+    this.menuContent.classList.remove("hq-command-content", "class-deploy-content", "ship-dashboard-content", "arsenal-workbench-content");
     const snapshot = this.multiplayerClient.snapshot;
     const diagnostics = [
       "DARK CRATERS multiplayer connection failure",
@@ -3886,7 +3895,8 @@ export class App {
   private showMainMenu(): void {
     this.raidScreen = "menu";
     this.habitatPreview.dispose();
-    this.menuContent.classList.remove("class-deploy-content", "ship-dashboard-content");
+    this.shipDashboardPreview.dispose();
+    this.menuContent.classList.remove("class-deploy-content", "ship-dashboard-content", "arsenal-workbench-content");
     this.menuContent.classList.add("hq-command-content");
     this.cosmeticManager.setActiveClass(this.classManager.snapshot.selectedClassId);
     this.landedShip.setEnabled(false);
@@ -4002,7 +4012,13 @@ export class App {
     this.bindMenuButtons();
     this.habitatPreview.mount(this.menuContent.querySelector<HTMLElement>(".hq-runner-preview-host"), {
       variant: "habitat",
+      framingMode: "fullBody",
       modelPaths: getClassSuitModelCandidates(this.classManager.snapshot.selectedClassId),
+      classId: this.classManager.snapshot.selectedClassId,
+      targetHeight: 1.36,
+      verticalLift: 0.02,
+      cameraRadius: 5.35,
+      cameraTargetY: 0.7,
     });
   }
 
@@ -4161,7 +4177,7 @@ export class App {
             <strong>KESTREL-9 // EXTRACTION READY</strong>
           </header>
           <div class="ship-preview-stage">
-            <div class="kestrel-silhouette">
+            <div class="kestrel-silhouette ship-dashboard-preview-host">
               <i></i><b></b><em></em>
               <span class="ship-schematic-label ship-schematic-name">KESTREL-9</span>
               <span class="ship-schematic-label ship-schematic-cargo">CARGO SPINE</span>
@@ -4206,6 +4222,7 @@ export class App {
       </div>
     `;
     this.bindMenuButtons();
+    this.shipDashboardPreview.mount(this.menuContent.querySelector<HTMLElement>(".ship-dashboard-preview-host"));
   }
 
   private showClassAssignmentMenu(): void {
@@ -4305,7 +4322,9 @@ export class App {
     this.bindMenuButtons();
     this.habitatPreview.mount(this.menuContent.querySelector<HTMLElement>(".class-runner-preview-host .hq-runner-preview-host"), {
       variant: "class-selection",
+      framingMode: "fullBody",
       modelPaths: getClassSuitModelCandidates(this.classManager.snapshot.selectedClassId),
+      classId: this.classManager.snapshot.selectedClassId,
     });
   }
 
@@ -4987,11 +5006,29 @@ export class App {
       `;
     }
     this.bindMenuButtons();
+    if (this.raidScreen === "loadout" && (this.loadoutTab === "gear" || this.loadoutTab === "cosmetics")) {
+      this.habitatPreview.mount(this.menuContent.querySelector<HTMLElement>(".loadout-runner-preview-host, .cosmetic-runner-preview-host"), {
+        variant: "habitat",
+        framingMode: "fullBody",
+        modelPaths: getClassSuitModelCandidates(this.classManager.snapshot.selectedClassId),
+        classId: this.classManager.snapshot.selectedClassId,
+        targetHeight: this.loadoutTab === "cosmetics" ? 1.36 : 1.4,
+        verticalLift: 0.02,
+        cameraRadius: this.loadoutTab === "cosmetics" ? 5.3 : 5.4,
+        cameraTargetY: 0.7,
+      });
+    }
   }
 
   private renderGearLoadoutScreen(): string {
     const loadout = this.loadout.snapshot;
     const manager = this.loadoutManager.snapshot;
+    const selectedSlotType = this.getLoadoutSlotLootType(this.selectedLoadoutSlot, loadout, manager);
+    const selectedType = manager.selectedType ?? selectedSlotType;
+    const selectedDetails = this.renderLoadoutItemDetails(selectedType, this.selectedLoadoutSlot);
+    const gearSlots = this.renderEquippedGearSlots(loadout);
+    const raidBag = this.renderRaidBag();
+    const warnings = this.renderLoadoutReadinessWarnings(loadout, manager);
     const filterTabs = loadoutFilters
       .map((filter) => `
         <button type="button" class="${manager.filter === filter ? "active" : ""}" data-action="loadout-filter-${filter}">
@@ -5000,33 +5037,79 @@ export class App {
       `)
       .join("");
     const stashRows = this.renderLoadoutStashRows(manager.filter);
-    const selectedDetails = this.renderLoadoutItemDetails(manager.selectedType);
-    const gearSlots = this.renderEquippedGearSlots(loadout);
-    const raidBag = this.renderRaidBag();
 
     return `
-      <div class="loadout-screen">
-        ${this.renderLoadoutHero()}
-        ${this.renderPlayerPreviewPanel()}
-        <section class="equipped-gear-panel">
-          <h3>Equipped Slots</h3>
-          <div class="gear-slot-grid">${gearSlots}</div>
+      <div class="loadout-locker-screen hq-dashboard-shell">
+        <header class="loadout-locker-top hq-panel-header">
+          <div>
+            <span>Loadout Locker</span>
+            <h2>LOADOUT</h2>
+            <p>Active EVA kit / crater deployment readiness</p>
+          </div>
+          <nav class="loadout-mode-tabs">
+            <button type="button" class="${this.loadoutTab === "gear" ? "active" : ""}" data-action="loadout-tab-gear">Gear</button>
+            <button type="button" class="${this.loadoutTab === "cosmetics" ? "active" : ""}" data-action="loadout-tab-cosmetics">Cosmetics</button>
+          </nav>
+          <div class="hq-resource-strip loadout-readiness-strip">
+            <span>Class <strong>${this.classManager.selectedClass.displayName}</strong></span>
+            <span>Gear <strong>${this.getGearScore()} / ${this.selectedRaidDefinition.recommendedGearScore}</strong></span>
+            <span>EVA <strong>${this.loadoutManager.raidBagUsedSlots}/${this.loadoutManager.raidBagCapacity}</strong></span>
+          </div>
+        </header>
+        ${this.renderLoadoutRunnerPanel()}
+        <section class="loadout-equipped-panel hq-panel">
+          <div class="hq-panel-header compact">
+            <div>
+              <span>Equipped Gear</span>
+              <h3>Deployment Slots</h3>
+            </div>
+            <small>Heavy cargo is mission state, not an EVA Pack slot.</small>
+          </div>
+          <div class="gear-slot-grid loadout-slot-grid">${gearSlots}</div>
         </section>
-        <section class="stash-inventory-panel">
-          <h3>Habitat Stash</h3>
-          <nav>${filterTabs}</nav>
-          <div class="loadout-stash-grid">${stashRows}</div>
-        </section>
-        <section class="raid-bag-panel">
-          <h3>EVA Pack</h3>
-          <p>${this.loadoutManager.raidBagUsedSlots}/${this.loadoutManager.raidBagCapacity} slots at risk next Crater Run</p>
-          <div class="raid-bag-grid">${raidBag}</div>
-        </section>
-        <section class="item-details-panel">
-          <h3>Item Details</h3>
+        <section class="loadout-detail-panel hq-panel hq-detail-panel">
+          <div class="hq-panel-header compact">
+            <div>
+              <span>Selected Slot</span>
+              <h3>${equipmentSlotLabels[this.selectedLoadoutSlot]}</h3>
+            </div>
+          </div>
           ${selectedDetails}
         </section>
+        <section class="loadout-eva-panel hq-panel">
+          <div class="hq-panel-header compact">
+            <div>
+              <span>EVA Pack</span>
+              <h3>Carried Supplies</h3>
+            </div>
+            <small>${this.loadoutManager.raidBagUsedSlots}/${this.loadoutManager.raidBagCapacity} slots at risk next run</small>
+          </div>
+          <div class="raid-bag-grid">${raidBag}</div>
+          <div class="loadout-stash-access">
+            <div>
+              <span>Habitat Stash</span>
+              <strong>Compatibility Browser</strong>
+              <p>Review compatible stash gear without changing the active deployment layout.</p>
+            </div>
+            <button type="button" class="loadout-stash-open-button" data-action="loadout-stash-compat-open">Open Compatibility Browser</button>
+          </div>
+        </section>
+        <section class="loadout-action-rail hq-panel">
+          <div>
+            <span>Readiness</span>
+            <strong>${warnings.length > 0 ? "Review Kit" : "Deployment Ready"}</strong>
+            <p>${warnings.length > 0 ? warnings.join(" | ") : "Primary kit is staged. Future Phase 11.0 will support in-raid EVA Pack weapon swaps."}</p>
+          </div>
+          <footer class="hq-action-bar">
+            <button type="button" data-action="arsenal">Arsenal</button>
+            <button type="button" data-action="stash">Stash</button>
+            <button type="button" data-action="loadout-stash-compat-open">Compatibility</button>
+            <button type="button" data-action="class-assignment">Class</button>
+            <button type="button" class="class-primary-action" data-action="start">Deploy</button>
+          </footer>
+        </section>
       </div>
+      ${this.loadoutStashCompatibilityOpen ? this.renderLoadoutStashCompatibilityPanel(filterTabs, stashRows, manager.filter, selectedType) : ""}
     `;
   }
 
@@ -5079,7 +5162,7 @@ export class App {
     return `
       <div class="loadout-screen cosmetics-loadout-screen">
         ${this.renderLoadoutHero()}
-        ${this.renderPlayerPreviewPanel(true)}
+        ${this.renderCosmeticRunnerPanel()}
         <section class="equipped-gear-panel cosmetic-equipped-panel">
           <h3>Class Suit Cosmetics</h3>
           <p>${activeClass.displayName} suit identity is class-bound. These are minor cosmetic overlays for the current assignment.</p>
@@ -5115,6 +5198,36 @@ export class App {
     `;
   }
 
+  private renderCosmeticRunnerPanel(): string {
+    return `
+      <section class="player-preview-panel cosmetic-runner-panel hq-panel hq-preview-panel">
+        <div class="hq-panel-header compact">
+          <div>
+            <span>Class Suit Preview</span>
+            <h3>${this.classManager.selectedClass.displayName}</h3>
+          </div>
+          <small>${this.previewModelStatus === "available" ? "Obsidian Sentinel class suit" : "Fallback preview ready"}</small>
+        </div>
+        <div class="cosmetic-runner-preview-host hq-runner-preview-host" aria-label="Cosmetic class suit preview">
+          <div class="hq-runner-fallback">
+            <i></i><b></b><em></em>
+          </div>
+        </div>
+        <div class="preview-actions">
+          <button type="button" data-action="cosmetic-preview-left">Rotate Left</button>
+          <button type="button" data-action="cosmetic-preview-right">Rotate Right</button>
+        </div>
+        <div class="preview-meta">
+          <span>Outfit</span><strong>${this.cosmeticManager.getEquippedName("outfit")}</strong>
+          <span>Helmet</span><strong>${this.cosmeticManager.getEquippedName("headgear")}</strong>
+          <span>Visor</span><strong>${this.cosmeticManager.getEquippedName("mask")}</strong>
+          <span>Assignment</span><strong>${this.classManager.selectedClass.roleLabel}</strong>
+        </div>
+        <small class="cosmetic-preview-note">Visual overlay preview pending</small>
+      </section>
+    `;
+  }
+
   private renderLoadoutHero(): string {
     const gearScore = this.getGearScore();
     const recommended = this.selectedRaidDefinition.recommendedGearScore;
@@ -5135,48 +5248,52 @@ export class App {
     `;
   }
 
-  private renderPlayerPreviewPanel(cosmeticMode = false): string {
+  private renderLoadoutRunnerPanel(): string {
     const manager = this.loadoutManager.snapshot;
-    const palette = this.cosmeticManager.getPalette();
-    const rotation = this.cosmeticManager.snapshot.previewRotation;
-    const style = [
-      `--preview-hoodie: ${colorToCss(palette.hoodie)}`,
-      `--preview-dark: ${colorToCss(palette.jacketDark)}`,
-      `--preview-vest: ${colorToCss(palette.vest)}`,
-      `--preview-visor: ${colorToCss(palette.visor)}`,
-      `--preview-glow: ${colorToCss(palette.glow)}`,
-      `--preview-accent: ${colorToCss(palette.accent)}`,
-      `--preview-rotation: ${rotation}deg`,
-    ].join("; ");
-
     return `
-      <section class="player-preview-panel">
-        <h3>Crater Runner Preview</h3>
-        <div class="raider-preview" aria-label="Stylized Crater Runner preview" style="${style}">
-          <div class="preview-backpack"></div>
-          <div class="preview-head"><span></span></div>
-          <div class="preview-torso"><i></i></div>
-          <div class="preview-arm left"></div>
-          <div class="preview-arm right"></div>
-          <div class="preview-leg left"></div>
-          <div class="preview-leg right"></div>
-          <div class="preview-weapon"></div>
-        </div>
-        ${cosmeticMode ? `
-          <div class="preview-actions">
-            <button type="button" data-action="cosmetic-preview-left">Rotate Left</button>
-            <button type="button" data-action="cosmetic-preview-right">Rotate Right</button>
+      <section class="loadout-runner-panel hq-panel hq-preview-panel">
+        <div class="hq-panel-header compact">
+          <div>
+            <span>Runner Identity</span>
+            <h3>${this.classManager.selectedClass.displayName}</h3>
           </div>
-        ` : ""}
-        <small class="preview-model-status">Preview Model: ${this.previewModelStatus === "available" ? "Obsidian Sentinel available" : "fallback primitive"}</small>
-        <div class="preview-meta">
+          <small>${this.previewModelStatus === "available" ? "Obsidian Sentinel preview" : "Fallback preview ready"}</small>
+        </div>
+        <div class="loadout-runner-preview-host hq-runner-preview-host" aria-label="Loadout runner preview">
+          <div class="hq-runner-fallback">
+            <i></i><b></b><em></em>
+          </div>
+        </div>
+        <div class="preview-meta loadout-runner-meta">
           <span>Primary</span><strong>${this.loadout.primaryWeaponName}</strong>
           <span>Sidearm</span><strong>${weaponDefinitions[this.loadout.snapshot.sidearmWeaponId].name}</strong>
-          <span>EVA Pack</span><strong>${manager.backpackType ? "Pack Expander" : "Starter Pack"}</strong>
-          <span>Outfit</span><strong>${this.cosmeticManager.getEquippedName("outfit")}</strong>
+          <span>EVA Pack</span><strong>${manager.backpackType ? getItemDefinition(manager.backpackType).label : "Starter Pack"}</strong>
+          <span>Suit</span><strong>${this.cosmeticManager.getEquippedName("outfit")}</strong>
         </div>
       </section>
     `;
+  }
+
+  private getLoadoutSlotLootType(slot: EquipmentSlot, loadout: RaidLoadout, manager: LoadoutManagerState): LootType | null {
+    if (slot === "primary") return loadout.primaryWeaponId ? weaponLootTypes[loadout.primaryWeaponId] : null;
+    if (slot === "sidearm") return weaponLootTypes[loadout.sidearmWeaponId];
+    if (slot === "melee") return loadout.meleeWeaponId ? weaponLootTypes[loadout.meleeWeaponId] : null;
+    if (slot === "armor") return manager.armorType;
+    if (slot === "backpack") return manager.backpackType;
+    if (slot === "tactical") return manager.tacticalToolType;
+    if (slot === "consumable1") return manager.consumable1Type;
+    return manager.consumable2Type;
+  }
+
+  private renderLoadoutReadinessWarnings(loadout: RaidLoadout, manager: LoadoutManagerState): string[] {
+    const warnings: string[] = [];
+    if (!loadout.primaryWeaponId) warnings.push("No primary equipped");
+    if (!manager.armorType) warnings.push("Armor slot empty");
+    if (this.loadoutManager.raidBagUsedSlots >= this.loadoutManager.raidBagCapacity) warnings.push("EVA Pack full");
+    const weapons = [loadout.primaryWeaponId, loadout.sidearmWeaponId, loadout.meleeWeaponId].filter((id): id is WeaponId => Boolean(id));
+    if (weapons.some((weaponId) => this.weaponController.getDurabilityState(weaponId).durability < 35)) warnings.push("Damaged weapon");
+    if (loadout.extraAmmoMags === 0) warnings.push("Field ammo minimal");
+    return warnings;
   }
 
   private renderEquippedGearSlots(loadout: RaidLoadout): string {
@@ -5195,12 +5312,15 @@ export class App {
     return slots.map(({ slot, type, label, locked }) => {
       const definition = type ? getItemDefinition(type) : null;
       const color = definition ? colorToCss(themeConfig.rarityColors[definition.rarity]) : "rgba(255,255,255,0.32)";
+      const selected = this.selectedLoadoutSlot === slot ? " selected" : "";
+      const weaponId = type ? weaponIdFromLootType(type) : null;
+      const durability = weaponId ? `${Math.round(this.weaponController.getDurabilityState(weaponId).durability)}% condition` : definition ? definition.rarity : "Prototype";
       return `
-        <div class="gear-slot" style="--rarity-color: ${color}">
-          <button type="button" data-action="${type ? `loadout-select-${type}` : "noop"}">
+        <div class="gear-slot hq-slot-card${selected}" style="--rarity-color: ${color}">
+          <button type="button" data-action="loadout-slot-${slot}">
             <span>${equipmentSlotLabels[slot]}</span>
             <strong>${label}</strong>
-            ${locked ? "<small>Free starter | Inspect in details</small>" : `<small>${definition?.rarity ?? "empty"}${weaponIdFromLootType(type ?? "scrap") ? " | Inspect in details" : ""}</small>`}
+            ${locked ? "<small>Equipped | Free starter</small>" : `<small>${type ? `Equipped | ${durability}` : "Empty | Future compatible slot"}</small>`}
           </button>
         </div>
       `;
@@ -5229,7 +5349,61 @@ export class App {
       })
       .join("");
 
-    return rows || `<span class="empty-loadout-list">Nothing in this filter yet</span>`;
+    return rows || `<span class="empty-loadout-list">No compatible stash items for this filter.</span>`;
+  }
+
+  private renderLoadoutStashCompatibilityPanel(filterTabs: string, stashRows: string, filter: LoadoutFilter, selectedType: LootType | null): string {
+    const selectedDefinition = selectedType ? getItemDefinition(selectedType) : null;
+    const selectedAvailability = selectedType
+      ? this.loadoutManager.availableQuantity(this.persistentStash.items, selectedType)
+      : 0;
+    const selectedColor = selectedDefinition
+      ? colorToCss(themeConfig.rarityColors[selectedDefinition.rarity])
+      : "rgba(103, 232, 249, 0.32)";
+    const selectedWeaponId = selectedType ? weaponIdFromLootType(selectedType) : null;
+
+    return `
+      <div class="loadout-compat-backdrop" aria-hidden="true"></div>
+      <section class="loadout-compat-modal" role="dialog" aria-modal="true" aria-label="Habitat stash compatibility">
+        <header class="hq-panel-header compact">
+          <div>
+            <span>Habitat Stash Compatibility</span>
+            <h3>${this.formatLoadoutFilter(filter)}</h3>
+            <p>Review stash items compatible with this loadout. Equip/move actions remain reserved for Phase 11.0.</p>
+          </div>
+          <button type="button" class="loadout-compat-close" data-action="loadout-stash-compat-close">Close</button>
+        </header>
+        <nav class="loadout-compat-filters">${filterTabs}</nav>
+        <div class="loadout-compat-body">
+          <div class="loadout-stash-grid loadout-compat-list">${stashRows}</div>
+          <aside class="loadout-compat-detail">
+            ${selectedDefinition
+              ? `<article class="loadout-details-card" style="--rarity-color: ${selectedColor}">
+                  <strong>${selectedDefinition.label}</strong>
+                  <span>${selectedDefinition.rarity.toUpperCase()} | ${selectedDefinition.category}</span>
+                  <p>${selectedDefinition.description}</p>
+                  <div><span>Available</span><strong>${selectedAvailability}</strong></div>
+                  <div><span>Category</span><strong>${selectedDefinition.category}</strong></div>
+                  <div><span>Use</span><strong>${selectedDefinition.use}</strong></div>
+                  <footer>
+                    ${selectedWeaponId ? `<button type="button" data-action="loadout-inspect-selected">Inspect</button>` : `<button type="button" disabled>Inspect - weapons only</button>`}
+                    <button type="button" data-action="stash">Open Stash</button>
+                    <button type="button" disabled>Phase 11 Equip/Move Pending</button>
+                  </footer>
+                </article>`
+              : `<article class="loadout-details-card hq-muted-card">
+                  <strong>No Compatible Item Selected</strong>
+                  <span>FILTER | ${this.formatLoadoutFilter(filter)}</span>
+                  <p>Select an item from the stash list to review compatibility, inspect safe weapon entries, or open the full Stash screen.</p>
+                  <footer>
+                    <button type="button" data-action="stash">Open Stash</button>
+                    <button type="button" disabled>Phase 11 Equip/Move Pending</button>
+                  </footer>
+                </article>`}
+          </aside>
+        </div>
+      </section>
+    `;
   }
 
   private renderRaidBag(): string {
@@ -5251,9 +5425,22 @@ export class App {
     }).join("");
   }
 
-  private renderLoadoutItemDetails(type: LootType | null): string {
+  private renderLoadoutItemDetails(type: LootType | null, slot: EquipmentSlot = this.selectedLoadoutSlot): string {
     if (!type) {
-      return `<p>Select stash gear to inspect, equip, pack, or discard.</p>`;
+      return `
+        <article class="loadout-details-card hq-muted-card">
+          <strong>${equipmentSlotLabels[slot]}</strong>
+          <span>EMPTY | PROTOTYPE READY</span>
+          <p>No item is currently assigned to this slot. This slot is preserved for future recovered gear and Phase 11.0 EVA Pack weapon-swap support.</p>
+          <div><span>Status</span><strong>${slot === "primary" ? "No primary equipped" : "Empty"}</strong></div>
+          <div><span>Field Movement</span><strong>HQ-only changes safe</strong></div>
+          <footer>
+            <button type="button" data-action="arsenal">Open Arsenal</button>
+            <button type="button" disabled>Move to EVA Pack - Phase 11.0</button>
+            <button type="button" disabled>No compatible item selected</button>
+          </footer>
+        </article>
+      `;
     }
 
     const definition = getItemDefinition(type);
@@ -5269,6 +5456,9 @@ export class App {
     const weaponInspectAction = weaponId
       ? `<button type="button" data-action="loadout-inspect-selected">Inspect Weapon</button>`
       : "";
+    const repairAction = weaponId
+      ? `<button type="button" data-action="inspect-repair-${weaponId}">Repair</button>`
+      : `<button type="button" disabled>Repair - weapons only</button>`;
     const unequipAction = equippedSlot
       ? `<button type="button" data-action="loadout-unequip-${equippedSlot}">Unequip</button>`
       : "";
@@ -5288,8 +5478,9 @@ export class App {
           ${weaponInspectAction}
           <button type="button" data-action="loadout-equip-selected">Equip</button>
           ${unequipAction}
-          <button type="button" data-action="loadout-bag-selected">Move to EVA Pack</button>
-          <button type="button" data-action="loadout-discard-selected">Discard</button>
+          ${repairAction}
+          <button type="button" disabled>Move to EVA Pack - Phase 11.0</button>
+          <button type="button" disabled>Compare - open Arsenal</button>
         </footer>
       </article>
     `;
@@ -5359,16 +5550,19 @@ export class App {
   }
 
   private showInspectWeaponMenu(context: "inspect" | "arsenal" | "habitat" = "inspect"): void {
+    if (context === "arsenal") {
+      this.showArsenalWorkbenchMenu();
+      return;
+    }
+
     this.inspectWeaponContext = context;
-    this.raidScreen = context === "arsenal" ? "arsenal" : "inspect";
+    this.raidScreen = "inspect";
     this.loadout.clampToStash(this.persistentStash.items);
     const weaponId = this.resolveInspectedWeaponId();
-    const headerEyebrow = context === "arsenal"
-      ? "Weapon Systems"
-      : context === "habitat"
+    const headerEyebrow = context === "habitat"
         ? "Equipped Weapon"
         : "Weapon Bench";
-    const headerBackAction = context === "arsenal" || context === "habitat" ? "menu" : "loadout";
+    const headerBackAction = context === "habitat" ? "menu" : "loadout";
 
     if (!weaponId) {
       this.menuContent.innerHTML = `
@@ -5418,7 +5612,7 @@ export class App {
         <header class="inspect-header">
           <div>
             <span>${headerEyebrow}</span>
-            <h2>${context === "arsenal" ? `Arsenal / ${weapon.name}` : weapon.name}</h2>
+            <h2>${weapon.name}</h2>
             <p><b>${this.capitalize(definition.rarity)}</b> ${definition.category} | ${equippedStatus} | Related branch: Response Discipline</p>
           </div>
           <div class="inspect-wallet">
@@ -5452,7 +5646,112 @@ export class App {
 
   private showArsenalMenu(): void {
     this.hqManager.open("arsenal");
-    this.showInspectWeaponMenu("arsenal");
+    this.showArsenalWorkbenchMenu();
+  }
+
+  private showArsenalWorkbenchMenu(): void {
+    this.inspectWeaponContext = "arsenal";
+    this.raidScreen = "arsenal";
+    this.hqManager.open("arsenal");
+    this.menuContent.classList.add("arsenal-workbench-content");
+    this.loadout.clampToStash(this.persistentStash.items);
+    const weaponId = this.resolveInspectedWeaponId() ?? "pistol";
+    this.inspectedWeaponId = weaponId;
+    const weapon = this.getUpgradedWeapon(weaponId);
+    const durability = this.weaponController.getDurabilityState(weaponId);
+    const weaponLoot = weaponLootTypes[weaponId];
+    const definition = getItemDefinition(weaponLoot);
+    const rarityColor = colorToCss(themeConfig.rarityColors[definition.rarity]);
+    const equippedSlot = this.getEquippedWeaponSlot(weaponId);
+    const equippedStatus = equippedSlot ? `${this.capitalize(equippedSlot)} equipped` : this.weaponExistsForInspect(weaponId) ? "Owned in stash" : "Prototype reference";
+    const compareWeaponId = weaponId === this.loadout.snapshot.sidearmWeaponId
+      ? this.loadout.snapshot.primaryWeaponId
+      : this.loadout.snapshot.primaryWeaponId ?? this.loadout.snapshot.sidearmWeaponId;
+    const credits = this.vendorManager.snapshot.credits;
+    const resourceRows = [
+      ["Credits", credits],
+      ["Scrap Alloy", this.getStashQuantity("scrap")],
+      ["Weapon Parts", this.getStashQuantity("weapon-parts")],
+      ["Circuit Fragments", this.getStashQuantity("electronics")],
+      ["Crater Glass", this.getStashQuantity("rare-core")],
+      ["H3", this.getStashQuantity("helium-drill-core") + this.getStashQuantity("rare-core")],
+    ].map(([label, value]) => `<span>${label}<strong>${Number(value).toLocaleString()}</strong></span>`).join("");
+
+    this.menuContent.innerHTML = `
+      <div class="arsenal-workbench-screen hq-dashboard-shell" style="--rarity-color: ${rarityColor}">
+        <header class="arsenal-workbench-top hq-panel-header">
+          <div>
+            <span>Weapon Workbench</span>
+            <h2>ARSENAL</h2>
+            <p>Weapon inspection / repair / upgrade bench</p>
+          </div>
+          <div class="hq-resource-strip arsenal-resource-strip">${resourceRows}</div>
+          <button type="button" data-action="loadout">Back to Loadout</button>
+        </header>
+        <section class="arsenal-list-panel hq-panel">
+          <div class="hq-panel-header compact">
+            <div>
+              <span>Owned Weapons</span>
+              <h3>Collection</h3>
+            </div>
+            <small>Prototype entries are inspect-only references.</small>
+          </div>
+          <div class="arsenal-weapon-list">${this.renderArsenalWeaponRows(weaponId)}</div>
+        </section>
+        <section class="arsenal-preview-panel hq-panel hq-preview-panel">
+          <div class="hq-panel-header compact">
+            <div>
+              <span>${this.getWeaponManufacturer(weaponId)}</span>
+              <h3>${this.getWeaponDisplayName(weaponId)}</h3>
+            </div>
+            <small>${equippedStatus}</small>
+          </div>
+          <div class="weapon-bench-preview-host" aria-label="Weapon workbench preview">
+            ${this.renderWeaponSchematicFallback(weapon)}
+          </div>
+          <div class="inspect-meta-grid">
+            <div><span>Class</span><strong>${this.getWeaponRoleLabel(weaponId)}</strong></div>
+            <div><span>Ammo</span><strong>${this.capitalize(weapon.ammoType)}</strong></div>
+            <div><span>Condition</span><strong>${Math.round(durability.durability)}%</strong></div>
+            <div><span>Preview Asset</span><strong>${getWeaponPreviewConfig(weaponId) ? "GLB / schematic fallback" : "Schematic fallback"}</strong></div>
+          </div>
+        </section>
+        <section class="arsenal-details-panel hq-panel hq-detail-panel">
+          <div class="hq-panel-header compact">
+            <div>
+              <span>Weapon Details</span>
+              <h3>${definition.rarity.toUpperCase()} FIELD TOOL</h3>
+            </div>
+          </div>
+          <p>${definition.description}</p>
+          ${this.renderWeaponStatPanel(weapon, durability)}
+        </section>
+        <section class="arsenal-mod-panel hq-panel">
+          ${this.renderWeaponAttachmentPanel()}
+        </section>
+        <section class="arsenal-service-panel hq-panel">
+          ${this.renderWeaponUpgradePanel(weaponId, this.getStashQuantity("scrap"), this.getStashQuantity("weapon-parts"))}
+          ${this.renderWeaponRepairPanel(weaponId, durability, this.getStashQuantity("scrap"))}
+          ${this.renderWeaponComparePanel(weaponId, compareWeaponId)}
+        </section>
+        <section class="arsenal-action-rail hq-panel">
+          <div>
+            <span>Bench Actions</span>
+            <strong>${this.getWeaponDisplayName(weaponId)}</strong>
+            <p>HQ equip, repair, upgrade, and attachment actions use current systems. In-raid weapon swapping remains reserved for Phase 11.0.</p>
+          </div>
+          <footer class="hq-action-bar">
+            <button type="button" data-action="inspect-equip-primary-${weaponId}">Equip to ${weaponId === "pistol" || weaponId === "burst-pistol" || weaponId === "revolver" || weaponId === "compact-smg" ? "Sidearm" : weaponId === "knife" ? "Tool" : "Primary"}</button>
+            <button type="button" data-action="inspect-repair-${weaponId}">Repair</button>
+            <button type="button" disabled>Compare Overlay - Bench Locked</button>
+            <button type="button" disabled>Skin / Wrap - Coming Soon</button>
+            <button type="button" data-action="loadout">Back to Loadout</button>
+          </footer>
+        </section>
+      </div>
+    `;
+    this.bindMenuButtons();
+    this.weaponBenchPreview.mount(this.menuContent.querySelector<HTMLElement>(".weapon-bench-preview-host"), weaponId);
   }
 
   private resolveInspectedWeaponId(): WeaponId | null {
@@ -5498,6 +5797,78 @@ export class App {
     }
 
     return null;
+  }
+
+  private getWeaponDisplayName(weaponId: WeaponId): string {
+    const names: Partial<Record<WeaponId, string>> = {
+      pistol: "MK-3 Survey Pistol",
+      "burst-pistol": "MK-3 Survey Pistol Alt",
+      revolver: "Flare Spike Launcher",
+      "compact-smg": "TY-7 Crater Carbine",
+      smg: "TY-7 Crater Carbine",
+      shotgun: "Breach-12 Scattergun",
+      "assault-rifle": "PR4 Pulse Rifle",
+      rifle: "Longline Marksman Rifle",
+      knife: "Industrial Mining Laser",
+    };
+    return names[weaponId] ?? weaponDefinitions[weaponId].name;
+  }
+
+  private getWeaponRoleLabel(weaponId: WeaponId): string {
+    const roles: Partial<Record<WeaponId, string>> = {
+      pistol: "Survey sidearm",
+      "burst-pistol": "Burst sidearm variant",
+      revolver: "Signal spike launcher",
+      "compact-smg": "Compact crater carbine",
+      smg: "Close-range carbine",
+      shotgun: "Breach scattergun",
+      "assault-rifle": "Pulse rifle",
+      rifle: "Marksman rifle",
+      knife: "Industrial field tool",
+    };
+    return roles[weaponId] ?? "Extraction weapon";
+  }
+
+  private getWeaponManufacturer(weaponId: WeaponId): string {
+    const makers: Partial<Record<WeaponId, string>> = {
+      pistol: "MK Survey Arms",
+      "burst-pistol": "MK Survey Arms",
+      revolver: "Flareline Works",
+      "compact-smg": "Tycho Yard",
+      smg: "Tycho Yard",
+      shotgun: "Breach Industrial",
+      "assault-rifle": "PR4 Helios Pattern",
+      rifle: "Longline Survey",
+      knife: "Mining Cutter Retrofit",
+    };
+    return makers[weaponId] ?? "Lunar Field Pattern";
+  }
+
+  private renderArsenalWeaponRows(selectedWeaponId: WeaponId): string {
+    const weaponIds = Object.keys(weaponDefinitions) as WeaponId[];
+    return weaponIds.map((weaponId) => {
+      const definition = getItemDefinition(weaponLootTypes[weaponId]);
+      const color = colorToCss(themeConfig.rarityColors[definition.rarity]);
+      const equipped = this.getEquippedWeaponSlot(weaponId);
+      const owned = this.weaponExistsForInspect(weaponId);
+      const durability = this.weaponController.getDurabilityState(weaponId);
+      return `
+        <button type="button" class="arsenal-weapon-row hq-list-row ${weaponId === selectedWeaponId ? "selected" : ""} ${owned ? "" : "prototype"}" data-action="inspect-select-${weaponId}" style="--rarity-color: ${color}">
+          <strong>${this.getWeaponDisplayName(weaponId)}</strong>
+          <span>${this.getWeaponRoleLabel(weaponId)}</span>
+          <small>${equipped ? `${this.capitalize(equipped)} equipped` : owned ? `${this.getStashQuantity(weaponLootTypes[weaponId])} in stash` : "Prototype reference"} | ${Math.round(durability.durability)}%</small>
+        </button>
+      `;
+    }).join("");
+  }
+
+  private renderWeaponSchematicFallback(weapon: RuntimeWeaponDefinition): string {
+    return `
+      <div class="weapon-silhouette weapon-schematic-fallback" style="--weapon-length: ${Math.max(72, weapon.mesh.depth * 86)}px">
+        <span></span><i></i><b></b>
+        <em>Diagnostic schematic</em>
+      </div>
+    `;
   }
 
   private renderInspectWeaponSelector(selectedWeaponId: WeaponId): string {
@@ -6395,11 +6766,13 @@ export class App {
     const action = button.dataset.action;
     if (action !== "debug-grant-resources" && action !== "debug-reset-save") {
       this.habitatPreview.dispose();
+      this.shipDashboardPreview.dispose();
+      this.weaponBenchPreview.dispose();
     }
     this.sfxAudio.playEvent(action === "start" || action === "multiplayer-start" || action?.startsWith("launch-raid-") || action?.startsWith("class-deploy-")
       ? "ui.deploy"
       : action === "settings" ? "ui.play" : "ui.nav");
-    this.menuContent.classList.remove("hq-command-content", "class-deploy-content", "ship-dashboard-content");
+    this.menuContent.classList.remove("hq-command-content", "class-deploy-content", "ship-dashboard-content", "arsenal-workbench-content");
 
     if (this.isPurchaseLikeAction(action) && !this.consumePurchaseActionClick()) {
       return;
@@ -6716,9 +7089,11 @@ export class App {
       this.showVendorMenu();
     } else if (action === "loadout-tab-gear") {
       this.loadoutTab = "gear";
+      this.loadoutStashCompatibilityOpen = false;
       this.showLoadoutMenu();
     } else if (action === "loadout-tab-cosmetics") {
       this.loadoutTab = "cosmetics";
+      this.loadoutStashCompatibilityOpen = false;
       this.loadingScreen.flash("Opening Class Cosmetics");
       this.showLoadoutMenu();
     } else if (action?.startsWith("cosmetic-category-")) {
@@ -6825,6 +7200,20 @@ export class App {
       this.refreshInspectWeaponMenuPreservingScroll();
     } else if (action?.startsWith("loadout-filter-")) {
       this.loadoutManager.setFilter(action.replace("loadout-filter-", "") as LoadoutFilter);
+      this.showLoadoutMenu();
+    } else if (action === "loadout-stash-compat-open") {
+      this.loadoutStashCompatibilityOpen = true;
+      this.showLoadoutMenu();
+    } else if (action === "loadout-stash-compat-close") {
+      this.loadoutStashCompatibilityOpen = false;
+      this.showLoadoutMenu();
+    } else if (action?.startsWith("loadout-slot-")) {
+      const slot = action.replace("loadout-slot-", "") as EquipmentSlot;
+      this.selectedLoadoutSlot = slot;
+      const type = this.getLoadoutSlotLootType(slot, this.loadout.snapshot, this.loadoutManager.snapshot);
+      if (type) {
+        this.loadoutManager.select(type);
+      }
       this.showLoadoutMenu();
     } else if (action?.startsWith("loadout-select-")) {
       this.loadoutManager.select(action.replace("loadout-select-", "") as LootType);
