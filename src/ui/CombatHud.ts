@@ -664,11 +664,9 @@ export class CombatHud {
     const compatibility = [
       primaryCompatible ? "Primary" : "",
       sidearmCompatible ? "Sidearm" : "",
-    ].filter(Boolean).join(" / ") || "No raid slot";
-    const primaryLabel = raid.equippedPrimaryWeaponId
-      ? `Swap Primary (${weaponDefinitions[raid.equippedPrimaryWeaponId].name})`
-      : "Equip Primary";
-    const sidearmLabel = `Swap Sidearm (${weaponDefinitions[raid.equippedSidearmWeaponId].name})`;
+    ].filter(Boolean).join(" / ") || "No compatible raid slot";
+    const primaryLabel = raid.equippedPrimaryWeaponId ? "Swap Primary" : "Equip Primary";
+    const sidearmLabel = raid.equippedSidearmWeaponId === "pistol" ? "Equip Sidearm" : "Swap Sidearm";
     const primaryMove = raid.equippedPrimaryWeaponId
       ? `<button type="button" data-loot-action="move-equipped-primary" data-slot-id="${item.id}">Move Primary to Pack</button>`
       : "";
@@ -680,11 +678,16 @@ export class CombatHud {
       <div class="inventory-weapon-actions">
         <small>WEAPON | ${compatibility}</small>
         <div>
-          ${primaryCompatible ? `<button type="button" data-loot-action="equip-primary" data-slot-id="${item.id}">${primaryLabel}</button>` : ""}
-          ${sidearmCompatible ? `<button type="button" data-loot-action="equip-sidearm" data-slot-id="${item.id}">${sidearmLabel}</button>` : ""}
+          ${primaryCompatible
+            ? `<button type="button" data-loot-action="equip-primary" data-slot-id="${item.id}">${primaryLabel}</button>`
+            : `<button type="button" disabled title="This weapon cannot fit that slot.">Primary unavailable</button>`}
+          ${sidearmCompatible
+            ? `<button type="button" data-loot-action="equip-sidearm" data-slot-id="${item.id}">${sidearmLabel}</button>`
+            : `<button type="button" disabled title="This weapon cannot fit that slot.">Sidearm unavailable</button>`}
           ${primaryMove}
           ${sidearmMove}
         </div>
+        ${!primaryCompatible && !sidearmCompatible ? `<span class="inventory-weapon-warning">This weapon cannot fit that slot.</span>` : ""}
       </div>
     `;
   }

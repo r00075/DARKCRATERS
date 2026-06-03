@@ -315,6 +315,22 @@ body.input-mode-ui #app {
   box-shadow: 0 0 10px rgba(65, 217, 255, 0.18);
 }
 
+.inventory-weapon-actions button:disabled {
+  color: rgba(148, 163, 184, 0.64);
+  border-color: rgba(148, 163, 184, 0.2);
+  background: rgba(15, 23, 42, 0.44);
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.inventory-weapon-warning {
+  margin-top: 5px;
+  color: #fca5a5;
+  font-size: 9px;
+  font-weight: 900;
+  white-space: normal;
+}
+
 .loot-container-panel {
   margin-top: 10px;
   border-top: 1px solid rgba(255, 255, 255, 0.16);
@@ -1812,7 +1828,9 @@ body.input-mode-ui #app {
 }
 
 .main-menu-content.hq-command-content {
+  box-sizing: border-box;
   width: 100vw;
+  max-width: 100vw;
   height: 100vh;
   max-height: none;
   place-items: stretch;
@@ -1823,10 +1841,12 @@ body.input-mode-ui #app {
 
 .hq-command-deck {
   position: relative;
-  width: 100vw;
+  box-sizing: border-box;
+  width: min(100%, 100vw);
+  max-width: 100vw;
   height: 100vh;
   max-height: none;
-  grid-template-columns: minmax(230px, 0.78fr) minmax(360px, 1.2fr) minmax(300px, 0.9fr);
+  grid-template-columns: minmax(220px, 0.76fr) minmax(340px, 1.18fr) minmax(280px, 0.88fr);
   grid-template-rows: 64px minmax(0, 1fr);
   grid-template-areas:
     "topbar topbar topbar"
@@ -1840,10 +1860,16 @@ body.input-mode-ui #app {
     radial-gradient(circle at 82% 45%, rgba(255, 176, 46, 0.1), transparent 30%);
 }
 
+.hq-command-deck > *,
+.hq-command-topbar > * {
+  min-width: 0;
+  box-sizing: border-box;
+}
+
 .hq-command-topbar {
   grid-area: topbar;
   display: grid;
-  grid-template-columns: minmax(170px, 220px) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(160px, 210px) minmax(0, 1fr) minmax(220px, 360px);
   align-items: center;
   gap: 14px;
   border-bottom: 1px solid rgba(65, 217, 255, 0.18);
@@ -1905,10 +1931,11 @@ body.input-mode-ui #app {
   justify-content: flex-end;
   gap: 7px;
   min-width: 0;
+  max-width: 100%;
   color: rgba(226, 232, 240, 0.82);
   font-size: 11px;
   font-weight: 850;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .hq-utility-cluster span {
@@ -1932,6 +1959,7 @@ body.input-mode-ui #app {
   display: grid;
   align-content: start;
   gap: 12px;
+  min-width: 0;
   min-height: 0;
   border: 1px solid rgba(65, 217, 255, 0.18);
   border-radius: 8px;
@@ -1955,6 +1983,7 @@ body.input-mode-ui #app {
   color: rgba(226, 232, 240, 0.82);
   font-size: 13px;
   line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .hq-context-panel div,
@@ -1980,6 +2009,8 @@ body.input-mode-ui #app {
   color: #e2e8f0;
   font-size: 12px;
   text-align: right;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .hq-runner-stage {

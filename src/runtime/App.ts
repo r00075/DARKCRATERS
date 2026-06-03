@@ -302,6 +302,7 @@ export class App {
   private heavyCargoBlockedFeedbackCooldown = 0;
   private heavyCargoInventorySuppressionSeconds = 0;
   private heavyCargoInventorySuppressionAction: "release" | "pickup" | "drop" | "secure" | null = null;
+  private lastHeavyCargoSuppressionLogAt = 0;
   private pendingHeavyCargoRequest: "none" | "release" | "pickup" | "drop" | "secure" = "none";
   private activeHeavyCoreNavMarkerCount = 0;
   private lastHeavyCargoRoomId: string | null = null;
@@ -1274,6 +1275,7 @@ export class App {
     if (blocked) {
       this.inventoryManager.setWarning(blocked);
       this.combatHud.showLootNotification(blocked);
+      console.info(`[LoadoutSwap] blocked reason=${this.getLoadoutSwapBlockCode(blocked)} slot=${equipSlot}`);
       return;
     }
 
@@ -1288,15 +1290,18 @@ export class App {
     const weaponId = weaponIdFromLootType(inventorySlot.type);
 
     if (!weaponId) {
-      this.inventoryManager.setWarning("Selected item is not a weapon");
-      this.combatHud.showLootNotification("Selected item is not a weapon");
+      const message = "This item is not a weapon.";
+      this.inventoryManager.setWarning(message);
+      this.combatHud.showLootNotification(message);
+      console.info(`[LoadoutSwap] blocked reason=not-weapon slot=${equipSlot} item=${inventorySlot.type}`);
       return;
     }
 
     if (!this.isWeaponCompatibleWithRaidSlot(weaponId, equipSlot)) {
-      const message = `${weaponDefinitions[weaponId].name} cannot fit the ${equipSlot} slot`;
+      const message = "This weapon cannot fit that slot.";
       this.inventoryManager.setWarning(message);
       this.combatHud.showLootNotification(message);
+      console.info(`[LoadoutSwap] blocked reason=incompatible-slot slot=${equipSlot} weapon=${weaponId}`);
       return;
     }
 
@@ -1314,9 +1319,10 @@ export class App {
     const displacedSlots = displacedLootType ? getItemDefinition(displacedLootType).slots : 0;
 
     if (this.raidInventory.usedSlots - selectedSlots + displacedSlots > this.raidInventory.capacity) {
-      const message = "EVA Pack full - free space before swapping weapons";
+      const message = "EVA Pack full — free space before swapping.";
       this.inventoryManager.setWarning(message);
       this.combatHud.showLootNotification(message);
+      console.info(`[LoadoutSwap] blocked reason=pack-full slot=${equipSlot} weapon=${weaponId} used=${this.raidInventory.usedSlots}/${this.raidInventory.capacity}`);
       return;
     }
 
@@ -1345,7 +1351,9 @@ export class App {
     this.refreshRaidWeaponControllerAfterSwap();
     this.clampRaidBagSelection();
     this.inventoryManager.clearWarning();
-    this.combatHud.showLootNotification(`${weaponDefinitions[weaponId].name} equipped to ${equipSlot}`);
+    const actionLabel = currentWeaponId ? "swap" : "equip";
+    this.combatHud.showLootNotification(`${weaponDefinitions[weaponId].name} ${actionLabel === "swap" ? "swapped into" : "equipped to"} ${equipSlot}`);
+    console.info(`[LoadoutSwap] action=${actionLabel} slot=${equipSlot} equipped=${weaponId} displaced=${currentWeaponId ?? "none"} packUsed=${this.raidInventory.usedSlots}/${this.raidInventory.capacity} reserve=${this.weaponController.snapshot.reserveAmmo}`);
     console.info(`[EvaPack] weapon swap slot=${equipSlot} equipped=${weaponId} displaced=${currentWeaponId ?? "none"} packUsed=${this.raidInventory.usedSlots}/${this.raidInventory.capacity}`);
   }
 
@@ -1355,6 +1363,7 @@ export class App {
     if (blocked) {
       this.inventoryManager.setWarning(blocked);
       this.combatHud.showLootNotification(blocked);
+      console.info(`[LoadoutSwap] blocked reason=${this.getLoadoutSwapBlockCode(blocked)} action=move-equipped slot=${equipSlot}`);
       return;
     }
 
@@ -1368,18 +1377,20 @@ export class App {
     }
 
     if (equipSlot === "sidearm" && currentWeaponId === "pistol") {
-      const message = "Starter sidearm cannot be moved to EVA Pack";
+      const message = "Starter sidearm cannot be moved into EVA Pack.";
       this.inventoryManager.setWarning(message);
       this.combatHud.showLootNotification(message);
+      console.info("[LoadoutSwap] blocked reason=starter-sidearm");
       return;
     }
 
     const lootType = weaponLootTypes[currentWeaponId];
 
     if (!this.raidInventory.canAdd(lootType, 1)) {
-      const message = "EVA Pack full - free space before moving equipped weapon";
+      const message = "EVA Pack full — free space before swapping.";
       this.inventoryManager.setWarning(message);
       this.combatHud.showLootNotification(message);
+      console.info(`[LoadoutSwap] blocked reason=pack-full action=move-equipped slot=${equipSlot} weapon=${currentWeaponId} used=${this.raidInventory.usedSlots}/${this.raidInventory.capacity}`);
       return;
     }
 
@@ -1401,6 +1412,7 @@ export class App {
     this.refreshRaidWeaponControllerAfterSwap();
     this.inventoryManager.clearWarning();
     this.combatHud.showLootNotification(`${weaponDefinitions[currentWeaponId].name} moved to EVA Pack`);
+    console.info(`[LoadoutSwap] action=move-equipped slot=${equipSlot} weapon=${currentWeaponId} packUsed=${this.raidInventory.usedSlots}/${this.raidInventory.capacity} reserve=${this.weaponController.snapshot.reserveAmmo}`);
     console.info(`[EvaPack] equipped weapon moved slot=${equipSlot} weapon=${currentWeaponId} packUsed=${this.raidInventory.usedSlots}/${this.raidInventory.capacity}`);
   }
 
@@ -1418,6 +1430,13 @@ export class App {
     }
 
     return null;
+  }
+
+  private getLoadoutSwapBlockCode(message: string): string {
+    if (message.includes("heavy cargo")) return "heavy-cargo";
+    if (message.includes("downed")) return "downed";
+    if (message.includes("active raid")) return "not-active-raid";
+    return "blocked";
   }
 
   private getEquippedRaidWeaponId(equipSlot: RaidWeaponEquipSlot): WeaponId | null {
@@ -1454,8 +1473,10 @@ export class App {
   }
 
   private refreshRaidWeaponControllerAfterSwap(): void {
+    const reserveAmmo = this.weaponController.snapshot.reserveAmmo;
     this.activeLoadout = this.loadout.snapshot;
-    this.weaponController.resetForRaid(this.activeLoadout, this.weaponController.snapshot.reserveAmmo);
+    // Phase 11.0A preserves reserve ammo across swaps; magazine continuity remains controller-level future work.
+    this.weaponController.resetForRaid(this.activeLoadout, reserveAmmo);
   }
 
   private getPendingHeavyCargoInputAction(): "release" | "pickup" | "drop" | "secure" | null {
@@ -1502,7 +1523,11 @@ export class App {
       return false;
     }
 
-    console.info(`[EvaPack] open blocked reason=heavy-cargo action=${this.heavyCargoInventorySuppressionAction} source=${source}`);
+    const now = performance.now();
+    if (now - this.lastHeavyCargoSuppressionLogAt > 450) {
+      this.lastHeavyCargoSuppressionLogAt = now;
+      console.info(`[EvaPack] open blocked reason=heavy-cargo action=${this.heavyCargoInventorySuppressionAction} source=${source}`);
+    }
     return true;
   }
 
