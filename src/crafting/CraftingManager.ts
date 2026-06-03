@@ -255,7 +255,7 @@ export const craftingRecipes: CraftingRecipe[] = [
       { type: "electronics", quantity: 1 },
     ],
     requiredWorkbenchLevel: 4,
-    description: "Portable maintenance kit for prized weapons. Requires weapon parts and suit electronics.",
+    description: "Arsenal service kit consumed to fully restore one damaged weapon.",
   },
   {
     id: "rare-upgrade-kit",
@@ -264,7 +264,7 @@ export const craftingRecipes: CraftingRecipe[] = [
     outputQuantity: 1,
     scrapCost: 35,
     requiredWorkbenchLevel: 5,
-    description: "Late-tree upgrade kit for serious prep.",
+    description: "Final-tier Arsenal calibration kit for serious weapon tuning.",
   },
   {
     id: "elite-backpack",

@@ -286,6 +286,22 @@ export class WeaponController {
     };
   }
 
+  public repairWeaponFullyWithKit(weaponId: WeaponId): {
+    repaired: boolean;
+    message: string;
+    scrapCost: number;
+  } {
+    const result = this.durabilitySystem.repairFullyWithKit(weaponId);
+    this.activeDurabilityState = this.durabilitySystem.getState(this.activeSlot.weaponId);
+    this.syncHandlingModifiers();
+    this.syncState(this.state.aimDirection);
+    return {
+      repaired: result.repaired,
+      message: result.message,
+      scrapCost: result.scrapCost,
+    };
+  }
+
   public getFullRepairCost(weaponId: WeaponId): number {
     return this.durabilitySystem.getFullRepairCost(weaponId);
   }

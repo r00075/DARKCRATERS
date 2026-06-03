@@ -203,6 +203,31 @@ export class WeaponDurabilitySystem {
     };
   }
 
+  public repairFullyWithKit(weaponId: WeaponId): RepairResult {
+    const current = this.durability[weaponId];
+
+    if (current >= durabilityConfig.maxDurability) {
+      return {
+        repaired: false,
+        message: `${this.formatWeapon(weaponId)} is already fully repaired`,
+        durability: current,
+        scrapCost: 0,
+      };
+    }
+
+    this.durability[weaponId] = durabilityConfig.maxDurability;
+    this.runtime[weaponId].jammed = false;
+    this.runtime[weaponId].clearTimer = 0;
+    this.save();
+
+    return {
+      repaired: true,
+      message: `${this.formatWeapon(weaponId)} repaired to 100% with Weapon Repair Kit`,
+      durability: this.durability[weaponId],
+      scrapCost: 0,
+    };
+  }
+
   public getState(weaponId: WeaponId): WeaponDurabilityState {
     const durability = this.durability[weaponId];
     const wear = 1 - durability / durabilityConfig.maxDurability;
