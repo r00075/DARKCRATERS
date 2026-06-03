@@ -637,8 +637,9 @@ export class CombatHud {
     const selected = item.id === raid.selectedInventorySlotId;
     const weaponActions = selected ? this.formatInventoryWeaponActions(item, raid) : "";
     const useProfile = getItemUseProfile(item.type);
+    const useLabel = item.type === "essence-flare" ? "Emit Reveal Pulse" : "Use";
     const useAction = useProfile.usableInRaid
-      ? `<button type="button" data-loot-action="use" data-slot-id="${item.id}">Use</button>`
+      ? `<button type="button" data-loot-action="use" data-slot-id="${item.id}">${useLabel}</button>`
       : "";
     return `
       <div class="inventory-slot filled${selected ? " selected" : ""}" data-loot-action="select" data-slot-id="${item.id}" style="--rarity-color: ${color}">

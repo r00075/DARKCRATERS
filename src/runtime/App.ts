@@ -56,7 +56,7 @@ import type { DynamicEventState } from "../raid/DynamicEventDirector";
 import { DynamicEventDirector } from "../raid/DynamicEventDirector";
 import type { ExtractionState } from "../raid/ExtractionController";
 import { ExtractionController } from "../raid/ExtractionController";
-import { getItemDefinition, itemDefinitions, type LootType } from "../raid/ItemDefinitions";
+import { getItemDefinition, getItemUseProfile, itemDefinitions, type LootType } from "../raid/ItemDefinitions";
 import { Loadout, loadoutConfig, type RaidLoadout } from "../raid/Loadout";
 import { InventoryManager } from "../raid/InventoryManager";
 import { HeavyCargoManager, heliumDrillCoreHeavyCargoId, type HeavyCargoViewState } from "../raid/HeavyCargoManager";
@@ -69,6 +69,7 @@ import {
   type LoadoutManagerState,
 } from "../raid/LoadoutManager";
 import { LootDirector } from "../raid/LootDirector";
+import { LumenRevealSystem, type LumenRevealResult } from "../raid/LumenRevealSystem";
 import type { ObjectiveState } from "../raid/ObjectiveDirector";
 import { ObjectiveDirector } from "../raid/ObjectiveDirector";
 import { PersistentStash } from "../raid/PersistentStash";
@@ -261,6 +262,7 @@ export class App {
   private readonly extractionController = new ExtractionController();
   private readonly raidTimer = new RaidTimer();
   private readonly lootDirector: LootDirector;
+  private readonly lumenRevealSystem: LumenRevealSystem;
   private readonly heavyCargoManager: HeavyCargoManager;
   private readonly dynamicEventDirector: DynamicEventDirector;
   private readonly objectiveDirector: ObjectiveDirector;
@@ -461,6 +463,7 @@ export class App {
     );
     this.targetDummy = new TargetDummy(this.scene, new Vector3(-92, 0, -78));
     this.lootDirector = new LootDirector(this.scene);
+    this.lumenRevealSystem = new LumenRevealSystem(this.scene);
     this.heavyCargoManager = new HeavyCargoManager(
       this.scene,
       (poiDefinitions.find((poi) => poi.id === "core-pit")?.center.clone() ?? Vector3.Zero()).add(new Vector3(-5, 0.35, 2)),
@@ -764,6 +767,7 @@ export class App {
     this.poiObjectiveManager.dispose();
     this.dynamicEventDirector.dispose();
     this.lootDirector.dispose();
+    this.lumenRevealSystem.dispose();
     this.weaponController.dispose();
     this.multiplayerClient.dispose();
     this.input.dispose();
@@ -1613,6 +1617,13 @@ export class App {
       return;
     }
 
+    const useProfile = getItemUseProfile(slot.type);
+    if (!useProfile.usableInRaid) {
+      this.logItemUse(slot.type, false, "not-raid-usable");
+      this.combatHud.showLootNotification(useProfile.blockedReason ?? "This item cannot be used directly.");
+      return;
+    }
+
     if (slot.type === "anti-toxin") {
       if (!this.playerStatus.snapshot.lunarInfection && this.playerStatus.snapshot.mentalStability >= 100) {
         this.logItemUse(slot.type, false, "no-toxin-effect");
@@ -1628,10 +1639,19 @@ export class App {
     }
 
     if (slot.type === "essence-flare") {
+      if (!this.lumenRevealSystem.canActivate()) {
+        this.logItemUse(slot.type, false, "reveal-guard");
+        this.combatHud.showLootNotification("Reveal pulse cycling. Try again.");
+        return;
+      }
       if (this.raidInventory.consume(slot.type, 1)) {
-        const targets = this.activateLumenRevealPulse();
-        this.logItemUse(slot.type, true, `reveal-targets-${targets}`);
+        console.info("[ItemUse] activate item=essence-flare action=reveal-pulse");
+        const result = this.activateLumenRevealPulse();
+        this.logItemUse(slot.type, true, `reveal-targets-${result.targets.length}`);
         this.combatHud.showLootNotification("Lumen reveal pulse emitted.");
+        this.combatHud.showLootNotification(result.targets.length > 0
+          ? `Lumen signatures revealed: ${result.targets.length}`
+          : "No Lumen signatures detected.");
       }
       return;
     }
@@ -1706,16 +1726,16 @@ export class App {
     this.combatHud.showLootNotification("This item cannot be used directly.");
   }
 
-  private activateLumenRevealPulse(): number {
-    const radius = 26;
+  private activateLumenRevealPulse(): LumenRevealResult {
     const playerPosition = this.player.state.position;
-    const targets = this.enemyDebugStates.filter((enemy) => enemy.health > 0 && Vector3.Distance(enemy.position, playerPosition) <= radius).length;
-    console.info(`[RevealTool] activated item=essence-flare radius=${radius} targets=${targets}`);
     this.noiseSystem.emit("loot", playerPosition, this.environmentState.gameplay);
-    return targets;
+    return this.lumenRevealSystem.activateEssenceFlare(playerPosition, this.enemyDebugStates);
   }
 
   private logItemUse(item: LootType, ok: boolean, reason: string): void {
+    if (!ok) {
+      console.info(`[ItemUse] blocked item=${item} reason=${reason}`);
+    }
     console.info(`[ItemUse] item=${item} action=use ok=${ok} reason=${reason}`);
   }
 
@@ -1749,6 +1769,7 @@ export class App {
     const multiplayer = this.multiplayerClient.snapshot;
     const shipAudioDebug = this.shipAudio.debugState;
     const mouse = this.input.mouseDebug;
+    const revealDebug = this.lumenRevealSystem.debugState;
     const nearestPoi = this.getNearestPoiDebugLabel();
     const activeContractPoi = this.contractManager.snapshot.active?.definition.targetPoi ?? "none";
     const markerCount = this.getNavigationMarkers().length;
@@ -1777,6 +1798,7 @@ export class App {
       <span>Crater Run: timer ${Math.ceil(this.raidTimerState.timeRemaining)}s/${this.selectedRaidDefinition.lengthSeconds}s | extract ${this.raidTimerState.extractionUnlocked ? "active" : "locked"} | Risk ${this.getDistanceRiskTier()}</span>
       <span>EVA Pack: ${this.raidInventory.usedSlots} / ${this.raidInventory.capacity}</span>
       <span>Loot Containers: ${this.lootDirector.containerCount} | Active enemies: ${this.enemyDebugStates.length}</span>
+      <span>Reveal Tool: last ${revealDebug.lastItem ?? "none"} ${revealDebug.lastResult} | radius ${revealDebug.lastRadius}m | targets ${revealDebug.lastTargetCount} | active markers ${revealDebug.activeMarkerCount} | revealed ${revealDebug.activeRevealedCount}</span>
       <span>PvE Authority: ${this.multiplayerMode ? (multiplayer.status === "connected" ? "SERVER" : "DISCONNECTED") : "LOCAL"} | Server enemies ${multiplayer.authoritativeEnemyCount} | active ${multiplayer.activeEnemyCount} | dormant ${multiplayer.dormantEnemyCount} | rendered ${multiplayer.renderedNetworkEnemyCount}</span>
       <span>Enemy Net: tick ${multiplayer.enemyServerTickRate}/s | snapshot ${multiplayer.enemySnapshotRate}/s #${multiplayer.enemySnapshotId} | last ${multiplayer.lastEnemyEvent} | affected ${multiplayer.lastEnemyAffectedId ?? "none"} | corrections ${multiplayer.enemyCorrectionCount}</span>
       <span>Network Lifecycle: connected ${multiplayer.status === "connected" ? "true" : "false"} | room ${multiplayer.roomId ?? "none"} | last ${multiplayer.lastRoomLifecycleEvent} | reset ${multiplayer.lastNetworkStateResetReason} | enemy clear ${multiplayer.lastNetworkEnemyClearReason}</span>
@@ -3926,6 +3948,7 @@ export class App {
     this.tacticalToolState = this.tacticalToolManager.state;
     this.visibilityToolState = this.visibilityToolManager.state;
     this.noiseSystem.reset();
+    this.lumenRevealSystem.reset();
     this.noiseState = {
       recentType: null,
       recentRadius: 0,
@@ -5329,6 +5352,9 @@ export class App {
     const manager = this.loadoutManager.snapshot;
     const selectedSlotType = this.getLoadoutSlotLootType(this.selectedLoadoutSlot, loadout, manager);
     const selectedType = manager.selectedType ?? selectedSlotType;
+    const selectedHeaderLabel = manager.selectedType && manager.selectedType !== selectedSlotType
+      ? "Compatibility Item"
+      : equipmentSlotLabels[this.selectedLoadoutSlot];
     const selectedDetails = this.renderLoadoutItemDetails(selectedType, this.selectedLoadoutSlot);
     const gearSlots = this.renderEquippedGearSlots(loadout);
     const raidBag = this.renderRaidBag();
@@ -5375,7 +5401,7 @@ export class App {
           <div class="hq-panel-header compact">
             <div>
               <span>Selected Slot</span>
-              <h3>${equipmentSlotLabels[this.selectedLoadoutSlot]}</h3>
+              <h3>${selectedHeaderLabel}</h3>
             </div>
           </div>
           ${selectedDetails}
@@ -5402,7 +5428,7 @@ export class App {
           <div>
             <span>Readiness</span>
             <strong>${warnings.length > 0 ? "Review Kit" : "Deployment Ready"}</strong>
-            <p>${warnings.length > 0 ? warnings.join(" | ") : "Primary kit is staged. Future Phase 11.0 will support in-raid EVA Pack weapon swaps."}</p>
+            <p>${warnings.length > 0 ? warnings.join(" | ") : "Primary kit is staged. EVA Pack field utilities and supported risk items are ready for deployment."}</p>
           </div>
           <footer class="hq-action-bar">
             <button type="button" data-action="arsenal">Arsenal</button>
@@ -5673,7 +5699,7 @@ export class App {
           <div>
             <span>Habitat Stash Compatibility</span>
             <h3>${this.formatLoadoutFilter(filter)}</h3>
-            <p>Review stash items compatible with this loadout. Equip/move actions remain reserved for Phase 11.0.</p>
+            <p>Pack field utilities into the EVA Pack, equip supported gear, or inspect weapons before deployment.</p>
           </div>
           <button type="button" class="loadout-compat-close" data-action="loadout-stash-compat-close">Close</button>
         </header>
@@ -5689,11 +5715,7 @@ export class App {
                   <div><span>Available</span><strong>${selectedAvailability}</strong></div>
                   <div><span>Category</span><strong>${selectedDefinition.category}</strong></div>
                   <div><span>Use</span><strong>${selectedDefinition.use}</strong></div>
-                  <footer>
-                    ${selectedWeaponId ? `<button type="button" data-action="loadout-inspect-selected">Inspect</button>` : `<button type="button" disabled>Inspect - weapons only</button>`}
-                    <button type="button" data-action="stash">Open Stash</button>
-                    <button type="button" disabled>Phase 11 Equip/Move Pending</button>
-                  </footer>
+                  <footer>${selectedType ? this.renderLoadoutCompatibilityActions(selectedType, selectedAvailability, selectedWeaponId) : ""}</footer>
                 </article>`
               : `<article class="loadout-details-card hq-muted-card">
                   <strong>No Compatible Item Selected</strong>
@@ -5701,13 +5723,221 @@ export class App {
                   <p>Select an item from the stash list to review compatibility, inspect safe weapon entries, or open the full Stash screen.</p>
                   <footer>
                     <button type="button" data-action="stash">Open Stash</button>
-                    <button type="button" disabled>Phase 11 Equip/Move Pending</button>
+                    <button type="button" disabled>No compatible slot</button>
                   </footer>
                 </article>`}
           </aside>
         </div>
       </section>
     `;
+  }
+
+  private renderLoadoutCompatibilityActions(type: LootType, availability: number, weaponId: WeaponId | null): string {
+    const equippedSlot = this.getEquippedSlotForLootType(type);
+    const packedQuantity = this.loadoutManager.snapshot.raidBag.find((item) => item.type === type)?.quantity ?? 0;
+    const canInspect = weaponId !== null;
+    const equipBlockReason = this.getCompatibilityEquipBlockReason(type, equippedSlot, packedQuantity, availability);
+    const canEquip = this.canEquipFromCompatibility(type) && equipBlockReason === null;
+    const packBlockReason = this.getCompatibilityPackBlockReason(type, availability);
+    const equipLabel = this.getCompatibilityEquipLabel(type);
+    const packButton = packBlockReason === null
+      ? `<button type="button" data-action="loadout-compat-pack-selected">Pack to EVA</button>`
+      : `<button type="button" disabled>${packBlockReason}</button>`;
+    const equipButton = canEquip
+      ? `<button type="button" data-action="loadout-compat-equip-selected">${equipLabel}</button>`
+      : `<button type="button" disabled>${equipBlockReason ?? "No compatible slot"}</button>`;
+    const inspectButton = canInspect
+      ? `<button type="button" data-action="loadout-inspect-selected">Inspect in Arsenal</button>`
+      : `<button type="button" disabled>Inspect - weapons only</button>`;
+
+    return `
+      ${inspectButton}
+      ${equipButton}
+      ${packButton}
+      <button type="button" data-action="stash">Open Stash</button>
+    `;
+  }
+
+  private canEquipFromCompatibility(type: LootType): boolean {
+    if (weaponIdFromLootType(type) || attachmentIdFromLootType(type)) {
+      return true;
+    }
+    return type === "armor-light" ||
+      type === "backpack-upgrade" ||
+      type === "elite-backpack" ||
+      type === "tool-flashlight" ||
+      type === "medkit" ||
+      type === "advanced-medkit" ||
+      type === "bandage" ||
+      type === "armor-plate" ||
+      type === "improved-armor-plate";
+  }
+
+  private getCompatibilityEquipLabel(type: LootType): string {
+    if (weaponIdFromLootType(type)) return "Equip to Loadout";
+    if (attachmentIdFromLootType(type)) return "Equip Attachment";
+    if (type === "armor-light") return "Equip Armor";
+    if (type === "backpack-upgrade" || type === "elite-backpack") return "Equip Backpack";
+    if (type === "tool-flashlight") return "Equip Tactical Tool";
+    if (type === "medkit" || type === "advanced-medkit" || type === "bandage" || type === "armor-plate" || type === "improved-armor-plate") {
+      return "Equip to Consumable Slot";
+    }
+    return "No compatible slot";
+  }
+
+  private getCompatibilityEquipBlockReason(type: LootType, equippedSlot: EquipmentSlot | null, packedQuantity: number, availability = 1): string | null {
+    if (equippedSlot) return "Already equipped";
+    if (packedQuantity > 0) return "Already packed";
+    if (availability <= 0 && type !== "weapon-pistol") return "None available";
+    if (getItemDefinition(type).category === "material") return "Material only";
+    if (!this.canEquipFromCompatibility(type)) return "No compatible slot";
+    return null;
+  }
+
+  private getCompatibilityPackBlockReason(type: LootType, availability: number): string | null {
+    const definition = getItemDefinition(type);
+    const profile = getItemUseProfile(type);
+
+    if (availability <= 0) {
+      const packedQuantity = this.loadoutManager.snapshot.raidBag.find((item) => item.type === type)?.quantity ?? 0;
+      return packedQuantity > 0 ? "Already packed" : "Already equipped";
+    }
+
+    if (weaponIdFromLootType(type) || attachmentIdFromLootType(type)) {
+      return "Use loadout slot";
+    }
+
+    if (!profile.usableInRaid) {
+      if (type === "scanner-battery") return "Utility material only";
+      return definition.category === "material" ? "Material only" : "No compatible slot";
+    }
+
+    const used = this.loadoutManager.raidBagUsedSlots;
+    const needs = definition.stackable && this.loadoutManager.snapshot.raidBag.some((item) => item.type === type)
+      ? 0
+      : definition.slots;
+    if (used + needs > this.loadoutManager.raidBagCapacity) {
+      return "EVA Pack full";
+    }
+
+    return null;
+  }
+
+  private handleLoadoutCompatibilityEquip(): void {
+    const selectedType = this.loadoutManager.snapshot.selectedType;
+    if (!selectedType) {
+      console.info("[LoadoutCompatibility] blocked item=none reason=no-selection");
+      this.combatHud.showLootNotification("Select an item first");
+      this.showLoadoutMenu();
+      return;
+    }
+
+    const reason = this.getCompatibilityEquipBlockReason(
+      selectedType,
+      this.getEquippedSlotForLootType(selectedType),
+      this.loadoutManager.snapshot.raidBag.find((item) => item.type === selectedType)?.quantity ?? 0,
+      this.loadoutManager.availableQuantity(this.persistentStash.items, selectedType),
+    );
+    if (reason !== null) {
+      const message = reason ?? "No compatible slot";
+      console.info(`[LoadoutCompatibility] action=blocked item=${selectedType} reason=${this.toLogToken(message)}`);
+      this.combatHud.showLootNotification(message);
+      this.showLoadoutMenu();
+      return;
+    }
+
+    const message = this.loadoutManager.equipSelected(this.loadout, this.persistentStash.items);
+    this.loadoutManager.applyToLoadout(this.loadout, this.persistentStash.items);
+    const destination = this.getCompatibilityEquipDestination(selectedType);
+    console.info(`[LoadoutCompatibility] action=equip item=${selectedType} reason=accepted`);
+    console.info(`[LoadoutCompatibility] moved item=${selectedType} from=stash to=${destination} quantity=1`);
+    this.combatHud.showLootNotification(message);
+    this.showLoadoutMenu();
+  }
+
+  private handleLoadoutCompatibilityPack(): void {
+    const selectedType = this.loadoutManager.snapshot.selectedType;
+    if (!selectedType) {
+      console.info("[LoadoutCompatibility] blocked item=none reason=no-selection");
+      this.combatHud.showLootNotification("Select an item first");
+      this.showLoadoutMenu();
+      return;
+    }
+
+    const availability = this.loadoutManager.availableQuantity(this.persistentStash.items, selectedType);
+    const blockReason = this.getCompatibilityPackBlockReason(selectedType, availability);
+    if (blockReason) {
+      console.info(`[LoadoutCompatibility] blocked item=${selectedType} reason=${this.toLogToken(blockReason)}`);
+      this.combatHud.showLootNotification(blockReason);
+      this.showLoadoutMenu();
+      return;
+    }
+
+    const message = this.loadoutManager.moveToRaidBag(selectedType, this.persistentStash.items);
+    this.loadoutManager.applyToLoadout(this.loadout, this.persistentStash.items);
+    console.info(`[LoadoutCompatibility] action=pack item=${selectedType} result=accepted to=eva`);
+    console.info(`[LoadoutCompatibility] moved item=${selectedType} from=stash to=eva quantity=1`);
+    this.combatHud.showLootNotification(message);
+    this.showLoadoutMenu();
+  }
+
+  private handleStashMoveToLoadout(type: LootType): void {
+    this.loadoutManager.select(type);
+    console.info(`[LoadoutCompatibility] selected item=${type} category=${getItemDefinition(type).category} role=${getItemUseProfile(type).roles.join("/")}`);
+    const equippedSlot = this.getEquippedSlotForLootType(type);
+    const packedQuantity = this.loadoutManager.snapshot.raidBag.find((item) => item.type === type)?.quantity ?? 0;
+    const availability = this.loadoutManager.availableQuantity(this.persistentStash.items, type);
+    const equipBlock = this.getCompatibilityEquipBlockReason(type, equippedSlot, packedQuantity, availability);
+
+    if (equipBlock === null) {
+      const message = this.loadoutManager.equipType(type, this.loadout, this.persistentStash.items);
+      this.loadoutManager.applyToLoadout(this.loadout, this.persistentStash.items);
+      console.info(`[LoadoutCompatibility] action=equip item=${type} reason=accepted`);
+      console.info(`[LoadoutCompatibility] moved item=${type} from=stash to=${this.getCompatibilityEquipDestination(type)} quantity=1`);
+      this.combatHud.showLootNotification(message);
+      return;
+    }
+
+    const packBlock = this.getCompatibilityPackBlockReason(type, availability);
+    if (packBlock === null) {
+      const message = this.loadoutManager.moveToRaidBag(type, this.persistentStash.items);
+      this.loadoutManager.applyToLoadout(this.loadout, this.persistentStash.items);
+      console.info(`[LoadoutCompatibility] action=pack item=${type} result=accepted to=eva`);
+      console.info(`[LoadoutCompatibility] moved item=${type} from=stash to=eva quantity=1`);
+      this.combatHud.showLootNotification(message);
+      return;
+    }
+
+    console.info(`[LoadoutCompatibility] blocked item=${type} reason=${this.toLogToken(packBlock)}`);
+    this.combatHud.showLootNotification(packBlock);
+  }
+
+  private getCompatibilityEquipDestination(type: LootType): string {
+    const weaponId = weaponIdFromLootType(type);
+    if (weaponId) {
+      if (weaponId === "pistol" || weaponId === "burst-pistol" || weaponId === "revolver" || weaponId === "compact-smg") {
+        return "sidearm";
+      }
+      if (weaponId === "knife") {
+        return "melee";
+      }
+      return "primary";
+    }
+    const attachmentId = attachmentIdFromLootType(type);
+    if (attachmentId) {
+      return `attachment-${attachmentDefinitions[attachmentId].slot}`;
+    }
+    if (type === "armor-light") return "armor";
+    if (type === "backpack-upgrade" || type === "elite-backpack") return "backpack";
+    if (type === "tool-flashlight") return "tactical";
+    if (type === "medkit" || type === "advanced-medkit" || type === "bandage" || type === "armor-plate" || type === "improved-armor-plate") {
+      return this.loadoutManager.snapshot.consumable1Type === null ? "consumable1" : "consumable2";
+    }
+    return "unknown";
+  }
+
+  private toLogToken(label: string): string {
+    return label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "unknown";
   }
 
   private renderRaidBag(): string {
@@ -5735,12 +5965,12 @@ export class App {
         <article class="loadout-details-card hq-muted-card">
           <strong>${equipmentSlotLabels[slot]}</strong>
           <span>EMPTY | PROTOTYPE READY</span>
-          <p>No item is currently assigned to this slot. This slot is preserved for future recovered gear and Phase 11.0 EVA Pack weapon-swap support.</p>
+          <p>No item is currently assigned to this slot. Use the Compatibility Browser to equip supported stash gear or pack field utilities into the EVA Pack.</p>
           <div><span>Status</span><strong>${slot === "primary" ? "No primary equipped" : "Empty"}</strong></div>
           <div><span>Field Movement</span><strong>HQ-only changes safe</strong></div>
           <footer>
             <button type="button" data-action="arsenal">Open Arsenal</button>
-            <button type="button" disabled>Move to EVA Pack - Phase 11.0</button>
+            <button type="button" data-action="loadout-stash-compat-open">Open Compatibility Browser</button>
             <button type="button" disabled>No compatible item selected</button>
           </footer>
         </article>
@@ -5766,6 +5996,20 @@ export class App {
     const unequipAction = equippedSlot
       ? `<button type="button" data-action="loadout-unequip-${equippedSlot}">Unequip</button>`
       : "";
+    const availability = this.loadoutManager.availableQuantity(this.persistentStash.items, type);
+    const equipBlockReason = this.getCompatibilityEquipBlockReason(
+      type,
+      equippedSlot,
+      this.loadoutManager.snapshot.raidBag.find((item) => item.type === type)?.quantity ?? 0,
+      availability,
+    );
+    const equipAction = this.canEquipFromCompatibility(type) && equipBlockReason === null
+      ? `<button type="button" data-action="loadout-equip-selected">Equip</button>`
+      : `<button type="button" disabled>${equipBlockReason ?? "No compatible slot"}</button>`;
+    const packBlockReason = this.getCompatibilityPackBlockReason(type, availability);
+    const packAction = packBlockReason === null
+      ? `<button type="button" data-action="loadout-bag-selected">Pack to EVA</button>`
+      : `<button type="button" disabled>${packBlockReason}</button>`;
 
     return `
       <article class="loadout-details-card" style="--rarity-color: ${color}">
@@ -5780,10 +6024,10 @@ export class App {
         <em>Items brought into a Crater Run are lost on death unless they are free starter gear.</em>
         <footer>
           ${weaponInspectAction}
-          <button type="button" data-action="loadout-equip-selected">Equip</button>
+          ${equipAction}
           ${unequipAction}
           ${repairAction}
-          <button type="button" disabled>Move to EVA Pack - Phase 11.0</button>
+          ${packAction}
           <button type="button" disabled>Compare - open Arsenal</button>
         </footer>
       </article>
@@ -7342,8 +7586,7 @@ export class App {
       }
     } else if (action === "stash-loadout-selected") {
       if (this.selectedStashType) {
-        this.loadoutManager.select(this.selectedStashType);
-        this.combatHud.showLootNotification(this.loadoutManager.equipSelected(this.loadout, this.persistentStash.items));
+        this.handleStashMoveToLoadout(this.selectedStashType);
       }
       this.showStashMenu();
     } else if (action === "stash-sell-selected") {
@@ -7564,25 +7807,53 @@ export class App {
       }
       this.showLoadoutMenu();
     } else if (action?.startsWith("loadout-select-")) {
-      this.loadoutManager.select(action.replace("loadout-select-", "") as LootType);
+      const type = action.replace("loadout-select-", "") as LootType;
+      this.loadoutManager.select(type);
+      console.info(`[LoadoutCompatibility] selected item=${type} category=${getItemDefinition(type).category} role=${getItemUseProfile(type).roles.join("/")}`);
       this.showLoadoutMenu();
     } else if (action === "loadout-equip-selected") {
       this.combatHud.showLootNotification(this.loadoutManager.equipSelected(this.loadout, this.persistentStash.items));
       this.showLoadoutMenu();
+    } else if (action === "loadout-compat-equip-selected") {
+      this.handleLoadoutCompatibilityEquip();
     } else if (action === "loadout-inspect-selected") {
       const selectedType = this.loadoutManager.snapshot.selectedType;
       const weaponId = selectedType ? weaponIdFromLootType(selectedType) : null;
       if (weaponId && this.weaponExistsForInspect(weaponId)) {
+        console.info(`[LoadoutCompatibility] action=inspect item=${selectedType} reason=accepted`);
         this.inspectedWeaponId = weaponId;
         this.showInspectWeaponMenu("inspect");
       } else {
+        if (selectedType) {
+          console.info(`[LoadoutCompatibility] action=blocked item=${selectedType} reason=inspect-weapons-only`);
+        }
         this.combatHud.showLootNotification("Select an equipped weapon to inspect");
         this.showLoadoutMenu();
       }
     } else if (action === "loadout-bag-selected") {
+      const selectedType = this.loadoutManager.snapshot.selectedType;
+      if (!selectedType) {
+        this.combatHud.showLootNotification("Select an item first");
+        this.showLoadoutMenu();
+        return;
+      }
+      const packBlock = this.getCompatibilityPackBlockReason(
+        selectedType,
+        this.loadoutManager.availableQuantity(this.persistentStash.items, selectedType),
+      );
+      if (packBlock) {
+        console.info(`[LoadoutCompatibility] blocked item=${selectedType} reason=${this.toLogToken(packBlock)}`);
+        this.combatHud.showLootNotification(packBlock);
+        this.showLoadoutMenu();
+        return;
+      }
       this.combatHud.showLootNotification(this.loadoutManager.moveSelectedToRaidBag(this.persistentStash.items));
       this.loadoutManager.applyToLoadout(this.loadout, this.persistentStash.items);
+      console.info(`[LoadoutCompatibility] action=pack item=${selectedType} result=accepted to=eva`);
+      console.info(`[LoadoutCompatibility] moved item=${selectedType} from=stash to=eva quantity=1`);
       this.showLoadoutMenu();
+    } else if (action === "loadout-compat-pack-selected") {
+      this.handleLoadoutCompatibilityPack();
     } else if (action === "loadout-discard-selected") {
       const selectedType = this.loadoutManager.snapshot.selectedType;
       if (selectedType && window.confirm(`Discard one ${getItemDefinition(selectedType).label}?`)) {

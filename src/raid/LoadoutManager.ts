@@ -6,7 +6,7 @@ import {
   type AttachmentSlot,
 } from "../weapons/AttachmentDefinitions";
 import { weaponIdFromLootType, type WeaponId } from "../weapons/WeaponDefinitions";
-import { getItemDefinition, itemDefinitions, type LootType } from "./ItemDefinitions";
+import { getItemDefinition, getItemUseProfile, itemDefinitions, type LootType } from "./ItemDefinitions";
 import { loadoutConfig, meleeOptions, sidearmOptions, type Loadout } from "./Loadout";
 import type { LootStack } from "./RaidInventory";
 
@@ -62,7 +62,21 @@ const defaultState: LoadoutManagerState = {
 };
 
 const consumableTypes = new Set<LootType>(["medkit", "advanced-medkit", "bandage", "armor-plate", "improved-armor-plate"]);
-const materialTypes = new Set<LootType>(["credits", "scrap", "cloth", "ammo", "battery", "electronics", "weapon-parts"]);
+const materialTypes = new Set<LootType>([
+  "credits",
+  "scrap",
+  "cloth",
+  "ammo",
+  "battery",
+  "scanner-battery",
+  "electronics",
+  "weapon-parts",
+  "alien-chitin",
+  "lumen-essence",
+  "acid-gland",
+  "crater-tissue",
+  "infected-sample",
+]);
 const isLootType = (type: unknown): type is LootType =>
   typeof type === "string" && type in itemDefinitions;
 const isLoadoutFilter = (filter: unknown): filter is LoadoutFilter =>
@@ -231,6 +245,11 @@ export class LoadoutManager {
 
   public moveToRaidBag(type: LootType, stashItems: readonly LootStack[]): string {
     const definition = getItemDefinition(type);
+    const profile = getItemUseProfile(type);
+
+    if (!profile.usableInRaid) {
+      return definition.category === "material" ? "Material only" : "No compatible slot";
+    }
 
     if (this.availableQuantity(stashItems, type) <= 0) {
       return "None available";
@@ -462,6 +481,7 @@ export class LoadoutManager {
           .filter((item) => item !== null &&
             typeof item === "object" &&
             isLootType((item as Partial<LootStack>).type) &&
+            getItemUseProfile((item as Partial<LootStack>).type as LootType).usableInRaid &&
             Number.isFinite((item as Partial<LootStack>).quantity) &&
             ((item as Partial<LootStack>).quantity ?? 0) > 0)
           .map((item) => ({
