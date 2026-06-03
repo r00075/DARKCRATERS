@@ -1648,7 +1648,7 @@ export class App {
         console.info("[ItemUse] activate item=essence-flare action=reveal-pulse");
         const result = this.activateLumenRevealPulse();
         this.logItemUse(slot.type, true, `reveal-targets-${result.targets.length}`);
-        this.combatHud.showLootNotification("Lumen reveal pulse emitted.");
+        this.combatHud.showLootNotification("Essence Flare released.");
         this.combatHud.showLootNotification(result.targets.length > 0
           ? `Lumen signatures revealed: ${result.targets.length}`
           : "No Lumen signatures detected.");
@@ -1728,8 +1728,14 @@ export class App {
 
   private activateLumenRevealPulse(): LumenRevealResult {
     const playerPosition = this.player.state.position;
+    const selectedClassId = this.classManager.snapshot.selectedClassId;
+    const surveyorAffinity = selectedClassId === "surveyor";
     this.noiseSystem.emit("loot", playerPosition, this.environmentState.gameplay);
-    return this.lumenRevealSystem.activateEssenceFlare(playerPosition, this.enemyDebugStates);
+    return this.lumenRevealSystem.activateEssenceFlare(playerPosition, this.enemyDebugStates, {
+      classId: selectedClassId,
+      radius: surveyorAffinity ? 36 : 30,
+      durationSeconds: surveyorAffinity ? 12 : 10,
+    });
   }
 
   private logItemUse(item: LootType, ok: boolean, reason: string): void {
@@ -1798,7 +1804,7 @@ export class App {
       <span>Crater Run: timer ${Math.ceil(this.raidTimerState.timeRemaining)}s/${this.selectedRaidDefinition.lengthSeconds}s | extract ${this.raidTimerState.extractionUnlocked ? "active" : "locked"} | Risk ${this.getDistanceRiskTier()}</span>
       <span>EVA Pack: ${this.raidInventory.usedSlots} / ${this.raidInventory.capacity}</span>
       <span>Loot Containers: ${this.lootDirector.containerCount} | Active enemies: ${this.enemyDebugStates.length}</span>
-      <span>Reveal Tool: last ${revealDebug.lastItem ?? "none"} ${revealDebug.lastResult} | radius ${revealDebug.lastRadius}m | targets ${revealDebug.lastTargetCount} | active markers ${revealDebug.activeMarkerCount} | revealed ${revealDebug.activeRevealedCount}</span>
+      <span>Reveal Tool: last ${revealDebug.lastItem ?? "none"} ${revealDebug.lastResult} | class ${revealDebug.lastClassId} | radius ${revealDebug.lastRadius}m/${revealDebug.lastDurationSeconds}s | targets ${revealDebug.lastTargetCount} raw ${revealDebug.lastRawTargetCount} grouped ${revealDebug.lastGroupedTargetCount} | active markers ${revealDebug.activeMarkerCount} | revealed ${revealDebug.activeRevealedCount}</span>
       <span>PvE Authority: ${this.multiplayerMode ? (multiplayer.status === "connected" ? "SERVER" : "DISCONNECTED") : "LOCAL"} | Server enemies ${multiplayer.authoritativeEnemyCount} | active ${multiplayer.activeEnemyCount} | dormant ${multiplayer.dormantEnemyCount} | rendered ${multiplayer.renderedNetworkEnemyCount}</span>
       <span>Enemy Net: tick ${multiplayer.enemyServerTickRate}/s | snapshot ${multiplayer.enemySnapshotRate}/s #${multiplayer.enemySnapshotId} | last ${multiplayer.lastEnemyEvent} | affected ${multiplayer.lastEnemyAffectedId ?? "none"} | corrections ${multiplayer.enemyCorrectionCount}</span>
       <span>Network Lifecycle: connected ${multiplayer.status === "connected" ? "true" : "false"} | room ${multiplayer.roomId ?? "none"} | last ${multiplayer.lastRoomLifecycleEvent} | reset ${multiplayer.lastNetworkStateResetReason} | enemy clear ${multiplayer.lastNetworkEnemyClearReason}</span>

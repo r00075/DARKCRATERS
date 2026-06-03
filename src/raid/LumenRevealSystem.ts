@@ -16,6 +16,10 @@ export type LumenRevealTarget = Readonly<{
   distance: number;
 }>;
 
+export type RevealedTargetState = Readonly<LumenRevealTarget & {
+  remainingSeconds: number;
+}>;
+
 export type LumenRevealResult = Readonly<{
   activated: boolean;
   targets: readonly LumenRevealTarget[];
@@ -30,6 +34,9 @@ export type LumenRevealDebugState = Readonly<{
   lastRadius: number;
   lastDurationSeconds: number;
   lastTargetCount: number;
+  lastRawTargetCount: number;
+  lastGroupedTargetCount: number;
+  lastClassId: string;
   activeMarkerCount: number;
   activeRevealedCount: number;
   lastResult: string;
@@ -39,6 +46,14 @@ type ActiveMarker = {
   id: string;
   meshes: AbstractMesh[];
   timeout: number;
+  observer: ReturnType<Scene["onBeforeRenderObservable"]["add"]> | null;
+};
+
+type MutableRevealTargetGroup = {
+  id: string;
+  type: string;
+  positions: Vector3[];
+  distance: number;
 };
 
 const essenceFlareRadius = 30;
@@ -59,6 +74,9 @@ export class LumenRevealSystem {
     lastRadius: 0,
     lastDurationSeconds: 0,
     lastTargetCount: 0,
+    lastRawTargetCount: 0,
+    lastGroupedTargetCount: 0,
+    lastClassId: "none",
     activeMarkerCount: 0,
     activeRevealedCount: 0,
     lastResult: "idle",
@@ -68,7 +86,7 @@ export class LumenRevealSystem {
     this.revealMaterial = new StandardMaterial("lumen-reveal-marker-material", scene);
     this.revealMaterial.diffuseColor = themeConfig.colors.cyan;
     this.revealMaterial.emissiveColor = new Color3(0.12, 0.72, 0.95);
-    this.revealMaterial.alpha = 0.78;
+    this.revealMaterial.alpha = 0.82;
 
     this.pulseMaterial = new StandardMaterial("lumen-reveal-pulse-material", scene);
     this.pulseMaterial.diffuseColor = themeConfig.colors.purple;
@@ -90,44 +108,80 @@ export class LumenRevealSystem {
     return now - this.lastActivationMs >= activationGuardMs;
   }
 
-  public activateEssenceFlare(playerPosition: Vector3, enemies: readonly EnemyDebugState[]): LumenRevealResult {
+  public isTargetRevealed(id: string, now = performance.now()): boolean {
+    return (this.revealedUntil.get(id) ?? 0) > now;
+  }
+
+  public getRevealedTargets(now = performance.now()): readonly RevealedTargetState[] {
+    const revealed: RevealedTargetState[] = [];
+    for (const marker of this.activeMarkers.values()) {
+      const until = this.revealedUntil.get(marker.id) ?? 0;
+      if (until <= now || marker.meshes.length === 0) {
+        continue;
+      }
+      const root = marker.meshes[0];
+      revealed.push({
+        id: marker.id,
+        type: "lumen-signature",
+        position: root.position.clone(),
+        distance: 0,
+        remainingSeconds: Math.max(0, (until - now) / 1000),
+      });
+    }
+    return revealed;
+  }
+
+  public activateEssenceFlare(
+    playerPosition: Vector3,
+    enemies: readonly EnemyDebugState[],
+    options: { classId?: string; radius?: number; durationSeconds?: number } = {},
+  ): LumenRevealResult {
     const now = performance.now();
+    const radius = options.radius ?? essenceFlareRadius;
+    const durationSeconds = options.durationSeconds ?? essenceFlareDurationSeconds;
+    const classId = options.classId ?? "none";
     if (!this.canActivate(now)) {
       this.debugStateInternal = {
         ...this.debugStateInternal,
         lastItem: "essence-flare",
+        lastRadius: radius,
+        lastDurationSeconds: durationSeconds,
+        lastClassId: classId,
         lastResult: "cooldown",
       };
       return {
         activated: false,
         targets: [],
-        radius: essenceFlareRadius,
-        durationSeconds: essenceFlareDurationSeconds,
+        radius,
+        durationSeconds,
         disruptionSeconds: essenceFlareDisruptionSeconds,
         reason: "cooldown",
       };
     }
 
     this.lastActivationMs = now;
-    const targets = this.collectTargets(playerPosition, enemies, essenceFlareRadius);
+    const { targets, rawCount, groupedCount } = this.collectTargets(playerPosition, enemies, radius);
     console.info(
-      `[RevealTool] activated item=essence-flare radius=${essenceFlareRadius} duration=${essenceFlareDurationSeconds}`,
+      `[RevealTool] activated item=essence-flare class=${classId} radius=${radius} duration=${durationSeconds}`,
     );
-    console.info(`[RevealTool] targets count=${targets.length}`);
+    console.info(`[RevealTool] targets count=${targets.length} raw=${rawCount} grouped=${groupedCount}`);
     if (targets.length === 0) {
-      console.info(`[RevealTool] no targets radius=${essenceFlareRadius}`);
+      console.info(`[RevealTool] no targets radius=${radius}`);
     }
 
-    this.createPulseVisual(playerPosition, essenceFlareRadius);
+    this.createPulseVisual(playerPosition, radius);
     for (const target of targets) {
-      this.revealTarget(target, now);
+      this.revealTarget(target, now, durationSeconds);
     }
 
     this.debugStateInternal = {
       lastItem: "essence-flare",
-      lastRadius: essenceFlareRadius,
-      lastDurationSeconds: essenceFlareDurationSeconds,
+      lastRadius: radius,
+      lastDurationSeconds: durationSeconds,
       lastTargetCount: targets.length,
+      lastRawTargetCount: rawCount,
+      lastGroupedTargetCount: groupedCount,
+      lastClassId: classId,
       activeMarkerCount: this.activeMarkers.size,
       activeRevealedCount: this.revealedUntil.size,
       lastResult: targets.length > 0 ? "targets-revealed" : "no-targets",
@@ -136,8 +190,8 @@ export class LumenRevealSystem {
     return {
       activated: true,
       targets,
-      radius: essenceFlareRadius,
-      durationSeconds: essenceFlareDurationSeconds,
+      radius,
+      durationSeconds,
       disruptionSeconds: essenceFlareDisruptionSeconds,
       reason: "activated",
     };
@@ -156,6 +210,9 @@ export class LumenRevealSystem {
       lastRadius: 0,
       lastDurationSeconds: 0,
       lastTargetCount: 0,
+      lastRawTargetCount: 0,
+      lastGroupedTargetCount: 0,
+      lastClassId: "none",
       activeMarkerCount: 0,
       activeRevealedCount: 0,
       lastResult: "reset",
@@ -172,8 +229,9 @@ export class LumenRevealSystem {
     playerPosition: Vector3,
     enemies: readonly EnemyDebugState[],
     radius: number,
-  ): LumenRevealTarget[] {
-    const targets = new Map<string, LumenRevealTarget>();
+  ): { targets: LumenRevealTarget[]; rawCount: number; groupedCount: number } {
+    const groups = new Map<string, MutableRevealTargetGroup>();
+    let rawCount = 0;
 
     for (const enemy of enemies) {
       if (!enemy || enemy.health <= 0 || enemy.state === "dead") {
@@ -187,12 +245,8 @@ export class LumenRevealSystem {
       if (distance > radius) {
         continue;
       }
-      targets.set(enemy.id, {
-        id: enemy.id,
-        type: enemy.type,
-        position,
-        distance,
-      });
+      rawCount += 1;
+      this.addRevealTargetGroup(groups, enemy.id, enemy.type, position, distance);
     }
 
     for (const mesh of this.scene.meshes) {
@@ -200,24 +254,89 @@ export class LumenRevealSystem {
       if (!metadata || (metadata.entityType !== "enemy" && metadata.gameplayTag !== "enemy-visual")) {
         continue;
       }
-      const id = metadata.enemyId ?? mesh.id ?? mesh.name ?? `mesh-${mesh.uniqueId}`;
-      if (targets.has(id)) {
-        continue;
-      }
+      const id = this.getMeshRevealGroupId(mesh, metadata);
       const position = mesh.getAbsolutePosition().clone();
       const distance = Vector3.Distance(position, playerPosition);
       if (distance > radius) {
         continue;
       }
-      targets.set(id, {
-        id,
-        type: metadata.enemyType ?? "lumen-signature",
-        position,
-        distance,
-      });
+      rawCount += 1;
+      this.addRevealTargetGroup(groups, id, metadata.enemyType ?? "lumen-signature", position, distance);
     }
 
-    return Array.from(targets.values()).sort((a, b) => a.distance - b.distance);
+    const targets = Array.from(groups.values())
+      .map((group) => ({
+        id: group.id,
+        type: group.type,
+        position: this.averagePositions(group.positions),
+        distance: group.distance,
+      }))
+      .sort((a, b) => a.distance - b.distance);
+
+    return {
+      targets,
+      rawCount,
+      groupedCount: targets.length,
+    };
+  }
+
+  private addRevealTargetGroup(
+    groups: Map<string, MutableRevealTargetGroup>,
+    id: string,
+    type: string,
+    position: Vector3,
+    distance: number,
+  ): void {
+    const existing = groups.get(id);
+    if (existing) {
+      existing.positions.push(position);
+      existing.distance = Math.min(existing.distance, distance);
+      if (existing.type === "lumen-signature" && type !== "lumen-signature") {
+        existing.type = type;
+      }
+      return;
+    }
+
+    groups.set(id, {
+      id,
+      type,
+      positions: [position],
+      distance,
+    });
+  }
+
+  private getMeshRevealGroupId(
+    mesh: AbstractMesh,
+    metadata: { enemyId?: string; enemyType?: string },
+  ): string {
+    if (metadata.enemyId) {
+      return metadata.enemyId;
+    }
+
+    const parent = mesh.parent;
+    const parentMetadata = parent?.metadata as { enemyId?: string } | null;
+    if (parentMetadata?.enemyId) {
+      return parentMetadata.enemyId;
+    }
+
+    const rawName = parent?.name || parent?.id || mesh.name || mesh.id || `mesh-${mesh.uniqueId}`;
+    const stripped = rawName
+      .replace(/(?:^|[-_])(head|body|torso|visual|mesh|hitbox|collider|capsule)(?:[-_]?\d+)?$/i, "")
+      .replace(/[-_]?(head|body|torso|visual|mesh|hitbox|collider|capsule)[-_]?\d*$/i, "")
+      .replace(/\.\d+$/i, "");
+    return stripped && stripped !== rawName ? stripped : rawName;
+  }
+
+  private averagePositions(positions: readonly Vector3[]): Vector3 {
+    if (positions.length === 0) {
+      return Vector3.Zero();
+    }
+    const average = Vector3.Zero();
+    for (const position of positions) {
+      average.addInPlace(position);
+    }
+    average.scaleInPlace(1 / positions.length);
+    return average;
   }
 
   private createPulseVisual(origin: Vector3, radius: number): void {
@@ -251,9 +370,9 @@ export class LumenRevealSystem {
     }
   }
 
-  private revealTarget(target: LumenRevealTarget, now: number): void {
+  private revealTarget(target: LumenRevealTarget, now: number, durationSeconds: number): void {
     this.clearMarker(target.id, "replace");
-    const revealUntil = now + essenceFlareDurationSeconds * 1000;
+    const revealUntil = now + durationSeconds * 1000;
     this.revealedUntil.set(target.id, revealUntil);
     this.disruptedUntil.set(target.id, now + essenceFlareDisruptionSeconds * 1000);
 
@@ -264,7 +383,7 @@ export class LumenRevealSystem {
 
     const halo = MeshBuilder.CreateTorus(
       `lumen-reveal-halo-${target.id}`,
-      { diameter: 1.25, thickness: 0.035, tessellation: 48 },
+      { diameter: 1.45, thickness: 0.035, tessellation: 64 },
       this.scene,
     );
     halo.parent = markerRoot;
@@ -275,7 +394,7 @@ export class LumenRevealSystem {
 
     const beacon = MeshBuilder.CreateSphere(
       `lumen-reveal-beacon-${target.id}`,
-      { diameter: 0.22, segments: 12 },
+      { diameter: 0.26, segments: 16 },
       this.scene,
     );
     beacon.parent = markerRoot;
@@ -283,11 +402,31 @@ export class LumenRevealSystem {
     beacon.material = this.revealMaterial;
     beacon.isPickable = false;
 
-    const timeout = window.setTimeout(() => this.clearMarker(target.id, "duration-expired"), essenceFlareDurationSeconds * 1000);
+    const column = MeshBuilder.CreateCylinder(
+      `lumen-reveal-column-${target.id}`,
+      { height: 2.2, diameterTop: 0.035, diameterBottom: 0.08, tessellation: 12 },
+      this.scene,
+    );
+    column.parent = markerRoot;
+    column.position.y = 1.1;
+    column.material = this.revealMaterial;
+    column.isPickable = false;
+
+    const startedAt = performance.now();
+    const observer = this.scene.onBeforeRenderObservable.add(() => {
+      const elapsed = (performance.now() - startedAt) / 1000;
+      const pulse = 1 + Math.sin(elapsed * Math.PI * 2.2) * 0.08;
+      halo.scaling.set(pulse, pulse, pulse);
+      beacon.scaling.set(1.08 - (pulse - 1), 1.08 - (pulse - 1), 1.08 - (pulse - 1));
+      column.rotation.y += 0.012;
+    });
+
+    const timeout = window.setTimeout(() => this.clearMarker(target.id, "duration-expired"), durationSeconds * 1000);
     this.activeMarkers.set(target.id, {
       id: target.id,
-      meshes: [markerRoot, halo, beacon],
+      meshes: [markerRoot, halo, beacon, column],
       timeout,
+      observer,
     });
     console.info(
       `[RevealTool] target revealed id=${target.id} type=${target.type} distance=${target.distance.toFixed(1)}`,
@@ -300,6 +439,9 @@ export class LumenRevealSystem {
       return;
     }
     window.clearTimeout(marker.timeout);
+    if (marker.observer) {
+      this.scene.onBeforeRenderObservable.remove(marker.observer);
+    }
     this.disposeMarker(marker);
     this.activeMarkers.delete(id);
     this.revealedUntil.delete(id);
