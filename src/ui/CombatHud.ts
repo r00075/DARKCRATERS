@@ -26,6 +26,11 @@ import { colorToCss, themeConfig } from "../theme/ThemeConfig";
 import type { TraversalState } from "../traversal/TraversalController";
 import type { VisibilityToolState } from "../visibility/VisibilityToolManager";
 import type { WeaponState } from "../weapons/WeaponController";
+import {
+  weaponDefinitions,
+  weaponIdFromLootType,
+  type WeaponId,
+} from "../weapons/WeaponDefinitions";
 import type { MotorState } from "../world/PlayerMotor";
 
 export type DamageNumber = Readonly<{
@@ -95,6 +100,8 @@ export type RaidHudState = Readonly<{
   inventoryCapacity: number;
   raidBagOpen: boolean;
   selectedInventorySlotId: string | null;
+  equippedPrimaryWeaponId: WeaponId | null;
+  equippedSidearmWeaponId: WeaponId;
   selectedLootIndex: number;
   lootContainer: LootContainerView | null;
   inventoryWarning: string | null;
@@ -578,7 +585,7 @@ export class CombatHud {
 
   private formatInventory(raid: RaidHudState): string {
     const slots = raid.inventorySlotsList.length > 0
-      ? raid.inventorySlotsList.map((item) => this.formatInventorySlot(item, raid.selectedInventorySlotId)).join("")
+      ? raid.inventorySlotsList.map((item) => this.formatInventorySlot(item, raid)).join("")
       : Array.from({ length: raid.inventoryCapacity }, (_, index) => `<div class="inventory-slot empty">${index + 1}</div>`).join("");
     const empties = Math.max(0, raid.inventoryCapacity - raid.inventorySlots);
     const emptySlots = Array.from({ length: empties }, () => `<div class="inventory-slot empty"></div>`).join("");
@@ -588,6 +595,10 @@ export class CombatHud {
     return `
       <strong>EVA Pack ${raid.inventorySlots}/${raid.inventoryCapacity}</strong>
       <span class="inventory-capacity">${freeSlots} free slot${freeSlots === 1 ? "" : "s"} | Tab close | X drop selected</span>
+      <div class="inventory-equipped-strip">
+        <span><small>PRIMARY</small>${raid.equippedPrimaryWeaponId ? weaponDefinitions[raid.equippedPrimaryWeaponId].name : "Empty"}</span>
+        <span><small>SIDEARM</small>${weaponDefinitions[raid.equippedSidearmWeaponId].name}</span>
+      </div>
       <button type="button" class="bag-close-button" data-loot-action="close-bag">Close EVA Pack</button>
       <div class="inventory-grid">${slots}${emptySlots}</div>
       ${this.formatLootContainer(raid)}
@@ -620,15 +631,17 @@ export class CombatHud {
     }
   }
 
-  private formatInventorySlot(item: InventorySlot, selectedSlotId: string | null): string {
+  private formatInventorySlot(item: InventorySlot, raid: RaidHudState): string {
     const definition = getItemDefinition(item.type);
     const color = colorToCss(themeConfig.rarityColors[definition.rarity]);
-    const selected = item.id === selectedSlotId;
+    const selected = item.id === raid.selectedInventorySlotId;
+    const weaponActions = selected ? this.formatInventoryWeaponActions(item, raid) : "";
     return `
       <div class="inventory-slot filled${selected ? " selected" : ""}" data-loot-action="select" data-slot-id="${item.id}" style="--rarity-color: ${color}">
         <span>${item.label}</span>
         <small>${item.quantity > 1 ? `x${item.quantity}` : `${item.slots} slot${item.slots > 1 ? "s" : ""}`} | ${definition.rarity}</small>
         ${this.formatItemTooltip(item.type, item.quantity)}
+        ${weaponActions}
         <footer class="inventory-slot-actions">
           <button type="button" data-loot-action="use" data-slot-id="${item.id}">Use</button>
           <button type="button" data-loot-action="drop" data-slot-id="${item.id}">Drop</button>
@@ -637,6 +650,51 @@ export class CombatHud {
         </footer>
       </div>
     `;
+  }
+
+  private formatInventoryWeaponActions(item: InventorySlot, raid: RaidHudState): string {
+    const weaponId = weaponIdFromLootType(item.type);
+
+    if (!weaponId) {
+      return "";
+    }
+
+    const primaryCompatible = this.isPrimaryCompatible(weaponId);
+    const sidearmCompatible = this.isSidearmCompatible(weaponId);
+    const compatibility = [
+      primaryCompatible ? "Primary" : "",
+      sidearmCompatible ? "Sidearm" : "",
+    ].filter(Boolean).join(" / ") || "No raid slot";
+    const primaryLabel = raid.equippedPrimaryWeaponId
+      ? `Swap Primary (${weaponDefinitions[raid.equippedPrimaryWeaponId].name})`
+      : "Equip Primary";
+    const sidearmLabel = `Swap Sidearm (${weaponDefinitions[raid.equippedSidearmWeaponId].name})`;
+    const primaryMove = raid.equippedPrimaryWeaponId
+      ? `<button type="button" data-loot-action="move-equipped-primary" data-slot-id="${item.id}">Move Primary to Pack</button>`
+      : "";
+    const sidearmMove = raid.equippedSidearmWeaponId !== "pistol"
+      ? `<button type="button" data-loot-action="move-equipped-sidearm" data-slot-id="${item.id}">Move Sidearm to Pack</button>`
+      : "";
+
+    return `
+      <div class="inventory-weapon-actions">
+        <small>WEAPON | ${compatibility}</small>
+        <div>
+          ${primaryCompatible ? `<button type="button" data-loot-action="equip-primary" data-slot-id="${item.id}">${primaryLabel}</button>` : ""}
+          ${sidearmCompatible ? `<button type="button" data-loot-action="equip-sidearm" data-slot-id="${item.id}">${sidearmLabel}</button>` : ""}
+          ${primaryMove}
+          ${sidearmMove}
+        </div>
+      </div>
+    `;
+  }
+
+  private isPrimaryCompatible(weaponId: WeaponId): boolean {
+    return weaponId === "smg" || weaponId === "shotgun" || weaponId === "assault-rifle" || weaponId === "rifle";
+  }
+
+  private isSidearmCompatible(weaponId: WeaponId): boolean {
+    return weaponId === "pistol" || weaponId === "burst-pistol" || weaponId === "revolver" || weaponId === "compact-smg";
   }
 
   private formatLootContainer(raid: RaidHudState): string {

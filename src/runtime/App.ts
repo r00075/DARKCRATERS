@@ -151,6 +151,7 @@ type LoopProfile = Readonly<{
 }>;
 
 type RaidExitReason = "dead" | "downed_abandon" | "abandoned" | "extracted" | "manual_debug" | "timer_expired";
+type RaidWeaponEquipSlot = "primary" | "sidearm";
 type UiOverlayState =
   | "gameplay"
   | "raidBag"
@@ -692,6 +693,8 @@ export class App {
           inventoryCapacity: this.raidInventory.capacity,
           raidBagOpen: this.raidBagOpen,
           selectedInventorySlotId: this.getSelectedRaidBagSlotId(),
+          equippedPrimaryWeaponId: this.loadout.snapshot.primaryWeaponId,
+          equippedSidearmWeaponId: this.loadout.snapshot.sidearmWeaponId,
           selectedLootIndex: this.selectedLootIndex,
           lootContainer: this.inventoryManager.snapshot.activeContainer,
           inventoryWarning: this.inventoryManager.snapshot.warning,
@@ -1209,6 +1212,20 @@ export class App {
       return true;
     }
 
+    if (action === "equip-primary" || action === "equip-sidearm") {
+      if (!slotId) {
+        return false;
+      }
+
+      this.equipRaidBagWeapon(slotId, action === "equip-primary" ? "primary" : "sidearm");
+      return true;
+    }
+
+    if (action === "move-equipped-primary" || action === "move-equipped-sidearm") {
+      this.moveEquippedWeaponToRaidBag(action === "move-equipped-primary" ? "primary" : "sidearm");
+      return true;
+    }
+
     if (action === "select" || action === "inspect" || action === "mark" || action === "use") {
       const slotIndex = this.raidInventory.inventorySlots.findIndex((item) => item.id === slotId);
 
@@ -1249,6 +1266,196 @@ export class App {
     }
 
     return false;
+  }
+
+  private equipRaidBagWeapon(slotId: string, equipSlot: RaidWeaponEquipSlot): void {
+    const blocked = this.getRaidWeaponChangeBlockReason();
+
+    if (blocked) {
+      this.inventoryManager.setWarning(blocked);
+      this.combatHud.showLootNotification(blocked);
+      return;
+    }
+
+    const inventorySlot = this.raidInventory.inventorySlots.find((item) => item.id === slotId);
+
+    if (!inventorySlot) {
+      this.inventoryManager.setWarning("Weapon not found in EVA Pack");
+      this.combatHud.showLootNotification("Weapon not found in EVA Pack");
+      return;
+    }
+
+    const weaponId = weaponIdFromLootType(inventorySlot.type);
+
+    if (!weaponId) {
+      this.inventoryManager.setWarning("Selected item is not a weapon");
+      this.combatHud.showLootNotification("Selected item is not a weapon");
+      return;
+    }
+
+    if (!this.isWeaponCompatibleWithRaidSlot(weaponId, equipSlot)) {
+      const message = `${weaponDefinitions[weaponId].name} cannot fit the ${equipSlot} slot`;
+      this.inventoryManager.setWarning(message);
+      this.combatHud.showLootNotification(message);
+      return;
+    }
+
+    const currentWeaponId = this.getEquippedRaidWeaponId(equipSlot);
+
+    if (currentWeaponId === weaponId) {
+      const message = `${weaponDefinitions[weaponId].name} already equipped`;
+      this.inventoryManager.setWarning(message);
+      this.combatHud.showLootNotification(message);
+      return;
+    }
+
+    const displacedLootType = this.getDisplacedWeaponLootType(equipSlot, currentWeaponId);
+    const selectedSlots = inventorySlot.slots;
+    const displacedSlots = displacedLootType ? getItemDefinition(displacedLootType).slots : 0;
+
+    if (this.raidInventory.usedSlots - selectedSlots + displacedSlots > this.raidInventory.capacity) {
+      const message = "EVA Pack full - free space before swapping weapons";
+      this.inventoryManager.setWarning(message);
+      this.combatHud.showLootNotification(message);
+      return;
+    }
+
+    const removed = this.raidInventory.dropSlot(slotId);
+
+    if (!removed) {
+      const message = "Weapon swap failed - selected item unavailable";
+      this.inventoryManager.setWarning(message);
+      this.combatHud.showLootNotification(message);
+      return;
+    }
+
+    if (displacedLootType) {
+      const returned = this.raidInventory.add(displacedLootType, 1);
+
+      if (!returned) {
+        this.raidInventory.add(removed.type, removed.quantity);
+        const message = "Weapon swap failed - EVA Pack could not receive equipped weapon";
+        this.inventoryManager.setWarning(message);
+        this.combatHud.showLootNotification(message);
+        return;
+      }
+    }
+
+    this.setEquippedRaidWeapon(equipSlot, weaponId);
+    this.refreshRaidWeaponControllerAfterSwap();
+    this.clampRaidBagSelection();
+    this.inventoryManager.clearWarning();
+    this.combatHud.showLootNotification(`${weaponDefinitions[weaponId].name} equipped to ${equipSlot}`);
+    console.info(`[EvaPack] weapon swap slot=${equipSlot} equipped=${weaponId} displaced=${currentWeaponId ?? "none"} packUsed=${this.raidInventory.usedSlots}/${this.raidInventory.capacity}`);
+  }
+
+  private moveEquippedWeaponToRaidBag(equipSlot: RaidWeaponEquipSlot): void {
+    const blocked = this.getRaidWeaponChangeBlockReason();
+
+    if (blocked) {
+      this.inventoryManager.setWarning(blocked);
+      this.combatHud.showLootNotification(blocked);
+      return;
+    }
+
+    const currentWeaponId = this.getEquippedRaidWeaponId(equipSlot);
+
+    if (!currentWeaponId) {
+      const message = `No ${equipSlot} weapon equipped`;
+      this.inventoryManager.setWarning(message);
+      this.combatHud.showLootNotification(message);
+      return;
+    }
+
+    if (equipSlot === "sidearm" && currentWeaponId === "pistol") {
+      const message = "Starter sidearm cannot be moved to EVA Pack";
+      this.inventoryManager.setWarning(message);
+      this.combatHud.showLootNotification(message);
+      return;
+    }
+
+    const lootType = weaponLootTypes[currentWeaponId];
+
+    if (!this.raidInventory.canAdd(lootType, 1)) {
+      const message = "EVA Pack full - free space before moving equipped weapon";
+      this.inventoryManager.setWarning(message);
+      this.combatHud.showLootNotification(message);
+      return;
+    }
+
+    const returned = this.raidInventory.add(lootType, 1);
+
+    if (!returned) {
+      const message = "Equipped weapon could not be moved to EVA Pack";
+      this.inventoryManager.setWarning(message);
+      this.combatHud.showLootNotification(message);
+      return;
+    }
+
+    if (equipSlot === "primary") {
+      this.loadout.clearPrimary();
+    } else {
+      this.loadout.equipSidearm("pistol");
+    }
+
+    this.refreshRaidWeaponControllerAfterSwap();
+    this.inventoryManager.clearWarning();
+    this.combatHud.showLootNotification(`${weaponDefinitions[currentWeaponId].name} moved to EVA Pack`);
+    console.info(`[EvaPack] equipped weapon moved slot=${equipSlot} weapon=${currentWeaponId} packUsed=${this.raidInventory.usedSlots}/${this.raidInventory.capacity}`);
+  }
+
+  private getRaidWeaponChangeBlockReason(): string | null {
+    if (this.raidScreen !== "raid" || this.raidOutcome !== "active") {
+      return "Weapon changes are only available during an active raid";
+    }
+
+    if (!this.playerHealth.snapshot.alive) {
+      return "Cannot change weapons while downed";
+    }
+
+    if (this.heavyCargoState.carriedByLocalPlayer || this.heavyCargoInventorySuppressionSeconds > 0) {
+      return "Cannot change weapons while carrying heavy cargo.";
+    }
+
+    return null;
+  }
+
+  private getEquippedRaidWeaponId(equipSlot: RaidWeaponEquipSlot): WeaponId | null {
+    const loadout = this.loadout.snapshot;
+    return equipSlot === "primary" ? loadout.primaryWeaponId : loadout.sidearmWeaponId;
+  }
+
+  private getDisplacedWeaponLootType(equipSlot: RaidWeaponEquipSlot, weaponId: WeaponId | null): LootType | null {
+    if (!weaponId) {
+      return null;
+    }
+
+    if (equipSlot === "sidearm" && weaponId === "pistol") {
+      return null;
+    }
+
+    return weaponLootTypes[weaponId];
+  }
+
+  private setEquippedRaidWeapon(equipSlot: RaidWeaponEquipSlot, weaponId: WeaponId): void {
+    if (equipSlot === "primary") {
+      this.loadout.equipPrimary(weaponId);
+    } else {
+      this.loadout.equipSidearm(weaponId);
+    }
+  }
+
+  private isWeaponCompatibleWithRaidSlot(weaponId: WeaponId, equipSlot: RaidWeaponEquipSlot): boolean {
+    if (equipSlot === "primary") {
+      return weaponId === "smg" || weaponId === "shotgun" || weaponId === "assault-rifle" || weaponId === "rifle";
+    }
+
+    return weaponId === "pistol" || weaponId === "burst-pistol" || weaponId === "revolver" || weaponId === "compact-smg";
+  }
+
+  private refreshRaidWeaponControllerAfterSwap(): void {
+    this.activeLoadout = this.loadout.snapshot;
+    this.weaponController.resetForRaid(this.activeLoadout, this.weaponController.snapshot.reserveAmmo);
   }
 
   private getPendingHeavyCargoInputAction(): "release" | "pickup" | "drop" | "secure" | null {
