@@ -12,6 +12,14 @@ import {
 } from "@babylonjs/core";
 import "@babylonjs/loaders/glTF";
 import { themeConfig } from "../theme/ThemeConfig";
+import {
+  nextPreviewId,
+  recordPreviewAsyncIgnored,
+  recordPreviewContextLost,
+  recordPreviewContextRestored,
+  recordPreviewCreate,
+  recordPreviewDispose,
+} from "./PreviewLifecycle";
 
 const kestrelDashboardPath = "/models/ships/kestrel-9-dashboard.glb";
 
@@ -21,6 +29,12 @@ export class ShipDashboardPreview {
   private scene: Scene | null = null;
   private host: HTMLElement | null = null;
   private loaded = false;
+  private disposed = true;
+  private contextLost = false;
+  private instanceId = 0;
+  private renderLoop: (() => void) | null = null;
+  private contextLostHandler: ((event: Event) => void) | null = null;
+  private contextRestoredHandler: (() => void) | null = null;
 
   public mount(host: HTMLElement | null): void {
     this.dispose();
@@ -34,6 +48,11 @@ export class ShipDashboardPreview {
     this.canvas.className = "ship-dashboard-preview-canvas";
     this.canvas.setAttribute("aria-label", "Kestrel-9 dashboard GLB preview");
     host.append(this.canvas);
+    this.disposed = false;
+    this.contextLost = false;
+    const instanceId = nextPreviewId();
+    this.instanceId = instanceId;
+    recordPreviewCreate("ship", instanceId);
 
     this.engine = new Engine(this.canvas, true, {
       antialias: true,
@@ -43,6 +62,31 @@ export class ShipDashboardPreview {
     });
     this.scene = new Scene(this.engine);
     this.scene.clearColor.set(0, 0, 0, 0);
+    const scene = this.scene;
+    const engine = this.engine;
+    const isCurrent = (): boolean =>
+      !this.disposed &&
+      !this.contextLost &&
+      this.instanceId === instanceId &&
+      this.scene === scene &&
+      this.engine === engine &&
+      !scene.isDisposed;
+    this.contextLostHandler = (event: Event): void => {
+      event.preventDefault();
+      this.contextLost = true;
+      engine.stopRenderLoop(this.renderLoop ?? undefined);
+      recordPreviewContextLost("ship");
+      this.host?.classList.add("model-fallback");
+    };
+    this.contextRestoredHandler = (): void => {
+      this.contextLost = false;
+      recordPreviewContextRestored("ship");
+      if (!this.disposed && this.instanceId === instanceId && this.renderLoop) {
+        engine.runRenderLoop(this.renderLoop);
+      }
+    };
+    this.canvas.addEventListener("webglcontextlost", this.contextLostHandler);
+    this.canvas.addEventListener("webglcontextrestored", this.contextRestoredHandler);
 
     const camera = new ArcRotateCamera(
       "kestrel-dashboard-camera",
@@ -79,9 +123,10 @@ export class ShipDashboardPreview {
     pad.position.y = -0.04;
     pad.material = padMaterial;
 
-    void SceneLoader.ImportMeshAsync("", "", kestrelDashboardPath, this.scene)
+    void SceneLoader.ImportMeshAsync("", "", kestrelDashboardPath, scene)
       .then((result) => {
-        if (!this.scene || this.scene.isDisposed) {
+        if (!isCurrent()) {
+          recordPreviewAsyncIgnored("ship", "disposed");
           return;
         }
         const root = result.meshes[0];
@@ -112,21 +157,39 @@ export class ShipDashboardPreview {
         this.host?.classList.add("model-loaded");
       })
       .catch((error) => {
+        if (!isCurrent()) {
+          recordPreviewAsyncIgnored("ship", "disposed");
+          return;
+        }
         console.warn("[ShipDashboardPreview] Kestrel-9 dashboard GLB failed; schematic fallback remains active.", error);
         this.host?.classList.add("model-fallback");
       });
 
-    this.engine.runRenderLoop(() => {
-      this.scene?.render();
-    });
+    this.renderLoop = () => {
+      if (!isCurrent()) {
+        return;
+      }
+      scene.render();
+    };
+    engine.runRenderLoop(this.renderLoop);
 
     window.addEventListener("resize", this.resize);
     this.resize();
   }
 
   public dispose(): void {
+    const instanceId = this.instanceId;
+    const hadEngine = this.engine !== null;
+    this.disposed = true;
     window.removeEventListener("resize", this.resize);
+    if (this.canvas && this.contextLostHandler) {
+      this.canvas.removeEventListener("webglcontextlost", this.contextLostHandler);
+    }
+    if (this.canvas && this.contextRestoredHandler) {
+      this.canvas.removeEventListener("webglcontextrestored", this.contextRestoredHandler);
+    }
     this.host?.classList.remove("model-loaded", "model-fallback");
+    this.engine?.stopRenderLoop(this.renderLoop ?? undefined);
     this.scene?.dispose();
     this.engine?.dispose();
     this.canvas?.remove();
@@ -135,6 +198,13 @@ export class ShipDashboardPreview {
     this.scene = null;
     this.host = null;
     this.loaded = false;
+    this.contextLost = false;
+    this.renderLoop = null;
+    this.contextLostHandler = null;
+    this.contextRestoredHandler = null;
+    if (hadEngine) {
+      recordPreviewDispose("ship", instanceId);
+    }
   }
 
   public get status(): "loaded" | "fallback" {

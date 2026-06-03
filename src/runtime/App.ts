@@ -1109,7 +1109,7 @@ export class App {
     }
 
     const definition = getItemDefinition(slot.type);
-    this.combatHud.showLootNotification(`${slot.label} | ${definition.rarity} | ${definition.value * slot.quantity} credits`);
+    this.combatHud.showLootNotification(`${slot.label} | ${definition.rarity} | ${definition.use}`);
   }
 
   private getSelectedRaidBagSlotId(): string | null {
@@ -1595,39 +1595,86 @@ export class App {
       return;
     }
 
+    if (this.raidOutcome !== "active" || this.raidScreen !== "raid") {
+      this.logItemUse(slot.type, false, "not-active-raid");
+      this.combatHud.showLootNotification("This item cannot be used directly.");
+      return;
+    }
+
+    if (!this.playerHealth.snapshot.alive) {
+      this.logItemUse(slot.type, false, "downed");
+      this.combatHud.showLootNotification("Cannot use items while downed.");
+      return;
+    }
+
+    if (this.heavyCargoState.carriedByLocalPlayer) {
+      this.logItemUse(slot.type, false, "heavy-cargo");
+      this.combatHud.showLootNotification("Cannot use items while carrying heavy cargo.");
+      return;
+    }
+
     if (slot.type === "anti-toxin") {
       if (!this.playerStatus.snapshot.lunarInfection && this.playerStatus.snapshot.mentalStability >= 100) {
-        this.combatHud.showLootNotification("Anti-Toxin not needed");
+        this.logItemUse(slot.type, false, "no-toxin-effect");
+        this.combatHud.showLootNotification("No toxin effect active.");
         return;
       }
       if (this.raidInventory.consume("anti-toxin", 1)) {
         this.playerStatus.administerAntiToxin();
+        this.logItemUse(slot.type, true, "toxins-cleared");
         this.combatHud.showLootNotification("Anti-Toxin administered. Infection cleared.");
       }
       return;
     }
 
-    if (slot.type === "lumen-essence") {
-      this.combatHud.showLootNotification("Lumen Essence reacts faintly.");
-      // TODO: Use Lumen Essence to enhance scanner pings, track Lumen nests, and support anti-infection research.
+    if (slot.type === "essence-flare") {
+      if (this.raidInventory.consume(slot.type, 1)) {
+        const targets = this.activateLumenRevealPulse();
+        this.logItemUse(slot.type, true, `reveal-targets-${targets}`);
+        this.combatHud.showLootNotification("Lumen reveal pulse emitted.");
+      }
       return;
     }
 
-    if (slot.type === "advanced-medkit" && this.raidInventory.consume(slot.type, 1)) {
+    if (slot.type === "advanced-medkit") {
+      if (this.playerHealth.snapshot.current >= this.playerHealth.snapshot.max) {
+        this.logItemUse(slot.type, false, "full-health");
+        this.combatHud.showLootNotification("Already at full health.");
+        return;
+      }
+      if (this.raidInventory.consume(slot.type, 1)) {
       this.playerHealth.heal(55);
+        this.logItemUse(slot.type, true, "healed");
       this.combatHud.showLootNotification("Advanced medkit used");
+      }
       return;
     }
 
-    if (slot.type === "medkit" && this.raidInventory.consume(slot.type, 1)) {
+    if (slot.type === "medkit") {
+      if (this.playerHealth.snapshot.current >= this.playerHealth.snapshot.max) {
+        this.logItemUse(slot.type, false, "full-health");
+        this.combatHud.showLootNotification("Already at full health.");
+        return;
+      }
+      if (this.raidInventory.consume(slot.type, 1)) {
       this.playerHealth.heal(35);
+        this.logItemUse(slot.type, true, "healed");
       this.combatHud.showLootNotification("Medkit used");
+      }
       return;
     }
 
-    if (slot.type === "bandage" && this.raidInventory.consume(slot.type, 1)) {
+    if (slot.type === "bandage") {
+      if (this.playerHealth.snapshot.current >= this.playerHealth.snapshot.max) {
+        this.logItemUse(slot.type, false, "full-health");
+        this.combatHud.showLootNotification("Already at full health.");
+        return;
+      }
+      if (this.raidInventory.consume(slot.type, 1)) {
       this.playerHealth.heal(16);
+        this.logItemUse(slot.type, true, "healed");
       this.combatHud.showLootNotification("Bandage used");
+      }
       return;
     }
 
@@ -1635,18 +1682,41 @@ export class App {
       this.playerHealth.setIncomingDamageMultiplier(slot.type === "improved-armor-plate"
         ? loadoutConfig.lightArmorDamageMultiplier * 0.82
         : loadoutConfig.lightArmorDamageMultiplier * 0.9);
+      this.logItemUse(slot.type, true, "armor-fitted");
       this.combatHud.showLootNotification(`${slot.label} fitted`);
       return;
     }
 
-    if (slot.type === "battery" && this.raidInventory.consume(slot.type, 1)) {
+    if (slot.type === "battery") {
+      if (this.oxygenPercent >= 100) {
+        this.logItemUse(slot.type, false, "oxygen-full");
+        this.combatHud.showLootNotification("Oxygen already full.");
+        return;
+      }
+      if (this.raidInventory.consume(slot.type, 1)) {
       this.oxygenPercent = Math.min(100, this.oxygenPercent + 35);
       this.oxygenWarningState = this.getOxygenState(this.oxygenPercent);
+        this.logItemUse(slot.type, true, "oxygen-restored");
       this.combatHud.showLootNotification("Oxygen Cell used");
+      }
       return;
     }
 
-    this.combatHud.showLootNotification(`${slot.label} cannot be used yet`);
+    this.logItemUse(slot.type, false, "not-directly-usable");
+    this.combatHud.showLootNotification("This item cannot be used directly.");
+  }
+
+  private activateLumenRevealPulse(): number {
+    const radius = 26;
+    const playerPosition = this.player.state.position;
+    const targets = this.enemyDebugStates.filter((enemy) => enemy.health > 0 && Vector3.Distance(enemy.position, playerPosition) <= radius).length;
+    console.info(`[RevealTool] activated item=essence-flare radius=${radius} targets=${targets}`);
+    this.noiseSystem.emit("loot", playerPosition, this.environmentState.gameplay);
+    return targets;
+  }
+
+  private logItemUse(item: LootType, ok: boolean, reason: string): void {
+    console.info(`[ItemUse] item=${item} action=use ok=${ok} reason=${reason}`);
   }
 
   private createHud(): HTMLDivElement {
@@ -4126,7 +4196,7 @@ export class App {
 
   private showMainMenu(): void {
     this.raidScreen = "menu";
-    this.habitatPreview.dispose();
+    this.habitatPreview.detach();
     this.shipDashboardPreview.dispose();
     this.menuContent.classList.remove("class-deploy-content", "ship-dashboard-content", "arsenal-workbench-content");
     this.menuContent.classList.add("hq-command-content");
@@ -4463,6 +4533,7 @@ export class App {
 
   private showPreDeploymentClassMenu(mode: "assignment" | "solo" | "multiplayer" = "assignment"): void {
     this.raidScreen = "class-assignment";
+    this.habitatPreview.detach();
     this.preDeploymentMode = mode;
     this.menuContent.classList.remove("hq-command-content");
     this.menuContent.classList.add("class-deploy-content");
@@ -5209,6 +5280,7 @@ export class App {
 
   private showLoadoutMenu(): void {
     this.raidScreen = "loadout";
+    this.habitatPreview.detach();
     try {
       this.loadoutManager.initialize(this.loadout, this.persistentStash.items);
       this.loadout.clampToStash(this.persistentStash.items);
@@ -6485,18 +6557,34 @@ export class App {
       const rarityColor = colorToCss(themeConfig.rarityColors[definition.rarity]);
       const unlocked = workbenchLevel >= recipe.requiredWorkbenchLevel;
       const canAfford = scrap >= recipe.scrapCost;
+      const ingredientStatus = this.craftingManager.recipeIngredientStatus(recipe, (type) => this.getStashQuantity(type));
+      const hasIngredients = ingredientStatus.every((ingredient) => ingredient.ok);
       const outputLabel = recipe.outputQuantity > 1
         ? `${recipe.outputQuantity} ${definition.label}`
         : definition.label;
+      const ingredientRows = ingredientStatus.length > 0
+        ? `<div class="crafting-ingredients">${ingredientStatus.map((ingredient) => {
+          const label = getItemDefinition(ingredient.type).label;
+          return `<span class="${ingredient.ok ? "ok" : "missing"}">${label} ${ingredient.available}/${ingredient.quantity}</span>`;
+        }).join("")}</div>`
+        : "";
+      const buttonLabel = !unlocked
+        ? "Locked"
+        : !canAfford
+          ? "Need Scrap"
+          : !hasIngredients
+            ? "Need Items"
+            : "Craft";
 
       return `
-        <article class="crafting-card ${canAfford ? "" : "unaffordable"} ${unlocked ? "" : "locked"}" style="--rarity-color: ${rarityColor}">
+        <article class="crafting-card ${canAfford && hasIngredients ? "" : "unaffordable"} ${unlocked ? "" : "locked"}" style="--rarity-color: ${rarityColor}">
           <strong>${recipe.name}</strong>
           <span>${unlocked ? outputLabel : `Requires Fabrication Lv. ${recipe.requiredWorkbenchLevel}`}</span>
           <small>${recipe.description}</small>
+          ${ingredientRows}
           <footer>
             <em>${recipe.scrapCost} regolith scrap</em>
-            <button type="button" data-action="craft-${recipe.id}" ${unlocked ? "" : "disabled"}>${unlocked ? canAfford ? "Craft" : "Need Scrap" : "Locked"}</button>
+            <button type="button" data-action="craft-${recipe.id}" ${unlocked && canAfford && hasIngredients ? "" : "disabled"}>${buttonLabel}</button>
           </footer>
         </article>
       `;
@@ -6885,6 +6973,29 @@ export class App {
       action?.startsWith("vendor-repair-") === true;
   }
 
+  private shouldKeepRunnerPreviewForMenuAction(action: string | undefined): boolean {
+    return action === "menu" ||
+      action === "start" ||
+      action === "multiplayer-start" ||
+      action === "hq-loadout" ||
+      action === "loadout" ||
+      action === "hq-style" ||
+      action === "class-assignment" ||
+      action === "class-confirm-assignment" ||
+      action === "class-review-loadout" ||
+      action?.startsWith("launch-raid-") === true ||
+      action?.startsWith("class-select-") === true ||
+      action?.startsWith("loadout-tab-") === true ||
+      action?.startsWith("cosmetic-category-") === true ||
+      action?.startsWith("cosmetic-equip-") === true ||
+      action === "cosmetic-preview-left" ||
+      action === "cosmetic-preview-right" ||
+      action === "cosmetics-apply" ||
+      action === "cosmetics-randomize" ||
+      action === "cosmetics-favorite" ||
+      action === "cosmetics-reset";
+  }
+
   private consumePurchaseActionClick(): boolean {
     const now = performance.now();
 
@@ -6997,7 +7108,9 @@ export class App {
     const button = event.currentTarget as HTMLButtonElement;
     const action = button.dataset.action;
     if (action !== "debug-grant-resources" && action !== "debug-reset-save") {
-      this.habitatPreview.dispose();
+      if (!this.shouldKeepRunnerPreviewForMenuAction(action)) {
+        this.habitatPreview.detach();
+      }
       this.shipDashboardPreview.dispose();
       this.weaponBenchPreview.dispose();
     }
@@ -7197,9 +7310,12 @@ export class App {
           recipeId,
           (quantity) => this.persistentStash.remove("scrap", quantity),
           (items) => this.persistentStash.addItems(items),
+          (type, quantity) => this.persistentStash.remove(type, quantity),
+          (type) => this.getStashQuantity(type),
         );
         this.recordPrepScrapSpend(previousScrapSpent);
-        this.combatHud.showLootNotification(result.ok ? "Crafted" : "Not enough Regolith Scrap");
+        this.combatHud.showLootNotification(result.message);
+        console.info(`[Crafting] recipe=${recipeId} ok=${result.ok} reason=${result.message}`);
       }
       this.refreshWorkbenchMenuPreservingState();
     } else if (action === "stash") {

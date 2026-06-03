@@ -3,6 +3,8 @@ import type { LootStack } from "../raid/RaidInventory";
 
 export type CraftingRecipeId =
   | "bandage"
+  | "essence-flare"
+  | "scanner-battery"
   | "ammo-pack"
   | "armor-plate"
   | "anti-toxin"
@@ -18,6 +20,11 @@ export type CraftingRecipeId =
   | "rare-upgrade-kit"
   | "elite-backpack"
   | "high-tier-suppressor";
+
+export type CraftingIngredient = Readonly<{
+  type: LootType;
+  quantity: number;
+}>;
 
 export type CraftingUpgradeId =
   | "backpack-slots"
@@ -59,6 +66,7 @@ export type CraftingRecipe = Readonly<{
   outputType: LootType;
   outputQuantity: number;
   scrapCost: number;
+  ingredients?: readonly CraftingIngredient[];
   requiredWorkbenchLevel: number;
   description: string;
 }>;
@@ -101,6 +109,33 @@ export const workbenchUpgradeCosts = {
 } as Record<number, number>;
 
 export const craftingRecipes: CraftingRecipe[] = [
+  {
+    id: "essence-flare",
+    name: "Essence Flare",
+    outputType: "essence-flare",
+    outputQuantity: 1,
+    scrapCost: 2,
+    ingredients: [
+      { type: "lumen-essence", quantity: 1 },
+      { type: "electronics", quantity: 1 },
+      { type: "battery", quantity: 1 },
+    ],
+    requiredWorkbenchLevel: 1,
+    description: "Converts Lumen Essence, suit electronics, and an oxygen cell into a field reveal pulse.",
+  },
+  {
+    id: "scanner-battery",
+    name: "Scanner Battery",
+    outputType: "scanner-battery",
+    outputQuantity: 1,
+    scrapCost: 1,
+    ingredients: [
+      { type: "electronics", quantity: 1 },
+      { type: "rare-core", quantity: 1 },
+    ],
+    requiredWorkbenchLevel: 1,
+    description: "Signal cell scaffold for reveal and scanner tool loops.",
+  },
   {
     id: "bandage",
     name: "Bandage",
@@ -214,9 +249,13 @@ export const craftingRecipes: CraftingRecipe[] = [
     name: "Weapon Repair Kit",
     outputType: "weapon-repair-kit",
     outputQuantity: 1,
-    scrapCost: 24,
+    scrapCost: 8,
+    ingredients: [
+      { type: "weapon-parts", quantity: 1 },
+      { type: "electronics", quantity: 1 },
+    ],
     requiredWorkbenchLevel: 4,
-    description: "Portable maintenance kit for prized weapons.",
+    description: "Portable maintenance kit for prized weapons. Requires weapon parts and suit electronics.",
   },
   {
     id: "rare-upgrade-kit",
@@ -357,6 +396,8 @@ export class CraftingManager {
     recipeId: CraftingRecipeId,
     spendScrap: (quantity: number) => boolean,
     addToStash: (items: readonly LootStack[]) => void,
+    spendItem?: (type: LootType, quantity: number) => boolean,
+    getItemQuantity?: (type: LootType) => number,
   ): CraftingResult {
     const recipe = this.getRecipe(recipeId);
 
@@ -368,11 +409,31 @@ export class CraftingManager {
       return this.fail(`${recipe.name} requires Fabrication Level ${recipe.requiredWorkbenchLevel}`);
     }
 
+    if (!this.hasIngredients(recipe, getItemQuantity)) {
+      return this.fail(`Missing ingredients for ${recipe.name}`);
+    }
+
+    const outputDefinition = getItemDefinition(recipe.outputType);
+    if (outputDefinition.type !== recipe.outputType) {
+      console.warn(`[Crafting] recipe=${recipe.id} blocked reason=output-mismatch configured=${recipe.outputType} resolved=${outputDefinition.type}`);
+      return this.fail(`Output mismatch for ${recipe.name}`);
+    }
+    console.info(`[Crafting] recipe=${recipe.id} output=${recipe.outputType} quantity=${recipe.outputQuantity} display=${outputDefinition.label}`);
+
     if (!spendScrap(recipe.scrapCost)) {
       return this.fail(`Not enough Regolith Scrap for ${recipe.name}`);
     }
 
-    const outputDefinition = getItemDefinition(recipe.outputType);
+    const consumedIngredients = this.consumeIngredients(recipe, spendItem);
+    if (!consumedIngredients.ok) {
+      if (recipe.scrapCost > 0) {
+        addToStash([{ type: "scrap", label: getItemDefinition("scrap").label, quantity: recipe.scrapCost }]);
+      }
+      return this.fail(`Missing ingredients for ${recipe.name}`);
+    }
+    console.info(`[Crafting] consumed ingredients=${this.formatIngredients(consumedIngredients.ingredients)}`);
+    console.info(`[Crafting] add output item=${recipe.outputType} quantity=${recipe.outputQuantity}`);
+
     addToStash([
       {
         type: recipe.outputType,
@@ -462,6 +523,20 @@ export class CraftingManager {
     return this.state.workbenchLevel >= recipe.requiredWorkbenchLevel;
   }
 
+  public recipeIngredientStatus(
+    recipe: CraftingRecipe,
+    getItemQuantity: (type: LootType) => number,
+  ): Array<CraftingIngredient & { available: number; ok: boolean }> {
+    return (recipe.ingredients ?? []).map((ingredient) => {
+      const available = getItemQuantity(ingredient.type);
+      return {
+        ...ingredient,
+        available,
+        ok: available >= ingredient.quantity,
+      };
+    });
+  }
+
   public getArmorRepairCost(): number {
     if (this.state.armorDurability >= 100) {
       return 0;
@@ -518,6 +593,57 @@ export class CraftingManager {
     };
     this.save();
     return { ok: false, message };
+  }
+
+  private hasIngredients(recipe: CraftingRecipe, getItemQuantity?: (type: LootType) => number): boolean {
+    if (!recipe.ingredients || recipe.ingredients.length === 0) {
+      return true;
+    }
+
+    if (!getItemQuantity) {
+      return false;
+    }
+
+    return recipe.ingredients.every((ingredient) => getItemQuantity(ingredient.type) >= ingredient.quantity);
+  }
+
+  private consumeIngredients(
+    recipe: CraftingRecipe,
+    spendItem?: (type: LootType, quantity: number) => boolean,
+  ): { ok: boolean; ingredients: CraftingIngredient[] } {
+    if (!recipe.ingredients || recipe.ingredients.length === 0) {
+      return { ok: true, ingredients: [] };
+    }
+
+    if (!spendItem) {
+      return { ok: false, ingredients: [] };
+    }
+
+    const consumed: CraftingIngredient[] = [];
+
+    for (const ingredient of recipe.ingredients) {
+      if (spendItem(ingredient.type, ingredient.quantity)) {
+        consumed.push(ingredient);
+        continue;
+      }
+
+      for (const rollback of consumed) {
+        // Rollback is handled by the caller only for Regolith Scrap; ingredient removal
+        // should be preceded by hasIngredients, so this branch is a defensive guard.
+        void rollback;
+      }
+      return { ok: false, ingredients: consumed };
+    }
+
+    return { ok: true, ingredients: consumed };
+  }
+
+  private formatIngredients(ingredients: readonly CraftingIngredient[]): string {
+    if (ingredients.length === 0) {
+      return "none";
+    }
+
+    return ingredients.map((ingredient) => `${ingredient.type}:${ingredient.quantity}`).join(",");
   }
 
   private load(): CraftingState {

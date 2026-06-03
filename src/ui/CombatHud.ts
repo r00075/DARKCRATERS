@@ -11,7 +11,7 @@ import type { EnvironmentState } from "../environment/EnvironmentManager";
 import type { ExtractionState } from "../raid/ExtractionController";
 import type { HeavyCargoViewState } from "../raid/HeavyCargoManager";
 import type { ObjectiveState } from "../raid/ObjectiveDirector";
-import { getItemDefinition } from "../raid/ItemDefinitions";
+import { getItemDefinition, getItemUseProfile } from "../raid/ItemDefinitions";
 import type { LootContainerView } from "../raid/LootDirector";
 import type { POIObjectiveState, POIObjectiveView } from "../raid/POIObjectiveManager";
 import type { InventorySlot, LootEvent, LootStack } from "../raid/RaidInventory";
@@ -636,6 +636,10 @@ export class CombatHud {
     const color = colorToCss(themeConfig.rarityColors[definition.rarity]);
     const selected = item.id === raid.selectedInventorySlotId;
     const weaponActions = selected ? this.formatInventoryWeaponActions(item, raid) : "";
+    const useProfile = getItemUseProfile(item.type);
+    const useAction = useProfile.usableInRaid
+      ? `<button type="button" data-loot-action="use" data-slot-id="${item.id}">Use</button>`
+      : "";
     return `
       <div class="inventory-slot filled${selected ? " selected" : ""}" data-loot-action="select" data-slot-id="${item.id}" style="--rarity-color: ${color}">
         <span>${item.label}</span>
@@ -643,7 +647,7 @@ export class CombatHud {
         ${this.formatItemTooltip(item.type, item.quantity)}
         ${weaponActions}
         <footer class="inventory-slot-actions">
-          <button type="button" data-loot-action="use" data-slot-id="${item.id}">Use</button>
+          ${useAction}
           <button type="button" data-loot-action="drop" data-slot-id="${item.id}">Drop</button>
           <button type="button" data-loot-action="inspect" data-slot-id="${item.id}">Inspect</button>
           <button type="button" data-loot-action="mark" data-slot-id="${item.id}">Mark</button>
@@ -741,12 +745,19 @@ export class CombatHud {
 
   private formatItemTooltip(type: LootStack["type"], quantity: number): string {
     const definition = getItemDefinition(type);
+    const profile = getItemUseProfile(type);
+    const futureUse = profile.futureUse ? `<span>Future: ${profile.futureUse}</span>` : "";
+    const blocked = !profile.usableInRaid && profile.blockedReason ? `<span>${profile.blockedReason}</span>` : "";
     return `
       <span class="item-tooltip">
         <strong>${definition.label}</strong>
         <span>${definition.rarity.toUpperCase()} ${definition.category}</span>
+        <span>Roles: ${profile.roles.join(" / ")}</span>
         <span>${definition.stackable ? `Stack x${quantity}` : "Non-stackable"} | ${definition.slots} slot${definition.slots > 1 ? "s" : ""}</span>
         <span>${definition.description}</span>
+        <span>Current: ${profile.currentUse}</span>
+        ${futureUse}
+        ${blocked}
         <span>Value ${definition.value * quantity} | ${definition.use}</span>
       </span>
     `;

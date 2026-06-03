@@ -11,10 +11,12 @@ export type LootType =
   | "anti-toxin"
   | "ammo"
   | "battery"
+  | "scanner-battery"
   | "electronics"
   | "weapon-parts"
   | "alien-chitin"
   | "lumen-essence"
+  | "essence-flare"
   | "acid-gland"
   | "crater-tissue"
   | "horror-core"
@@ -54,6 +56,27 @@ export type LootType =
   | "sealed-mining-cache";
 
 export type ItemCategory = "material" | "gear" | "consumable" | "objective";
+export type ItemUseRole =
+  | "equip"
+  | "consume"
+  | "craft"
+  | "repair"
+  | "upgrade"
+  | "sell"
+  | "turn-in"
+  | "reveal"
+  | "lore"
+  | "contract"
+  | "future";
+
+export type ItemUseProfile = Readonly<{
+  roles: readonly ItemUseRole[];
+  usableInRaid: boolean;
+  usableInHQ: boolean;
+  currentUse: string;
+  futureUse?: string;
+  blockedReason?: string;
+}>;
 
 export type ItemDefinition = Readonly<{
   type: LootType;
@@ -65,6 +88,7 @@ export type ItemDefinition = Readonly<{
   value: number;
   description: string;
   use: string;
+  useProfile?: ItemUseProfile;
 }>;
 
 export const itemDefinitions: Record<LootType, ItemDefinition> = {
@@ -111,6 +135,12 @@ export const itemDefinitions: Record<LootType, ItemDefinition> = {
     value: 5,
     description: "Pressurized trauma kit with oxygenated clotting foam.",
     use: "Quick use restores a large chunk of health.",
+    useProfile: {
+      roles: ["consume"],
+      usableInRaid: true,
+      usableInHQ: false,
+      currentUse: "Usable in raid. Restores health when injured.",
+    },
   },
   bandage: {
     type: "bandage",
@@ -122,6 +152,13 @@ export const itemDefinitions: Record<LootType, ItemDefinition> = {
     value: 2,
     description: "Vac-seal wrap for suit cuts and small field mistakes.",
     use: "Quick use restores a small amount of health.",
+    useProfile: {
+      roles: ["consume", "craft"],
+      usableInRaid: true,
+      usableInHQ: false,
+      currentUse: "Usable in raid. Restores a small amount of health.",
+      futureUse: "Can become a component for stronger medical recipes.",
+    },
   },
   "armor-plate": {
     type: "armor-plate",
@@ -133,6 +170,12 @@ export const itemDefinitions: Record<LootType, ItemDefinition> = {
     value: 6,
     description: "Pop-in ceramic plate for a Crater Runner suit harness.",
     use: "Quick use refreshes your armor protection.",
+    useProfile: {
+      roles: ["consume"],
+      usableInRaid: true,
+      usableInHQ: false,
+      currentUse: "Usable in raid. Temporarily improves suit protection.",
+    },
   },
   "improved-armor-plate": {
     type: "improved-armor-plate",
@@ -144,6 +187,13 @@ export const itemDefinitions: Record<LootType, ItemDefinition> = {
     value: 10,
     description: "Reinforced composite plate rated for Lumen claws and rig shrapnel.",
     use: "Higher-tier armor consumable for future armor tuning.",
+    useProfile: {
+      roles: ["consume", "upgrade"],
+      usableInRaid: true,
+      usableInHQ: false,
+      currentUse: "Usable in raid. Fits a stronger suit protection plate.",
+      futureUse: "Upgrade economy hook for armor tuning.",
+    },
   },
   "anti-toxin": {
     type: "anti-toxin",
@@ -155,6 +205,13 @@ export const itemDefinitions: Record<LootType, ItemDefinition> = {
     value: 9,
     description: "A fast-acting counteragent for Lunar Tick neurotoxins. Cures Lunar Infection and restores partial mental stability.",
     use: "Quick use clears Lunar Infection and restores +20 Mental Stability.",
+    useProfile: {
+      roles: ["consume", "craft"],
+      usableInRaid: true,
+      usableInHQ: false,
+      currentUse: "Usable in raid when toxin, infection, or instability is active.",
+      futureUse: "Crafting output and Lumen biohazard countermeasure.",
+    },
   },
   ammo: {
     type: "ammo",
@@ -177,6 +234,32 @@ export const itemDefinitions: Record<LootType, ItemDefinition> = {
     value: 2,
     description: "Compact emergency oxygen and battery cell for EVA tools.",
     use: "Recharges flashlight, night-vision, and future oxygen systems.",
+    useProfile: {
+      roles: ["consume", "craft", "future"],
+      usableInRaid: true,
+      usableInHQ: false,
+      currentUse: "Usable in raid as an emergency oxygen cell.",
+      futureUse: "Power source for scanners, reveal tools, and field devices.",
+    },
+  },
+  "scanner-battery": {
+    type: "scanner-battery",
+    label: "Scanner Battery",
+    rarity: "uncommon",
+    category: "material",
+    stackable: true,
+    slots: 1,
+    value: 3,
+    description: "Tuned signal cell for scanner loops and Lumen reveal tooling.",
+    use: "Fabrication material for scanner and reveal systems.",
+    useProfile: {
+      roles: ["craft", "reveal", "future"],
+      usableInRaid: false,
+      usableInHQ: true,
+      currentUse: "Fabrication component for scanner and reveal tool recipes.",
+      futureUse: "Future scanner power cell and field utility upgrade input.",
+      blockedReason: "This item cannot be used directly.",
+    },
   },
   electronics: {
     type: "electronics",
@@ -188,6 +271,14 @@ export const itemDefinitions: Record<LootType, ItemDefinition> = {
     value: 5,
     description: "Recovered suit processors and rig control wafers.",
     use: "Future fabrication material for optics, scanners, signal tools, and Habitat upgrades.",
+    useProfile: {
+      roles: ["craft", "repair", "upgrade"],
+      usableInRaid: false,
+      usableInHQ: true,
+      currentUse: "Electronics salvage used by Fabrication Bench recipes.",
+      futureUse: "Scanner, repair, and weapon systems ingredient.",
+      blockedReason: "This item cannot be used directly.",
+    },
   },
   "weapon-parts": {
     type: "weapon-parts",
@@ -199,6 +290,13 @@ export const itemDefinitions: Record<LootType, ItemDefinition> = {
     value: 4,
     description: "Rugged weapon and mining-tool components stripped from lunar kits.",
     use: "Crafting and weapon upgrade material.",
+    useProfile: {
+      roles: ["craft", "repair", "upgrade"],
+      usableInRaid: false,
+      usableInHQ: true,
+      currentUse: "Used for weapon repair kits and future weapon upgrades.",
+      blockedReason: "This item cannot be used directly.",
+    },
   },
   "alien-chitin": {
     type: "alien-chitin",
@@ -221,6 +319,32 @@ export const itemDefinitions: Record<LootType, ItemDefinition> = {
     value: 12,
     description: "Bioluminescent residue that reacts to nearby Lumen movement. Valuable to researchers and useful for crude tracking.",
     use: "Research material and future scanner reagent. TODO: enhance scanner pings, track Lumen nests, and support anti-infection research.",
+    useProfile: {
+      roles: ["craft", "reveal", "lore"],
+      usableInRaid: false,
+      usableInHQ: true,
+      currentUse: "Crafting material used in Lumen reveal technology.",
+      futureUse: "Research reagent for scanner pings, Lumen nest tracking, and anti-infection work.",
+      blockedReason: "Craft into an Essence Flare before field activation.",
+    },
+  },
+  "essence-flare": {
+    type: "essence-flare",
+    label: "Essence Flare",
+    rarity: "rare",
+    category: "consumable",
+    stackable: true,
+    slots: 1,
+    value: 18,
+    description: "A crude cyan-violet reveal charge built from Lumen Essence and salvaged suit electronics.",
+    use: "Activates a local Lumen reveal pulse. Prototype hook; future passes will bind this to camouflage and scanner systems.",
+    useProfile: {
+      roles: ["consume", "reveal"],
+      usableInRaid: true,
+      usableInHQ: false,
+      currentUse: "Usable in raid. Emits a temporary Lumen reveal pulse around the runner.",
+      futureUse: "Future camouflage disruption and scanner tracking item.",
+    },
   },
   "acid-gland": {
     type: "acid-gland",
@@ -265,6 +389,13 @@ export const itemDefinitions: Record<LootType, ItemDefinition> = {
     value: 8,
     description: "Neurotoxic lunar infection sample drawn from Tick-contaminated tissue.",
     use: "Anti-Toxin recipe component and Quiet Order research turn-in.",
+    useProfile: {
+      roles: ["craft", "turn-in", "contract"],
+      usableInRaid: false,
+      usableInHQ: true,
+      currentUse: "Anti-Toxin crafting component and research turn-in.",
+      blockedReason: "This item cannot be used directly.",
+    },
   },
   "backpack-upgrade": {
     type: "backpack-upgrade",
@@ -331,6 +462,14 @@ export const itemDefinitions: Record<LootType, ItemDefinition> = {
     value: 12,
     description: "Recovered contractor or mercenary identity tag.",
     use: "Extractable player or contractor loot for faction turn-ins.",
+    useProfile: {
+      roles: ["turn-in", "contract", "sell"],
+      usableInRaid: false,
+      usableInHQ: true,
+      currentUse: "Turn-in / contract item.",
+      futureUse: "Faction reputation and contract economy input.",
+      blockedReason: "This item cannot be used directly.",
+    },
   },
   "armor-light": {
     type: "armor-light",
@@ -540,6 +679,12 @@ export const itemDefinitions: Record<LootType, ItemDefinition> = {
     value: 12,
     description: "Packed neon gel, fast wraps, and a tiny good-luck sticker.",
     use: "Higher-tier healing consumable for future healing tuning.",
+    useProfile: {
+      roles: ["consume"],
+      usableInRaid: true,
+      usableInHQ: false,
+      currentUse: "Usable in raid. Restores a large amount of health.",
+    },
   },
   "weapon-repair-kit": {
     type: "weapon-repair-kit",
@@ -551,6 +696,14 @@ export const itemDefinitions: Record<LootType, ItemDefinition> = {
     value: 14,
     description: "Compact bench kit for keeping valuable weapons alive.",
     use: "Future field or HQ weapon repair material.",
+    useProfile: {
+      roles: ["repair"],
+      usableInRaid: false,
+      usableInHQ: true,
+      currentUse: "Repair material. Used at the bench to support weapon maintenance.",
+      futureUse: "Future field repair action hook.",
+      blockedReason: "Use at Fabrication/Arsenal repair interfaces.",
+    },
   },
   "rare-upgrade-kit": {
     type: "rare-upgrade-kit",
@@ -636,3 +789,115 @@ export const lootLabels = Object.fromEntries(
 ) as Record<LootType, string>;
 
 export const getItemDefinition = (type: LootType): ItemDefinition => itemDefinitions[type];
+
+const defaultUseProfiles: Partial<Record<LootType, ItemUseProfile>> = {
+  credits: {
+    roles: ["sell"],
+    usableInRaid: false,
+    usableInHQ: true,
+    currentUse: "Currency and sell value.",
+    blockedReason: "This item cannot be used directly.",
+  },
+  scrap: {
+    roles: ["craft", "repair", "upgrade"],
+    usableInRaid: false,
+    usableInHQ: true,
+    currentUse: "Structural repair material used for weapons, tools, and ship components.",
+    blockedReason: "This item cannot be used directly.",
+  },
+  cloth: {
+    roles: ["craft"],
+    usableInRaid: false,
+    usableInHQ: true,
+    currentUse: "Fabrication material for patches, bandages, and utility gear.",
+    blockedReason: "This item cannot be used directly.",
+  },
+  ammo: {
+    roles: ["craft", "future"],
+    usableInRaid: false,
+    usableInHQ: true,
+    currentUse: "Reserve ammunition material handled by loadout prep.",
+    blockedReason: "This item cannot be used directly.",
+  },
+  "acid-gland": {
+    roles: ["craft", "turn-in"],
+    usableInRaid: false,
+    usableInHQ: true,
+    currentUse: "Toxin research and future specialty crafting component.",
+    blockedReason: "This item cannot be used directly.",
+  },
+  "crater-tissue": {
+    roles: ["craft", "lore", "turn-in"],
+    usableInRaid: false,
+    usableInHQ: true,
+    currentUse: "High-tier Lumen research material.",
+    blockedReason: "This item cannot be used directly.",
+  },
+  "rare-core": {
+    roles: ["craft", "upgrade", "sell"],
+    usableInRaid: false,
+    usableInHQ: true,
+    currentUse: "Helium-3 resource for ship, scanner, and future upgrade work.",
+    blockedReason: "This item cannot be used directly.",
+  },
+  "encrypted-data": {
+    roles: ["turn-in", "contract", "lore"],
+    usableInRaid: false,
+    usableInHQ: true,
+    currentUse: "Objective reward and intel turn-in item.",
+    blockedReason: "This item cannot be used directly.",
+  },
+  "target-token": {
+    roles: ["turn-in", "contract", "lore"],
+    usableInRaid: false,
+    usableInHQ: true,
+    currentUse: "Objective reward and Quiet Order research material.",
+    blockedReason: "This item cannot be used directly.",
+  },
+  "rare-upgrade-kit": {
+    roles: ["upgrade"],
+    usableInRaid: false,
+    usableInHQ: true,
+    currentUse: "Future high-tier weapon and gear upgrade material.",
+    blockedReason: "Upgrade system coming in Phase 11.3.",
+  },
+};
+
+export const getItemUseProfile = (type: LootType): ItemUseProfile => {
+  const definition = itemDefinitions[type];
+  if (definition.useProfile) {
+    return definition.useProfile;
+  }
+
+  if (defaultUseProfiles[type]) {
+    return defaultUseProfiles[type];
+  }
+
+  if (definition.category === "gear") {
+    return {
+      roles: ["equip"],
+      usableInRaid: false,
+      usableInHQ: true,
+      currentUse: definition.use,
+      blockedReason: "Equip or manage this item through Loadout / Arsenal.",
+    };
+  }
+
+  if (definition.category === "objective") {
+    return {
+      roles: ["turn-in", "sell"],
+      usableInRaid: false,
+      usableInHQ: true,
+      currentUse: definition.use,
+      blockedReason: "This item cannot be used directly.",
+    };
+  }
+
+  return {
+    roles: ["future"],
+    usableInRaid: false,
+    usableInHQ: false,
+    currentUse: definition.use,
+    blockedReason: "This item cannot be used directly.",
+  };
+};
