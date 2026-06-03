@@ -1601,25 +1601,29 @@ export class App {
 
     if (this.raidOutcome !== "active" || this.raidScreen !== "raid") {
       this.logItemUse(slot.type, false, "not-active-raid");
+      this.logFieldUtility(slot.type, "blocked", 0, "not-active-raid");
       this.combatHud.showLootNotification("This item cannot be used directly.");
       return;
     }
 
     if (!this.playerHealth.snapshot.alive) {
       this.logItemUse(slot.type, false, "downed");
+      this.logFieldUtility(slot.type, "blocked", 0, "downed");
       this.combatHud.showLootNotification("Cannot use items while downed.");
       return;
     }
 
     if (this.heavyCargoState.carriedByLocalPlayer) {
       this.logItemUse(slot.type, false, "heavy-cargo");
-      this.combatHud.showLootNotification("Cannot use items while carrying heavy cargo.");
+      this.logFieldUtility(slot.type, "blocked", 0, "heavy-cargo");
+      this.combatHud.showLootNotification("Cannot use field items while carrying heavy cargo.");
       return;
     }
 
     const useProfile = getItemUseProfile(slot.type);
     if (!useProfile.usableInRaid) {
       this.logItemUse(slot.type, false, "not-raid-usable");
+      this.logFieldUtility(slot.type, "blocked", 0, "not-raid-usable");
       this.combatHud.showLootNotification(useProfile.blockedReason ?? "This item cannot be used directly.");
       return;
     }
@@ -1627,12 +1631,14 @@ export class App {
     if (slot.type === "anti-toxin") {
       if (!this.playerStatus.snapshot.lunarInfection && this.playerStatus.snapshot.mentalStability >= 100) {
         this.logItemUse(slot.type, false, "no-toxin-effect");
+        this.logFieldUtility(slot.type, "blocked", 0, "no-toxin-effect");
         this.combatHud.showLootNotification("No toxin effect active.");
         return;
       }
       if (this.raidInventory.consume("anti-toxin", 1)) {
         this.playerStatus.administerAntiToxin();
         this.logItemUse(slot.type, true, "toxins-cleared");
+        this.logFieldUtility(slot.type, "cleanse", 20);
         this.combatHud.showLootNotification("Anti-Toxin administered. Infection cleared.");
       }
       return;
@@ -1641,6 +1647,7 @@ export class App {
     if (slot.type === "essence-flare") {
       if (!this.lumenRevealSystem.canActivate()) {
         this.logItemUse(slot.type, false, "reveal-guard");
+        this.logFieldUtility(slot.type, "blocked", 0, "reveal-guard");
         this.combatHud.showLootNotification("Reveal pulse cycling. Try again.");
         return;
       }
@@ -1659,13 +1666,17 @@ export class App {
     if (slot.type === "advanced-medkit") {
       if (this.playerHealth.snapshot.current >= this.playerHealth.snapshot.max) {
         this.logItemUse(slot.type, false, "full-health");
+        this.logFieldUtility(slot.type, "blocked", 0, "full-health");
         this.combatHud.showLootNotification("Already at full health.");
         return;
       }
       if (this.raidInventory.consume(slot.type, 1)) {
-      this.playerHealth.heal(55);
+        const healAmount = 55;
+        this.playerHealth.heal(healAmount);
         this.logItemUse(slot.type, true, "healed");
-      this.combatHud.showLootNotification("Advanced medkit used");
+        this.logFieldUtility(slot.type, "heal", healAmount);
+        this.noiseSystem.emit("heal", this.player.state.position, this.environmentState.gameplay);
+        this.combatHud.showLootNotification("Advanced medkit applied.");
       }
       return;
     }
@@ -1673,13 +1684,17 @@ export class App {
     if (slot.type === "medkit") {
       if (this.playerHealth.snapshot.current >= this.playerHealth.snapshot.max) {
         this.logItemUse(slot.type, false, "full-health");
+        this.logFieldUtility(slot.type, "blocked", 0, "full-health");
         this.combatHud.showLootNotification("Already at full health.");
         return;
       }
       if (this.raidInventory.consume(slot.type, 1)) {
-      this.playerHealth.heal(35);
+        const healAmount = 35;
+        this.playerHealth.heal(healAmount);
         this.logItemUse(slot.type, true, "healed");
-      this.combatHud.showLootNotification("Medkit used");
+        this.logFieldUtility(slot.type, "heal", healAmount);
+        this.noiseSystem.emit("heal", this.player.state.position, this.environmentState.gameplay);
+        this.combatHud.showLootNotification("Medkit applied.");
       }
       return;
     }
@@ -1687,42 +1702,56 @@ export class App {
     if (slot.type === "bandage") {
       if (this.playerHealth.snapshot.current >= this.playerHealth.snapshot.max) {
         this.logItemUse(slot.type, false, "full-health");
+        this.logFieldUtility(slot.type, "blocked", 0, "full-health");
         this.combatHud.showLootNotification("Already at full health.");
         return;
       }
       if (this.raidInventory.consume(slot.type, 1)) {
-      this.playerHealth.heal(16);
+        const healAmount = 16;
+        this.playerHealth.heal(healAmount);
         this.logItemUse(slot.type, true, "healed");
-      this.combatHud.showLootNotification("Bandage used");
+        this.logFieldUtility(slot.type, "heal", healAmount);
+        this.noiseSystem.emit("heal", this.player.state.position, this.environmentState.gameplay);
+        this.combatHud.showLootNotification("Bandage applied.");
       }
       return;
     }
 
     if ((slot.type === "armor-plate" || slot.type === "improved-armor-plate") && this.raidInventory.consume(slot.type, 1)) {
-      this.playerHealth.setIncomingDamageMultiplier(slot.type === "improved-armor-plate"
+      const armorMultiplier = slot.type === "improved-armor-plate"
         ? loadoutConfig.lightArmorDamageMultiplier * 0.82
-        : loadoutConfig.lightArmorDamageMultiplier * 0.9);
+        : loadoutConfig.lightArmorDamageMultiplier * 0.9;
+      this.playerHealth.setIncomingDamageMultiplier(armorMultiplier);
       this.logItemUse(slot.type, true, "armor-fitted");
-      this.combatHud.showLootNotification(`${slot.label} fitted`);
+      this.logFieldUtility(slot.type, "armor", armorMultiplier);
+      this.noiseSystem.emit("heal", this.player.state.position, this.environmentState.gameplay);
+      this.combatHud.showLootNotification(slot.type === "improved-armor-plate"
+        ? "Improved armor plate fitted."
+        : "Armor plate fitted.");
       return;
     }
 
     if (slot.type === "battery") {
       if (this.oxygenPercent >= 100) {
         this.logItemUse(slot.type, false, "oxygen-full");
+        this.logFieldUtility(slot.type, "blocked", 0, "oxygen-full");
         this.combatHud.showLootNotification("Oxygen already full.");
         return;
       }
       if (this.raidInventory.consume(slot.type, 1)) {
-      this.oxygenPercent = Math.min(100, this.oxygenPercent + 35);
-      this.oxygenWarningState = this.getOxygenState(this.oxygenPercent);
+        const oxygenRestore = 35;
+        this.oxygenPercent = Math.min(100, this.oxygenPercent + oxygenRestore);
+        this.oxygenWarningState = this.getOxygenState(this.oxygenPercent);
         this.logItemUse(slot.type, true, "oxygen-restored");
-      this.combatHud.showLootNotification("Oxygen Cell used");
+        this.logFieldUtility(slot.type, "oxygen", oxygenRestore);
+        this.noiseSystem.emit("heal", this.player.state.position, this.environmentState.gameplay);
+        this.combatHud.showLootNotification("Oxygen cell installed.");
       }
       return;
     }
 
     this.logItemUse(slot.type, false, "not-directly-usable");
+    this.logFieldUtility(slot.type, "blocked", 0, "not-directly-usable");
     this.combatHud.showLootNotification("This item cannot be used directly.");
   }
 
@@ -1743,6 +1772,10 @@ export class App {
       console.info(`[ItemUse] blocked item=${item} reason=${reason}`);
     }
     console.info(`[ItemUse] item=${item} action=use ok=${ok} reason=${reason}`);
+  }
+
+  private logFieldUtility(item: LootType, effect: string, value: number, reason?: string): void {
+    console.info(`[FieldUtility] item=${item} effect=${effect} value=${value}${reason ? ` reason=${reason}` : ""}`);
   }
 
   private createHud(): HTMLDivElement {

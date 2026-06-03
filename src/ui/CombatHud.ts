@@ -637,7 +637,7 @@ export class CombatHud {
     const selected = item.id === raid.selectedInventorySlotId;
     const weaponActions = selected ? this.formatInventoryWeaponActions(item, raid) : "";
     const useProfile = getItemUseProfile(item.type);
-    const useLabel = item.type === "essence-flare" ? "Emit Reveal Pulse" : "Use";
+    const useLabel = this.formatInventoryUseLabel(item.type);
     const useAction = useProfile.usableInRaid
       ? `<button type="button" data-loot-action="use" data-slot-id="${item.id}">${useLabel}</button>`
       : "";
@@ -655,6 +655,18 @@ export class CombatHud {
         </footer>
       </div>
     `;
+  }
+
+  private formatInventoryUseLabel(type: LootStack["type"]): string {
+    if (type === "essence-flare") return "Emit Reveal Pulse";
+    if (type === "medkit") return "Use Medkit";
+    if (type === "advanced-medkit") return "Use Advanced Medkit";
+    if (type === "bandage") return "Use Bandage";
+    if (type === "armor-plate") return "Fit Armor Plate";
+    if (type === "improved-armor-plate") return "Fit Improved Plate";
+    if (type === "battery") return "Install Oxygen Cell";
+    if (type === "anti-toxin") return "Use Anti-Toxin";
+    return "Use";
   }
 
   private formatInventoryWeaponActions(item: InventorySlot, raid: RaidHudState): string {
