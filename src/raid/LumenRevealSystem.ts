@@ -29,6 +29,28 @@ export type LumenRevealResult = Readonly<{
   reason: "activated" | "cooldown";
 }>;
 
+export type RevealedSignal = Readonly<{
+  id: string;
+  label: string;
+  type: "lumen-signature" | "enemy" | "unknown";
+  position: Vector3;
+  distance: number;
+  revealedAt: number;
+  expiresAt: number;
+  source: "essence-flare";
+}>;
+
+export type LumenRevealSignalState = Readonly<{
+  active: boolean;
+  source: "essence-flare" | null;
+  count: number;
+  signals: readonly RevealedSignal[];
+  nearest: RevealedSignal | null;
+  remainingSeconds: number;
+  surveyorAffinity: boolean;
+  lastResult: string;
+}>;
+
 export type LumenRevealDebugState = Readonly<{
   lastItem: string | null;
   lastRadius: number;
@@ -39,6 +61,8 @@ export type LumenRevealDebugState = Readonly<{
   lastClassId: string;
   activeMarkerCount: number;
   activeRevealedCount: number;
+  lastDeadTargetSkips: number;
+  lastDeadSignalCleanups: number;
   lastResult: string;
 }>;
 
@@ -56,6 +80,19 @@ type MutableRevealTargetGroup = {
   distance: number;
 };
 
+type RevealMeshMetadata = {
+  entityType?: string;
+  gameplayTag?: string;
+  enemyId?: string;
+  enemyType?: string;
+  state?: string;
+  health?: number;
+  healthRemaining?: number;
+  isDead?: boolean;
+  dead?: boolean;
+  defeated?: boolean;
+};
+
 const essenceFlareRadius = 30;
 const essenceFlareDurationSeconds = 10;
 const essenceFlareDisruptionSeconds = 3;
@@ -67,8 +104,13 @@ export class LumenRevealSystem {
   private readonly pulseMaterial: StandardMaterial;
   private readonly activeMarkers = new Map<string, ActiveMarker>();
   private readonly revealedUntil = new Map<string, number>();
+  private readonly revealedSignals = new Map<string, RevealedSignal>();
   private readonly disruptedUntil = new Map<string, number>();
+  private readonly skippedDeadTargetLogIds = new Set<string>();
   private lastActivationMs = -Number.POSITIVE_INFINITY;
+  private signalWindowExpiresAt = 0;
+  private signalWindowSurveyorAffinity = false;
+  private signalWindowSource: "essence-flare" | null = null;
   private debugStateInternal: LumenRevealDebugState = {
     lastItem: null,
     lastRadius: 0,
@@ -79,6 +121,8 @@ export class LumenRevealSystem {
     lastClassId: "none",
     activeMarkerCount: 0,
     activeRevealedCount: 0,
+    lastDeadTargetSkips: 0,
+    lastDeadSignalCleanups: 0,
     lastResult: "idle",
   };
 
@@ -113,6 +157,7 @@ export class LumenRevealSystem {
   }
 
   public getRevealedTargets(now = performance.now()): readonly RevealedTargetState[] {
+    this.pruneExpiredSignals(now);
     const revealed: RevealedTargetState[] = [];
     for (const marker of this.activeMarkers.values()) {
       const until = this.revealedUntil.get(marker.id) ?? 0;
@@ -131,10 +176,37 @@ export class LumenRevealSystem {
     return revealed;
   }
 
+  public getRevealedSignals(enemies: readonly EnemyDebugState[] = [], now = performance.now()): readonly RevealedSignal[] {
+    this.pruneExpiredSignals(now, enemies);
+    return Array.from(this.revealedSignals.values())
+      .filter((signal) => signal.expiresAt > now)
+      .sort((a, b) => a.distance - b.distance)
+      .map((signal) => ({
+        ...signal,
+        position: signal.position.clone(),
+      }));
+  }
+
+  public getSignalState(enemies: readonly EnemyDebugState[] = [], now = performance.now()): LumenRevealSignalState {
+    const signals = this.getRevealedSignals(enemies, now);
+    const remainingSeconds = Math.max(0, (this.signalWindowExpiresAt - now) / 1000);
+    const active = remainingSeconds > 0 || signals.length > 0;
+    return {
+      active,
+      source: active ? this.signalWindowSource : null,
+      count: signals.length,
+      signals,
+      nearest: signals[0] ?? null,
+      remainingSeconds,
+      surveyorAffinity: active && this.signalWindowSurveyorAffinity,
+      lastResult: active ? this.debugStateInternal.lastResult : "idle",
+    };
+  }
+
   public activateEssenceFlare(
     playerPosition: Vector3,
     enemies: readonly EnemyDebugState[],
-    options: { classId?: string; radius?: number; durationSeconds?: number } = {},
+    options: { classId?: string; radius?: number; durationSeconds?: number; surveyorAffinity?: boolean } = {},
   ): LumenRevealResult {
     const now = performance.now();
     const radius = options.radius ?? essenceFlareRadius;
@@ -147,6 +219,8 @@ export class LumenRevealSystem {
         lastRadius: radius,
         lastDurationSeconds: durationSeconds,
         lastClassId: classId,
+        lastDeadTargetSkips: this.debugStateInternal.lastDeadTargetSkips,
+        lastDeadSignalCleanups: this.debugStateInternal.lastDeadSignalCleanups,
         lastResult: "cooldown",
       };
       return {
@@ -160,11 +234,17 @@ export class LumenRevealSystem {
     }
 
     this.lastActivationMs = now;
-    const { targets, rawCount, groupedCount } = this.collectTargets(playerPosition, enemies, radius);
+    this.skippedDeadTargetLogIds.clear();
+    const { targets, rawCount, groupedCount, deadSkipped } = this.collectTargets(playerPosition, enemies, radius);
+    const surveyorAffinity = options.surveyorAffinity ?? classId === "surveyor";
+    this.clearAllMarkers("replace");
+    this.signalWindowExpiresAt = now + durationSeconds * 1000;
+    this.signalWindowSurveyorAffinity = surveyorAffinity;
+    this.signalWindowSource = "essence-flare";
     console.info(
       `[RevealTool] activated item=essence-flare class=${classId} radius=${radius} duration=${durationSeconds}`,
     );
-    console.info(`[RevealTool] targets count=${targets.length} raw=${rawCount} grouped=${groupedCount}`);
+    console.info(`[RevealTool] targets count=${targets.length} raw=${rawCount} grouped=${groupedCount} deadSkipped=${deadSkipped}`);
     if (targets.length === 0) {
       console.info(`[RevealTool] no targets radius=${radius}`);
     }
@@ -173,6 +253,7 @@ export class LumenRevealSystem {
     for (const target of targets) {
       this.revealTarget(target, now, durationSeconds);
     }
+    console.info(`[RevealSignal] updated count=${targets.length} source=essence-flare`);
 
     this.debugStateInternal = {
       lastItem: "essence-flare",
@@ -184,6 +265,8 @@ export class LumenRevealSystem {
       lastClassId: classId,
       activeMarkerCount: this.activeMarkers.size,
       activeRevealedCount: this.revealedUntil.size,
+      lastDeadTargetSkips: deadSkipped,
+      lastDeadSignalCleanups: 0,
       lastResult: targets.length > 0 ? "targets-revealed" : "no-targets",
     };
 
@@ -204,7 +287,11 @@ export class LumenRevealSystem {
     }
     this.activeMarkers.clear();
     this.revealedUntil.clear();
+    this.revealedSignals.clear();
     this.disruptedUntil.clear();
+    this.signalWindowExpiresAt = 0;
+    this.signalWindowSurveyorAffinity = false;
+    this.signalWindowSource = null;
     this.debugStateInternal = {
       lastItem: null,
       lastRadius: 0,
@@ -215,8 +302,11 @@ export class LumenRevealSystem {
       lastClassId: "none",
       activeMarkerCount: 0,
       activeRevealedCount: 0,
+      lastDeadTargetSkips: 0,
+      lastDeadSignalCleanups: 0,
       lastResult: "reset",
     };
+    this.skippedDeadTargetLogIds.clear();
   }
 
   public dispose(): void {
@@ -229,14 +319,23 @@ export class LumenRevealSystem {
     playerPosition: Vector3,
     enemies: readonly EnemyDebugState[],
     radius: number,
-  ): { targets: LumenRevealTarget[]; rawCount: number; groupedCount: number } {
+  ): { targets: LumenRevealTarget[]; rawCount: number; groupedCount: number; deadSkipped: number } {
     const groups = new Map<string, MutableRevealTargetGroup>();
+    const debugAliveIds = new Set<string>();
+    const debugDeadIds = new Set<string>();
     let rawCount = 0;
+    let deadSkipped = 0;
 
     for (const enemy of enemies) {
-      if (!enemy || enemy.health <= 0 || enemy.state === "dead") {
+      if (!this.isRevealTargetAliveFromDebug(enemy)) {
+        if (enemy) {
+          debugDeadIds.add(enemy.id);
+          deadSkipped += 1;
+          this.logDeadTargetSkipped(enemy.id, "debug");
+        }
         continue;
       }
+      debugAliveIds.add(enemy.id);
       const position = enemy.position?.clone?.();
       if (!position) {
         continue;
@@ -250,11 +349,24 @@ export class LumenRevealSystem {
     }
 
     for (const mesh of this.scene.meshes) {
-      const metadata = mesh.metadata as { entityType?: string; gameplayTag?: string; enemyId?: string; enemyType?: string } | null;
+      const metadata = mesh.metadata as RevealMeshMetadata | null;
       if (!metadata || (metadata.entityType !== "enemy" && metadata.gameplayTag !== "enemy-visual")) {
         continue;
       }
       const id = this.getMeshRevealGroupId(mesh, metadata);
+      if (debugDeadIds.has(id)) {
+        deadSkipped += 1;
+        this.logDeadTargetSkipped(id, "mesh");
+        continue;
+      }
+      if (debugAliveIds.has(id) && groups.has(id)) {
+        continue;
+      }
+      if (!this.isRevealTargetAliveFromMesh(mesh, metadata)) {
+        deadSkipped += 1;
+        this.logDeadTargetSkipped(id, "mesh");
+        continue;
+      }
       const position = mesh.getAbsolutePosition().clone();
       const distance = Vector3.Distance(position, playerPosition);
       if (distance > radius) {
@@ -277,6 +389,7 @@ export class LumenRevealSystem {
       targets,
       rawCount,
       groupedCount: targets.length,
+      deadSkipped,
     };
   }
 
@@ -373,7 +486,18 @@ export class LumenRevealSystem {
   private revealTarget(target: LumenRevealTarget, now: number, durationSeconds: number): void {
     this.clearMarker(target.id, "replace");
     const revealUntil = now + durationSeconds * 1000;
+    const signalType = this.toSignalType(target.type);
     this.revealedUntil.set(target.id, revealUntil);
+    this.revealedSignals.set(target.id, {
+      id: target.id,
+      label: this.formatSignalLabel(target.type),
+      type: signalType,
+      position: target.position.clone(),
+      distance: target.distance,
+      revealedAt: now,
+      expiresAt: revealUntil,
+      source: "essence-flare",
+    });
     this.disruptedUntil.set(target.id, now + essenceFlareDisruptionSeconds * 1000);
 
     const markerRoot = MeshBuilder.CreateBox(`lumen-reveal-marker-${target.id}`, { size: 0.1 }, this.scene);
@@ -433,7 +557,7 @@ export class LumenRevealSystem {
     );
   }
 
-  private clearMarker(id: string, reason: "replace" | "duration-expired" | "reset"): void {
+  private clearMarker(id: string, reason: "replace" | "duration-expired" | "reset" | "target-dead"): void {
     const marker = this.activeMarkers.get(id);
     if (!marker) {
       return;
@@ -445,8 +569,152 @@ export class LumenRevealSystem {
     this.disposeMarker(marker);
     this.activeMarkers.delete(id);
     this.revealedUntil.delete(id);
+    this.revealedSignals.delete(id);
     this.disruptedUntil.delete(id);
     console.info(`[RevealTool] cleanup target=${id} reason=${reason}`);
+    if (reason === "duration-expired") {
+      console.info(`[RevealSignal] expired id=${id}`);
+    } else if (reason === "target-dead") {
+      console.info(`[RevealSignal] cleanup id=${id} reason=target-dead`);
+    }
+  }
+
+  private clearAllMarkers(reason: "replace" | "reset"): void {
+    for (const id of Array.from(this.activeMarkers.keys())) {
+      this.clearMarker(id, reason);
+    }
+    this.revealedUntil.clear();
+    this.revealedSignals.clear();
+    this.disruptedUntil.clear();
+  }
+
+  private pruneExpiredSignals(now: number, enemies: readonly EnemyDebugState[] = []): void {
+    let deadSignalCleanups = 0;
+    for (const [id, signal] of Array.from(this.revealedSignals.entries())) {
+      if (signal.expiresAt <= now) {
+        this.clearMarker(id, "duration-expired");
+        continue;
+      }
+      if (this.isKnownTargetDead(id, enemies)) {
+        this.clearMarker(id, "target-dead");
+        deadSignalCleanups += 1;
+      }
+    }
+    if (deadSignalCleanups > 0) {
+      this.debugStateInternal = {
+        ...this.debugStateInternal,
+        lastDeadSignalCleanups: this.debugStateInternal.lastDeadSignalCleanups + deadSignalCleanups,
+      };
+    }
+    if (this.signalWindowExpiresAt <= now && this.revealedSignals.size === 0) {
+      this.signalWindowSource = null;
+      this.signalWindowSurveyorAffinity = false;
+    }
+  }
+
+  private isRevealTargetAliveFromDebug(enemy: EnemyDebugState | null | undefined): boolean {
+    return !!enemy && enemy.health > 0 && enemy.state !== "dead";
+  }
+
+  private isRevealTargetAliveFromMesh(mesh: AbstractMesh, metadata: RevealMeshMetadata): boolean {
+    if (typeof mesh.isDisposed === "function" && mesh.isDisposed()) {
+      return false;
+    }
+    if (!mesh.isEnabled() || !mesh.isVisible) {
+      return false;
+    }
+
+    const metadataState = this.readDeathState(metadata);
+    if (metadataState !== "unknown") {
+      return metadataState === "alive";
+    }
+
+    const parentMetadata = mesh.parent?.metadata as RevealMeshMetadata | null;
+    const parentState = parentMetadata ? this.readDeathState(parentMetadata) : "unknown";
+    return parentState === "unknown" ? true : parentState === "alive";
+  }
+
+  private readDeathState(metadata: RevealMeshMetadata): "alive" | "dead" | "unknown" {
+    if (metadata.isDead === true || metadata.dead === true || metadata.defeated === true) {
+      return "dead";
+    }
+    if (typeof metadata.health === "number") {
+      return metadata.health > 0 ? "alive" : "dead";
+    }
+    if (typeof metadata.healthRemaining === "number") {
+      return metadata.healthRemaining > 0 ? "alive" : "dead";
+    }
+    const state = typeof metadata.state === "string" ? metadata.state.toLowerCase() : "";
+    if (state === "dead" || state === "killed" || state === "despawned") {
+      return "dead";
+    }
+    if (state.length > 0) {
+      return "alive";
+    }
+    return "unknown";
+  }
+
+  private isKnownTargetDead(id: string, enemies: readonly EnemyDebugState[]): boolean {
+    const debug = enemies.find((enemy) => enemy.id === id);
+    if (debug) {
+      return !this.isRevealTargetAliveFromDebug(debug);
+    }
+
+    let sawDeadEvidence = false;
+    for (const mesh of this.scene.meshes) {
+      const metadata = mesh.metadata as RevealMeshMetadata | null;
+      const parentMetadata = mesh.parent?.metadata as RevealMeshMetadata | null;
+      if (!this.meshMatchesSignalId(mesh, metadata, parentMetadata, id)) {
+        continue;
+      }
+      const alive = metadata ? this.isRevealTargetAliveFromMesh(mesh, metadata) : true;
+      if (alive) {
+        return false;
+      }
+      sawDeadEvidence = true;
+    }
+    return sawDeadEvidence;
+  }
+
+  private meshMatchesSignalId(
+    mesh: AbstractMesh,
+    metadata: RevealMeshMetadata | null,
+    parentMetadata: RevealMeshMetadata | null,
+    id: string,
+  ): boolean {
+    if (metadata?.enemyId === id || parentMetadata?.enemyId === id) {
+      return true;
+    }
+    if (!metadata || (metadata.entityType !== "enemy" && metadata.gameplayTag !== "enemy-visual")) {
+      return false;
+    }
+    return this.getMeshRevealGroupId(mesh, metadata) === id;
+  }
+
+  private logDeadTargetSkipped(id: string, source: "debug" | "mesh"): void {
+    const key = `${source}:${id}`;
+    if (this.skippedDeadTargetLogIds.has(key)) {
+      return;
+    }
+    this.skippedDeadTargetLogIds.add(key);
+    console.info(`[RevealSignal] skipped-dead-target id=${id} source=${source}`);
+  }
+
+  private toSignalType(type: string): RevealedSignal["type"] {
+    if (!type) {
+      return "unknown";
+    }
+    return type === "lumen-signature" || type.includes("lumen") || type.includes("alien") || type.includes("enemy")
+      ? "lumen-signature"
+      : "enemy";
+  }
+
+  private formatSignalLabel(type: string): string {
+    const normalized = type
+      .replace(/^net-/, "")
+      .replace(/[-_]+/g, " ")
+      .trim();
+    return normalized.length > 0 ? normalized : "Lumen signature";
   }
 
   private disposeMarker(marker: ActiveMarker): void {

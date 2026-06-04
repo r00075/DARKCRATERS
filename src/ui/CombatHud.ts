@@ -75,8 +75,10 @@ export type TacticalMapPointMarker = Readonly<{
   label: string;
   x: number;
   z: number;
-  kind: "ship" | "cargo" | "launch" | "objective" | "poiObjective" | "extraction" | "contract" | "breadcrumb";
+  kind: "ship" | "cargo" | "launch" | "objective" | "poiObjective" | "extraction" | "contract" | "breadcrumb" | "signal";
   active?: boolean;
+  distance?: number;
+  remainingSeconds?: number;
 }>;
 export type TacticalMapData = Readonly<{
   open: boolean;
@@ -85,6 +87,27 @@ export type TacticalMapData = Readonly<{
   selectedPoiId: string | null;
   pois: TacticalMapPoiMarker[];
   points: TacticalMapPointMarker[];
+}>;
+
+export type RevealSignalHudState = Readonly<{
+  active: boolean;
+  count: number;
+  nearestDistance: number | null;
+  nearestLabel: string | null;
+  remainingSeconds: number;
+  surveyorAffinity: boolean;
+  contextHint: string | null;
+  lastResult: string;
+}>;
+
+export type RevealAffinityHudState = Readonly<{
+  surveyor: boolean;
+  radius: number;
+  durationSeconds: number;
+  surveyorRadius: number;
+  surveyorDurationSeconds: number;
+  baseRadius: number;
+  baseDurationSeconds: number;
 }>;
 
 export type RaidHudState = Readonly<{
@@ -135,6 +158,8 @@ export type RaidHudState = Readonly<{
   landingSequence: OrbitalDeploymentSequenceState;
   navigationMarkers: HudNavigationMarker[];
   tacticalMap: TacticalMapData;
+  revealSignal: RevealSignalHudState;
+  revealAffinity: RevealAffinityHudState;
 }>;
 
 export class CombatHud {
@@ -160,6 +185,7 @@ export class CombatHud {
   private readonly eventBanner = document.createElement("div");
   private readonly condition = document.createElement("div");
   private readonly navigation = document.createElement("div");
+  private readonly revealSignal = document.createElement("div");
   private readonly landingSequence = document.createElement("div");
   private readonly tacticalMap = document.createElement("div");
   private readonly visibilityTools = document.createElement("div");
@@ -222,6 +248,7 @@ export class CombatHud {
     this.eventBanner.className = "event-banner";
     this.condition.className = "condition-chip";
     this.navigation.className = "navigation-markers";
+    this.revealSignal.className = "reveal-signal-hud";
     this.landingSequence.className = "landing-sequence-hud";
     this.tacticalMap.className = "tactical-map-overlay";
     this.visibilityTools.className = "visibility-tools";
@@ -267,6 +294,7 @@ export class CombatHud {
       this.eventBanner,
       this.condition,
       this.navigation,
+      this.revealSignal,
       this.landingSequence,
       this.tacticalMap,
       this.visibilityTools,
@@ -391,9 +419,12 @@ export class CombatHud {
     this.condition.classList.toggle("hidden", !showRaidHud || landingActive);
     this.navigation.innerHTML = this.formatNavigationMarkers(raid.navigationMarkers);
     this.navigation.classList.toggle("hidden", !showRaidHud || landingActive || raid.navigationMarkers.length === 0);
+    this.revealSignal.innerHTML = this.formatRevealSignal(raid.revealSignal);
+    this.revealSignal.classList.toggle("hidden", !showRaidHud || landingActive || !raid.revealSignal.active);
+    this.revealSignal.classList.toggle("empty", raid.revealSignal.active && raid.revealSignal.count === 0);
     this.landingSequence.innerHTML = this.formatLandingSequence(raid.landingSequence);
     this.landingSequence.classList.toggle("active", landingActive);
-    this.tacticalMap.innerHTML = this.formatTacticalMap(raid.tacticalMap);
+    this.tacticalMap.innerHTML = this.formatTacticalMap(raid.tacticalMap, raid.revealAffinity);
     this.tacticalMap.classList.toggle("active", showRaidHud && !landingActive && raid.tacticalMap.open);
     this.visibilityTools.innerHTML = this.formatVisibilityTools(raid.visibilityTools, raid.tacticalTool);
     this.visibilityTools.classList.toggle("hidden", !showRaidHud || landingActive);
@@ -645,7 +676,8 @@ export class CombatHud {
       <div class="inventory-slot filled${selected ? " selected" : ""}" data-loot-action="select" data-slot-id="${item.id}" style="--rarity-color: ${color}">
         <span>${item.label}</span>
         <small>${item.quantity > 1 ? `x${item.quantity}` : `${item.slots} slot${item.slots > 1 ? "s" : ""}`} | ${definition.rarity}</small>
-        ${this.formatItemTooltip(item.type, item.quantity)}
+        ${this.formatItemTooltip(item.type, item.quantity, raid)}
+        ${selected ? this.formatInventoryRevealAffinity(item.type, raid) : ""}
         ${weaponActions}
         <footer class="inventory-slot-actions">
           ${useAction}
@@ -737,7 +769,7 @@ export class CombatHud {
             <span>${item.label}</span>
             <small>${known ? `${item.quantity > 1 ? `x${item.quantity}` : `${definition.slots} slot${definition.slots > 1 ? "s" : ""}`} | ${definition.rarity} | ${definition.stackable ? "stacks" : "does not stack"}` : `x${item.quantity} | unknown server item | claimable`}</small>
             <button type="button" class="loot-take-button" data-loot-action="take" data-container-id="${container.id}" data-item-index="${index}">Take</button>
-            ${known ? this.formatItemTooltip(item.type, item.quantity) : ""}
+            ${known ? this.formatItemTooltip(item.type, item.quantity, raid) : ""}
           </div>
         `;
       }).join("")
@@ -756,11 +788,16 @@ export class CombatHud {
     `;
   }
 
-  private formatItemTooltip(type: LootStack["type"], quantity: number): string {
+  private formatItemTooltip(type: LootStack["type"], quantity: number, raid: RaidHudState): string {
     const definition = getItemDefinition(type);
     const profile = getItemUseProfile(type);
     const futureUse = profile.futureUse ? `<span>Future: ${profile.futureUse}</span>` : "";
     const blocked = !profile.usableInRaid && profile.blockedReason ? `<span>${profile.blockedReason}</span>` : "";
+    const affinity = type === "essence-flare"
+      ? `<span>${raid.revealAffinity.surveyor
+        ? `Surveyor affinity active: ${raid.revealAffinity.surveyorRadius}m scan / ${raid.revealAffinity.surveyorDurationSeconds}s signal.`
+        : `Surveyor class extends this scan to ${raid.revealAffinity.surveyorRadius}m / ${raid.revealAffinity.surveyorDurationSeconds}s.`}</span>`
+      : "";
     return `
       <span class="item-tooltip">
         <strong>${definition.label}</strong>
@@ -769,9 +806,24 @@ export class CombatHud {
         <span>${definition.stackable ? `Stack x${quantity}` : "Non-stackable"} | ${definition.slots} slot${definition.slots > 1 ? "s" : ""}</span>
         <span>${definition.description}</span>
         <span>Current: ${profile.currentUse}</span>
+        ${affinity}
         ${futureUse}
         ${blocked}
         <span>Value ${definition.value * quantity} | ${definition.use}</span>
+      </span>
+    `;
+  }
+
+  private formatInventoryRevealAffinity(type: LootStack["type"], raid: RaidHudState): string {
+    if (type !== "essence-flare") {
+      return "";
+    }
+    const affinity = raid.revealAffinity;
+    return `
+      <span class="inventory-reveal-affinity">
+        ${affinity.surveyor
+          ? `Surveyor affinity active: ${affinity.surveyorRadius}m scan / ${affinity.surveyorDurationSeconds}s signal.`
+          : `Surveyor class extends this scan. Base scan ${affinity.baseRadius}m / ${affinity.baseDurationSeconds}s.`}
       </span>
     `;
   }
@@ -893,7 +945,7 @@ export class CombatHud {
     `;
   }
 
-  private formatTacticalMap(map: TacticalMapData): string {
+  private formatTacticalMap(map: TacticalMapData, affinity?: RevealAffinityHudState): string {
     if (!map.open) {
       return "";
     }
@@ -915,16 +967,24 @@ export class CombatHud {
     const pointMarkers = map.points.map((point) => {
       const x = toPercent(point.x);
       const y = toPercent(point.z);
+      const signalDetail = point.kind === "signal"
+        ? `<em>${point.distance !== undefined ? `${Math.max(0, Math.round(point.distance))}m` : ""}${point.remainingSeconds !== undefined ? ` | ${Math.ceil(point.remainingSeconds)}s` : ""}</em>`
+        : "";
       return `<span class="tactical-map-marker point ${point.kind} ${point.active ? "active" : ""}"
         style="left: ${x}%; top: ${y}%"
         title="${point.label}">
         ${point.kind === "breadcrumb" ? "" : `<b>${point.label}</b>`}
+        ${signalDetail}
       </span>`;
     }).join("");
     const routeDots = map.points.filter((point) => point.kind === "breadcrumb");
+    const signalPoints = map.points.filter((point) => point.kind === "signal");
     const routeHint = routeDots.length > 0
       ? `<small>Contract route hint active: ${routeDots.length} low-power pings</small>`
       : `<small>No contract route pings active</small>`;
+    const signalHint = signalPoints.length > 0
+      ? `<small>Lumen signals active: ${signalPoints.length}${affinity?.surveyor ? " | Surveyor extended scan active" : ""}</small>`
+      : `<small>${affinity?.surveyor ? `Surveyor scan ready: ${affinity.surveyorRadius}m / ${affinity.surveyorDurationSeconds}s with Essence Flare` : "Scanner Battery: future scanner power component"}</small>`;
 
     return `
       <section class="tactical-map-panel">
@@ -952,11 +1012,13 @@ export class CombatHud {
             <p>${selectedPoi ? `${selectedPoi.danger}. ${selectedPoi.lootProfile}. ${Math.round(selectedPoi.distance)}m from current position.` : "Select a marker for details."}</p>
             ${selectedPoi?.activeContract ? `<em>Active contract destination</em>` : ""}
             ${routeHint}
+            ${signalHint}
             <div class="tactical-map-legend">
               <span class="you">You</span>
               <span class="ship">Ship</span>
               <span class="contract">Contract</span>
               <span class="objective">Objective</span>
+              <span class="signal">Lumen Signal</span>
               <span class="extract">Extraction</span>
               <span class="risk">High Risk</span>
             </div>
@@ -984,6 +1046,32 @@ export class CombatHud {
       <strong>${activeTools}</strong>
       <span>${tacticalTool.label}: ${charges}${cooldown}${warning}</span>
       <span>Battery ${Math.ceil(tools.battery)}% placeholder</span>
+    `;
+  }
+
+  private formatRevealSignal(signal: RevealSignalHudState): string {
+    if (!signal.active) {
+      return "";
+    }
+
+    const windowText = signal.remainingSeconds > 0
+      ? `Reveal window: ${Math.ceil(signal.remainingSeconds)}s`
+      : "Reveal window closing";
+    if (signal.count <= 0) {
+      return `
+        <strong>NO LUMEN SIGNATURES DETECTED</strong>
+        <span>${windowText}</span>
+        ${signal.surveyorAffinity ? `<em class="surveyor-affinity">Surveyor scan extension active</em>` : ""}
+      `;
+    }
+
+    return `
+      <strong>SIGNAL REVEALED</strong>
+      <span>Lumen signatures: ${signal.count}</span>
+      <span>Nearest ${signal.nearestLabel ?? "Lumen signature"}: ${signal.nearestDistance !== null ? `${Math.round(signal.nearestDistance)}m` : "unknown"}</span>
+      <span>${windowText}</span>
+      ${signal.contextHint ? `<em>${signal.contextHint}</em>` : ""}
+      ${signal.surveyorAffinity ? `<em class="surveyor-affinity">Surveyor scan extension active</em>` : ""}
     `;
   }
 

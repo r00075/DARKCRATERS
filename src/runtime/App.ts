@@ -69,7 +69,7 @@ import {
   type LoadoutManagerState,
 } from "../raid/LoadoutManager";
 import { LootDirector } from "../raid/LootDirector";
-import { LumenRevealSystem, type LumenRevealResult } from "../raid/LumenRevealSystem";
+import { LumenRevealSystem, type LumenRevealResult, type RevealedSignal } from "../raid/LumenRevealSystem";
 import type { ObjectiveState } from "../raid/ObjectiveDirector";
 import { ObjectiveDirector } from "../raid/ObjectiveDirector";
 import { PersistentStash } from "../raid/PersistentStash";
@@ -117,7 +117,7 @@ import { InputController, type InputMode, type InputSnapshot } from "../input/In
 import { clamp, yawToBasis } from "../math/angles";
 import { createWorld, type WorldMap } from "../world/createWorld";
 import { extractionZoneDefinitions, mapLayoutConfig, poiDefinitions, type ExtractionZoneDefinition } from "../world/MapLayout";
-import { CombatHud, type HudNavigationMarker, type RaidOutcome, type RaidScreen, type TacticalMapData } from "../ui/CombatHud";
+import { CombatHud, type HudNavigationMarker, type RaidOutcome, type RaidScreen, type RevealSignalHudState, type TacticalMapData } from "../ui/CombatHud";
 import { LoadingScreenManager } from "../ui/LoadingScreenManager";
 import { VisibilityToolManager, type VisibilityToolState } from "../visibility/VisibilityToolManager";
 import {
@@ -379,6 +379,8 @@ export class App {
   private raidUiNavigationCooldown = 0;
   private tacticalMapOpen = false;
   private tacticalMapSelectedPoiId: string | null = null;
+  private lastRevealHudLogAt = 0;
+  private lastTacticalMapRevealLogKey = "";
   private poiArrivalVisited = new Set<string>();
   private travelEventCooldown = 32;
   private lastTravelEvent = "none";
@@ -737,6 +739,8 @@ export class App {
           landingSequence: this.shipLandingState,
           navigationMarkers: this.getNavigationMarkers(),
           tacticalMap: this.getTacticalMapData(),
+          revealSignal: this.getRevealSignalHudState(),
+          revealAffinity: this.getRevealAffinityState(),
         },
       );
       this.updateDebugOverlay();
@@ -1776,13 +1780,49 @@ export class App {
   private activateLumenRevealPulse(): LumenRevealResult {
     const playerPosition = this.player.state.position;
     const selectedClassId = this.classManager.snapshot.selectedClassId;
-    const surveyorAffinity = selectedClassId === "surveyor";
+    const revealAffinity = this.getRevealAffinityState(selectedClassId);
     this.noiseSystem.emit("loot", playerPosition, this.environmentState.gameplay);
     return this.lumenRevealSystem.activateEssenceFlare(playerPosition, this.enemyDebugStates, {
       classId: selectedClassId,
-      radius: surveyorAffinity ? 36 : 30,
-      durationSeconds: surveyorAffinity ? 12 : 10,
+      radius: revealAffinity.radius,
+      durationSeconds: revealAffinity.durationSeconds,
+      surveyorAffinity: revealAffinity.surveyor,
     });
+  }
+
+  private isSurveyorClass(classId: string | null | undefined = this.classManager.snapshot.selectedClassId): boolean {
+    const normalized = String(classId ?? "").trim().toLowerCase();
+    if (normalized === "surveyor") {
+      return true;
+    }
+    const selectedClass = this.classManager.selectedClass;
+    return selectedClass.displayName.trim().toLowerCase() === "surveyor" ||
+      selectedClass.roleLabel.trim().toLowerCase().includes("signal reading");
+  }
+
+  private getRevealAffinityState(classId: string | null | undefined = this.classManager.snapshot.selectedClassId): {
+    surveyor: boolean;
+    radius: number;
+    durationSeconds: number;
+    surveyorRadius: number;
+    surveyorDurationSeconds: number;
+    baseRadius: number;
+    baseDurationSeconds: number;
+  } {
+    const surveyor = this.isSurveyorClass(classId);
+    const baseRadius = 45;
+    const baseDurationSeconds = 18;
+    const surveyorRadius = 55;
+    const surveyorDurationSeconds = 24;
+    return {
+      surveyor,
+      radius: surveyor ? surveyorRadius : baseRadius,
+      durationSeconds: surveyor ? surveyorDurationSeconds : baseDurationSeconds,
+      surveyorRadius,
+      surveyorDurationSeconds,
+      baseRadius,
+      baseDurationSeconds,
+    };
   }
 
   private logItemUse(item: LootType, ok: boolean, reason: string): void {
@@ -1855,7 +1895,7 @@ export class App {
       <span>Crater Run: timer ${Math.ceil(this.raidTimerState.timeRemaining)}s/${this.selectedRaidDefinition.lengthSeconds}s | extract ${this.raidTimerState.extractionUnlocked ? "active" : "locked"} | Risk ${this.getDistanceRiskTier()}</span>
       <span>EVA Pack: ${this.raidInventory.usedSlots} / ${this.raidInventory.capacity}</span>
       <span>Loot Containers: ${this.lootDirector.containerCount} | Active enemies: ${this.enemyDebugStates.length}</span>
-      <span>Reveal Tool: last ${revealDebug.lastItem ?? "none"} ${revealDebug.lastResult} | class ${revealDebug.lastClassId} | radius ${revealDebug.lastRadius}m/${revealDebug.lastDurationSeconds}s | targets ${revealDebug.lastTargetCount} raw ${revealDebug.lastRawTargetCount} grouped ${revealDebug.lastGroupedTargetCount} | active markers ${revealDebug.activeMarkerCount} | revealed ${revealDebug.activeRevealedCount}</span>
+      <span>Reveal Tool: last ${revealDebug.lastItem ?? "none"} ${revealDebug.lastResult} | class ${revealDebug.lastClassId} | radius ${revealDebug.lastRadius}m/${revealDebug.lastDurationSeconds}s | targets ${revealDebug.lastTargetCount} raw ${revealDebug.lastRawTargetCount} grouped ${revealDebug.lastGroupedTargetCount} | dead skipped ${revealDebug.lastDeadTargetSkips} cleaned ${revealDebug.lastDeadSignalCleanups} | active markers ${revealDebug.activeMarkerCount} | revealed ${revealDebug.activeRevealedCount}</span>
       <span>PvE Authority: ${this.multiplayerMode ? (multiplayer.status === "connected" ? "SERVER" : "DISCONNECTED") : "LOCAL"} | Server enemies ${multiplayer.authoritativeEnemyCount} | active ${multiplayer.activeEnemyCount} | dormant ${multiplayer.dormantEnemyCount} | rendered ${multiplayer.renderedNetworkEnemyCount}</span>
       <span>Enemy Net: tick ${multiplayer.enemyServerTickRate}/s | snapshot ${multiplayer.enemySnapshotRate}/s #${multiplayer.enemySnapshotId} | last ${multiplayer.lastEnemyEvent} | affected ${multiplayer.lastEnemyAffectedId ?? "none"} | corrections ${multiplayer.enemyCorrectionCount}</span>
       <span>Network Lifecycle: connected ${multiplayer.status === "connected" ? "true" : "false"} | room ${multiplayer.roomId ?? "none"} | last ${multiplayer.lastRoomLifecycleEvent} | reset ${multiplayer.lastNetworkStateResetReason} | enemy clear ${multiplayer.lastNetworkEnemyClearReason}</span>
@@ -2100,6 +2140,26 @@ export class App {
       points.push(...this.getContractBreadcrumbPoints(playerPosition, contractPoi.center));
     }
 
+    const revealSignalState = this.lumenRevealSystem.getSignalState(this.enemyDebugStates);
+    for (const signal of revealSignalState.signals) {
+      points.push({
+        id: `reveal-${signal.id}`,
+        label: "Lumen Signal",
+        x: signal.position.x,
+        z: signal.position.z,
+        kind: "signal",
+        active: true,
+        distance: signal.distance,
+        remainingSeconds: Math.max(0, (signal.expiresAt - performance.now()) / 1000),
+      });
+    }
+
+    const revealMapLogKey = `${revealSignalState.signals.length}:${Math.ceil(revealSignalState.remainingSeconds)}`;
+    if (this.tacticalMapOpen && revealSignalState.active && this.lastTacticalMapRevealLogKey !== revealMapLogKey) {
+      this.lastTacticalMapRevealLogKey = revealMapLogKey;
+      console.info(`[TacticalMap] reveal markers count=${revealSignalState.signals.length}`);
+    }
+
     return {
       open: this.tacticalMapOpen,
       mapSize: mapLayoutConfig.size,
@@ -2122,6 +2182,57 @@ export class App {
       })),
       points,
     };
+  }
+
+  private getRevealSignalHudState(): RevealSignalHudState {
+    const state = this.lumenRevealSystem.getSignalState(this.enemyDebugStates);
+    const nearest = state.nearest;
+    const contextHint = nearest ? this.getRevealSignalContextHint(nearest) : null;
+    const now = performance.now();
+    if (state.active && now - this.lastRevealHudLogAt >= 1000) {
+      this.lastRevealHudLogAt = now;
+      console.info(`[HUD] reveal signal count=${state.count} nearest=${nearest ? nearest.distance.toFixed(1) : "none"}`);
+    }
+    return {
+      active: state.active,
+      count: state.count,
+      nearestDistance: nearest?.distance ?? null,
+      nearestLabel: nearest?.label ?? null,
+      remainingSeconds: state.remainingSeconds,
+      surveyorAffinity: state.surveyorAffinity,
+      contextHint,
+      lastResult: state.lastResult,
+    };
+  }
+
+  private getRevealSignalContextHint(signal: RevealedSignal): string | null {
+    const objectiveDistance = this.horizontalDistance(signal.position, this.objectiveState.targetPosition);
+    if (!this.objectiveState.completed && objectiveDistance <= 36) {
+      return "Signal near primary objective zone";
+    }
+
+    const poiObjective = this.poiObjectiveState.objectives
+      .filter((objective) => !objective.completed)
+      .map((objective) => ({
+        objective,
+        distance: this.horizontalDistance(signal.position, objective.markerPosition),
+      }))
+      .sort((a, b) => a.distance - b.distance)[0] ?? null;
+    if (poiObjective && poiObjective.distance <= 36) {
+      return `Lumen activity near ${poiObjective.objective.poiName}`;
+    }
+
+    const poi = poiDefinitions
+      .map((definition) => ({
+        definition,
+        distance: this.horizontalDistance(signal.position, definition.center),
+      }))
+      .sort((a, b) => a.distance - b.distance)[0] ?? null;
+    if (poi && poi.distance <= 48) {
+      return `Lumen activity near ${poi.definition.name}`;
+    }
+
+    return null;
   }
 
   private getContractBreadcrumbPoints(from: Vector3, to: Vector3): TacticalMapData["points"] {
@@ -3971,6 +4082,8 @@ export class App {
     this.selectedLootIndex = 0;
     this.tacticalMapOpen = false;
     this.tacticalMapSelectedPoiId = null;
+    this.lastRevealHudLogAt = 0;
+    this.lastTacticalMapRevealLogKey = "";
     this.poiArrivalVisited = new Set<string>();
     this.travelEventCooldown = 34;
     this.lastTravelEvent = "none";
@@ -5783,6 +5896,7 @@ export class App {
                   <div><span>Available</span><strong>${selectedAvailability}</strong></div>
                   <div><span>Category</span><strong>${selectedDefinition.category}</strong></div>
                   <div><span>Use</span><strong>${selectedDefinition.use}</strong></div>
+                  ${this.renderRevealAffinityDetail(selectedType)}
                   <footer>${selectedType ? this.renderLoadoutCompatibilityActions(selectedType, selectedAvailability, selectedWeaponId) : ""}</footer>
                 </article>`
               : `<article class="loadout-details-card hq-muted-card">
@@ -5823,6 +5937,22 @@ export class App {
       ${equipButton}
       ${packButton}
       <button type="button" data-action="stash">Open Stash</button>
+    `;
+  }
+
+  private renderRevealAffinityDetail(type: LootType | null): string {
+    if (type !== "essence-flare") {
+      return "";
+    }
+    const affinity = this.getRevealAffinityState();
+    const copy = affinity.surveyor
+      ? `Surveyor affinity active: ${affinity.surveyorRadius}m scan / ${affinity.surveyorDurationSeconds}s signal.`
+      : `Surveyor class extends this scan to ${affinity.surveyorRadius}m / ${affinity.surveyorDurationSeconds}s.`;
+    return `
+      <div class="loadout-reveal-affinity">
+        <span>Lumen Reveal</span>
+        <strong>${copy}</strong>
+      </div>
     `;
   }
 
@@ -6087,6 +6217,7 @@ export class App {
         <div><span>Use</span><strong>${definition.use}</strong></div>
         <div><span>Value</span><strong>${definition.value}</strong></div>
         <div><span>Carry Size</span><strong>${definition.slots} slot${definition.slots > 1 ? "s" : ""}</strong></div>
+        ${this.renderRevealAffinityDetail(type)}
         ${stats}
         ${attachmentStats}
         <em>Items brought into a Crater Run are lost on death unless they are free starter gear.</em>

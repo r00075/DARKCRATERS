@@ -256,7 +256,7 @@ export const itemDefinitions: Record<LootType, ItemDefinition> = {
       roles: ["craft", "reveal", "future"],
       usableInRaid: false,
       usableInHQ: true,
-      currentUse: "Utility power cell for reveal scanners and Lumen field devices.",
+      currentUse: "Scanner Battery: future scanner power component.",
       futureUse: "Future power cell for persistent Lumen scanner tools.",
       blockedReason: "Used in crafting and future scanner systems. Not directly usable in raid yet.",
     },
