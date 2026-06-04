@@ -93,6 +93,7 @@ import {
   type RaidResultSummary,
 } from "../raid/RaidResultSummary";
 import { RaidTimer, type RaidTimerState } from "../raid/RaidTimer";
+import { buildMissionPresentation, type MissionPresentation } from "../raid/MissionPresentation";
 import { Reputation } from "../raid/Reputation";
 import {
   controllerButtonLabels,
@@ -387,6 +388,9 @@ export class App {
   private lastTacticalMapRevealLogKey = "";
   private lastTacticalNavLogKey = "";
   private lastTacticalNavUnavailableLogKey = "";
+  private lastMissionBriefingLogKey = "";
+  private lastMissionObjectiveLogKey = "";
+  private lastMissionOutcomeLogKey = "";
   private poiArrivalVisited = new Set<string>();
   private travelEventCooldown = 32;
   private lastTravelEvent = "none";
@@ -742,6 +746,7 @@ export class App {
           shipModuleSummary: this.getShipModuleSummary(),
           shipCargoItems: this.shipManager.cargoItems,
           heavyCargo: this.heavyCargoState,
+          mission: this.getMissionPresentation(),
           landingSequence: this.shipLandingState,
           navigationMarkers: this.getNavigationMarkers(),
           routeHint: this.getTacticalRouteHint(),
@@ -2162,6 +2167,64 @@ export class App {
     };
   }
 
+  private getMissionPresentation(): MissionPresentation {
+    const routeHint = this.getTacticalRouteHint();
+    return buildMissionPresentation({
+      activeContract: this.contractManager.snapshot.active,
+      objective: this.objectiveState,
+      poiObjectives: this.poiObjectiveState,
+      heavyCargo: this.heavyCargoState,
+      objectiveCompleted: this.objectiveWasCompleted,
+      extractionAvailable: this.isExtractionAvailable,
+      routeTargetLabel: routeHint?.label ?? null,
+      routeTargetType: routeHint?.type ?? null,
+      outcome: this.raidOutcome,
+      resultSummary: this.raidResultSummary,
+    });
+  }
+
+  private logMissionBriefing(): void {
+    const mission = this.getMissionPresentation();
+    const key = `${mission.id}:${mission.familyId}:${this.selectedRaidDefinition.id}`;
+    if (this.lastMissionBriefingLogKey === key) {
+      return;
+    }
+
+    this.lastMissionBriefingLogKey = key;
+    console.info(`[MissionUX] briefing mission=${mission.id} family=${mission.familyId}`);
+  }
+
+  private logMissionObjectiveUpdate(step: string): void {
+    const mission = this.getMissionPresentation();
+    const key = `${mission.id}:${step}`;
+    if (this.lastMissionObjectiveLogKey === key) {
+      return;
+    }
+
+    this.lastMissionObjectiveLogKey = key;
+    console.info(`[MissionUX] objective updated id=${mission.id} step=${step}`);
+  }
+
+  private logMissionObjectiveComplete(): void {
+    const mission = this.getMissionPresentation();
+    console.info(`[MissionUX] objective complete id=${mission.id}`);
+  }
+
+  private logMissionRewardAvailable(source: string): void {
+    console.info(`[MissionUX] reward available source=${source}`);
+  }
+
+  private logMissionOutcome(): void {
+    const mission = this.getMissionPresentation();
+    const key = `${mission.id}:${mission.result}:${this.poiObjectiveOutcomesThisRaid.length}`;
+    if (this.lastMissionOutcomeLogKey === key) {
+      return;
+    }
+
+    this.lastMissionOutcomeLogKey = key;
+    console.info(`[MissionUX] outcome result=${mission.result} primary=${mission.status} poi=${this.poiObjectiveOutcomesThisRaid.length}`);
+  }
+
   private getTacticalNavTargetById(id: string, playerPosition: Vector3 = this.player.state.position): TacticalNavTarget | null {
     return this.getTacticalNavCandidates(playerPosition).find((target) => target.id === id) ?? null;
   }
@@ -2281,6 +2344,7 @@ export class App {
         selectedPoiId: null,
         selectedTargetId: null,
         trackedTarget: null,
+        mission: this.getMissionPresentation(),
         pois: [],
         points: [],
       };
@@ -2471,6 +2535,7 @@ export class App {
       selectedPoiId: this.tacticalMapSelectedPoiId,
       selectedTargetId: this.tacticalMapSelectedTargetId,
       trackedTarget: routeHint,
+      mission: this.getMissionPresentation(),
       pois: poiDefinitions.map((poi) => ({
         id: poi.id,
         name: poi.name,
@@ -3474,6 +3539,7 @@ export class App {
       }
       this.lastInteractConsumedBy = "heavy-cargo-drop";
       this.combatHud.showLootNotification("CORE DROPPED - RECOVERABLE | Movement restored");
+      this.logMissionObjectiveUpdate("recover dropped Helium-3 core");
       this.sfxAudio.playEvent("heavy.drop");
       this.logHeavyCargoUiActionComplete("drop");
       return true;
@@ -3531,6 +3597,7 @@ export class App {
       } else if (this.heavyCargoManager.tryLocalRelease(this.player.state.position)) {
         this.heavyCargoState = this.heavyCargoManager.update(this.player.state, this.landedShip.cargoAccessPosition);
         this.combatHud.showLootNotification("HEAVY CORE RELEASED | E: Carry core");
+        this.logMissionObjectiveUpdate("core released");
         this.sfxAudio.playEvent("heavy.release");
       }
       this.lastInteractConsumedBy = "heavy-cargo-release";
@@ -3567,6 +3634,7 @@ export class App {
 
   private onHeavyCargoPickedUp(): void {
     this.combatHud.showLootNotification("CORE SIGNATURE EXPOSED | LUMEN RESPONSE INBOUND | RETURN CORE TO SHIP");
+    this.logMissionObjectiveUpdate("return core to ship");
     this.sfxAudio.playEvent("heavy.pickup");
     this.sfxAudio.playEvent("heavy.exposed");
     this.noiseSystem.emit("loot", this.heavyCargoState.position, this.environmentState.gameplay, 1.6);
@@ -3584,6 +3652,11 @@ export class App {
     this.shipState = this.shipManager.secureHeavyCargo("Helium-3 Drill Core");
     this.landedShip.applyShipState(this.shipState);
     this.updateActiveExtractionZones();
+    if (this.tacticalNavTarget?.id === "heavy-core") {
+      this.clearTacticalNavTarget("objective-complete");
+      this.combatHud.showLootNotification("Route cleared: objective complete");
+    }
+    this.logMissionObjectiveComplete();
     this.combatHud.showLootNotification("HEAVY CARGO LOADED | EXTRACTION SIGNAL AVAILABLE");
     this.sfxAudio.playEvent("heavy.secure");
   }
@@ -3940,6 +4013,7 @@ export class App {
       poiObjectiveOutcome: this.getPoiObjectiveOutcome(outcome),
       vendorReputationGained: this.getVendorReputationSummary(outcome),
     };
+    this.logMissionOutcome();
   }
 
   private getRaidSurvivalStatus(kind: RaidResultKind): string {
@@ -4397,6 +4471,8 @@ export class App {
     this.lastRevealHudLogAt = 0;
     this.lastRevealHudLogKey = "";
     this.lastTacticalMapRevealLogKey = "";
+    this.lastMissionObjectiveLogKey = "";
+    this.lastMissionOutcomeLogKey = "";
     this.poiArrivalVisited = new Set<string>();
     this.travelEventCooldown = 34;
     this.lastTravelEvent = "none";
@@ -4474,6 +4550,7 @@ export class App {
     );
     this.poiObjectiveState = this.poiObjectiveManager.state;
     this.objectiveWasCompleted = false;
+    this.logMissionBriefing();
     this.multiplayerExtractSent = false;
     this.multiplayerDeathSent = false;
     this.multiplayerDownedSent = false;
@@ -4628,8 +4705,10 @@ export class App {
       this.objectiveWasCompleted = true;
       if (this.tacticalNavTarget?.id === "primary-objective") {
         this.clearTacticalNavTarget("objective-complete");
+        this.combatHud.showLootNotification("Route cleared: objective complete");
       }
-      this.combatHud.showLootNotification("Objective complete");
+      this.logMissionObjectiveComplete();
+      this.combatHud.showLootNotification(`Objective Complete: ${this.objectiveState.title}`);
     }
   }
 
@@ -4646,12 +4725,14 @@ export class App {
       if (event.type === "completed") {
         if (this.tacticalNavTarget?.id === event.objectiveId) {
           this.clearTacticalNavTarget("poi-objective-complete");
+          this.combatHud.showLootNotification("Route cleared: objective complete");
         }
         const completedObjective = this.poiObjectiveState.objectives.find((objective) => objective.id === event.objectiveId);
         const label = completedObjective
           ? `${completedObjective.title} - ${completedObjective.poiName}`
           : event.message;
         this.poiObjectiveOutcomesThisRaid = [...new Set([...this.poiObjectiveOutcomesThisRaid, label])];
+        this.logMissionObjectiveUpdate(label);
         this.contractObjectiveCompletedThisRaid ||= this.isActiveContractPoiObjectiveEvent(event);
         this.contractManager.record({
           type: "poi-objective-completed",
@@ -4663,7 +4744,16 @@ export class App {
           this.multiplayerClient.sendObjectiveComplete(event.objectiveId, event.objectiveType, event.poiId);
         }
       }
-      this.combatHud.showLootNotification(event.message);
+      if (event.type === "chest-unlocked") {
+        const completedObjective = this.poiObjectiveState.objectives.find((objective) => objective.id === event.objectiveId);
+        const source = completedObjective
+          ? `${completedObjective.poiName} ${completedObjective.title}`
+          : event.message;
+        this.logMissionRewardAvailable(source);
+        this.combatHud.showLootNotification(`Reward Cache Unlocked: ${source}`);
+      } else {
+        this.combatHud.showLootNotification(`Objective Complete: ${event.message}`);
+      }
     }
   }
 
@@ -4767,6 +4857,7 @@ export class App {
       : `<strong>None</strong>`;
     const activeContract = this.contractManager.snapshot.active?.definition;
     const activeContractLabel = activeContract ? activeContract.title : "No active contract";
+    const mission = this.getMissionPresentation();
     this.menuContent.innerHTML = `
       <div class="hq-screen hq-command-deck">
         <header class="hq-command-topbar">
@@ -4812,11 +4903,18 @@ export class App {
           </div>
         </section>
         <section class="hq-deploy-panel">
-          <span>Selected Operation</span>
-          <strong>${this.selectedRaidDefinition.name}</strong>
-          <p>${this.selectedRaidDefinition.description}</p>
+          <span>TYCHOSTAR FIELD ORDER</span>
+          <strong>${mission.title}</strong>
+          <p>${mission.briefing}</p>
           <div>
-            <span>Mode</span><strong>Solo / Co-op Ready</strong>
+            <span>Family</span><strong>${mission.familyName}</strong>
+            <span>Primary</span><strong>${mission.primaryObjective}</strong>
+            <span>Step</span><strong>${mission.currentStep}</strong>
+            <span>Optional</span><strong>${mission.optionalObjective}</strong>
+            <span>Extraction</span><strong>${mission.extraction}</strong>
+            <span>Risk</span><strong>${mission.risk}</strong>
+            <span>Route</span><strong>${mission.recommendedRoute}</strong>
+            <span>Mode</span><strong>${mission.soloSquad}</strong>
             <span>Gear</span><strong>${gearScore} / ${this.selectedRaidDefinition.recommendedGearScore} ${loadoutReady}</strong>
             <span>Ship</span><strong>${this.shipState.statusLabel}</strong>
             <span>Objective</span><strong>${activeContractLabel}</strong>
@@ -4850,6 +4948,7 @@ export class App {
     this.raidScreen = "raid-select";
     const gearScore = this.getGearScore();
     const activeContract = this.contractManager.snapshot.active?.definition;
+    const mission = this.getMissionPresentation();
     const cards = raidDefinitions.map((raid) => {
       const weak = gearScore < raid.recommendedGearScore;
       const active = raid.id === this.selectedRaidDefinition.id;
@@ -4870,7 +4969,8 @@ export class App {
           <small>Best for: ${raid.bestFor}</small>
           <small>Hazards: ${raid.environmentalHazards.join(" / ")}</small>
           <em>${raid.modifiers.join(" / ")}</em>
-          <small>${activeContract ? `Active contract: ${activeContract.title}` : "No active contract selected"}</small>
+          <small>${activeContract ? `Active contract: ${activeContract.title}` : `Primary order: ${mission.title}`}</small>
+          <small>Mission family: ${mission.familyName} | ${mission.soloSquad}</small>
           ${weak ? `<small class="raid-warning">Weak loadout: gear score ${gearScore}, recommended ${raid.recommendedGearScore}</small>` : ""}
           <button type="button" data-action="launch-raid-${raid.id}">Launch Crater Run</button>
         </article>
@@ -4889,6 +4989,7 @@ export class App {
             <span>Gear Score</span><strong>${gearScore}</strong>
             <span>Selected</span><strong>T${this.selectedRaidDefinition.tier}</strong>
             <span>Contract</span><strong>${activeContract ? "Active" : "None"}</strong>
+            <span>Family</span><strong>${mission.familyName}</strong>
           </div>
           <button type="button" data-action="menu">Back</button>
         </header>
@@ -4911,6 +5012,7 @@ export class App {
     const credits = this.vendorManager.snapshot.credits;
     const scrap = this.getStashQuantity("scrap");
     const rareCores = this.getStashQuantity("rare-core");
+    const mission = this.getMissionPresentation();
     const integrityPercent = Math.max(0, Math.min(100, Math.round(this.shipState.integrity)));
     const conditionLabel = integrityPercent >= 80 ? "GOOD" : integrityPercent >= 55 ? "SERVICEABLE" : "COMPROMISED";
     const upgradeSlotsUsed = this.shipModuleManager.installedModules.filter((module) => module.tier > 0).length;
@@ -5038,9 +5140,11 @@ export class App {
         </section>
         <section class="ship-mission-panel">
           <span>Next Mission</span>
-          <strong>Crater Exploration</strong>
-          <div><span>Risk</span><b>Moderate</b></div>
-          <div><span>Travel Cost</span><b>120 H3</b></div>
+          <strong>${mission.title}</strong>
+          <div><span>Family</span><b>${mission.familyName}</b></div>
+          <div><span>Step</span><b>${mission.currentStep}</b></div>
+          <div><span>Risk</span><b>${mission.risk}</b></div>
+          <div><span>Route</span><b>${mission.recommendedRoute}</b></div>
           <button type="button" data-action="start">Launch Mission</button>
         </section>
       </div>
@@ -5067,6 +5171,7 @@ export class App {
     const modeLabel = mode === "multiplayer" ? "Multiplayer Crater Run" : mode === "solo" ? "Solo Crater Run" : "Assignment Review";
     const deployAction = mode === "multiplayer" ? "class-deploy-multiplayer" : "class-deploy-solo";
     const deployLabel = mode === "multiplayer" ? "Deploy Multiplayer" : "Deploy";
+    const mission = this.getMissionPresentation();
     const cards = classDefinitions.map((definition) => `
       <button
         type="button"
@@ -5094,10 +5199,17 @@ export class App {
           <button type="button" data-action="menu">Back</button>
         </header>
         <section class="class-deploy-brief">
-          <span>Operation</span>
-          <strong>${this.selectedRaidDefinition.name}</strong>
-          <p>${this.selectedRaidDefinition.description}</p>
+          <span>TYCHOSTAR FIELD ORDER</span>
+          <strong>${mission.title}</strong>
+          <p>${mission.briefing}</p>
           <div>
+            <span>Family</span><b>${mission.familyName}</b>
+            <span>Primary</span><b>${mission.primaryObjective}</b>
+            <span>Step</span><b>${mission.currentStep}</b>
+            <span>Optional</span><b>${mission.optionalObjective}</b>
+            <span>Extraction</span><b>${mission.extraction}</b>
+            <span>Risk</span><b>${mission.risk}</b>
+            <span>Route</span><b>${mission.recommendedRoute}</b>
             <span>Mode</span><b>${modeLabel}</b>
             <span>Gear</span><b>${gearScore} / ${this.selectedRaidDefinition.recommendedGearScore}</b>
             <span>Ship</span><b>${this.shipState.statusLabel}</b>

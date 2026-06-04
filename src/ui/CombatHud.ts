@@ -13,6 +13,7 @@ import type { HeavyCargoViewState } from "../raid/HeavyCargoManager";
 import type { ObjectiveState } from "../raid/ObjectiveDirector";
 import { getItemDefinition, getItemUseProfile } from "../raid/ItemDefinitions";
 import type { LootContainerView } from "../raid/LootDirector";
+import type { MissionPresentation } from "../raid/MissionPresentation";
 import type { POIObjectiveState, POIObjectiveView } from "../raid/POIObjectiveManager";
 import type { InventorySlot, LootEvent, LootStack } from "../raid/RaidInventory";
 import type { RaidResultSummary } from "../raid/RaidResultSummary";
@@ -116,6 +117,7 @@ export type TacticalMapData = Readonly<{
   selectedPoiId: string | null;
   selectedTargetId: string | null;
   trackedTarget: TacticalRouteHint | null;
+  mission: MissionPresentation;
   pois: TacticalMapPoiMarker[];
   points: TacticalMapPointMarker[];
 }>;
@@ -186,6 +188,7 @@ export type RaidHudState = Readonly<{
   shipModuleSummary: string;
   shipCargoItems: LootStack[];
   heavyCargo: HeavyCargoViewState;
+  mission: MissionPresentation;
   landingSequence: OrbitalDeploymentSequenceState;
   navigationMarkers: HudNavigationMarker[];
   routeHint: TacticalRouteHint | null;
@@ -488,7 +491,7 @@ export class CombatHud {
     this.ship.classList.toggle("readiness-compromised", raid.ship.readiness === "compromised");
     this.shoulder.textContent = `Shoulder: ${raid.shoulderSide === "right" ? "R" : "L"}`;
     this.shoulder.classList.toggle("hidden", !showRaidHud || landingActive);
-    this.objective.innerHTML = this.formatObjective(raid.objective, raid.heavyCargo);
+    this.objective.innerHTML = this.formatMissionObjective(raid.mission, raid.objective, raid.heavyCargo, raid.routeHint);
     this.objective.classList.toggle("hidden", !showRaidHud || landingActive);
     this.poiObjectives.innerHTML = this.formatPoiObjectives(raid.poiObjectives);
     this.poiObjectives.classList.toggle("hidden", !showRaidHud || landingActive || !raid.poiObjectives.active);
@@ -856,10 +859,21 @@ export class CombatHud {
       }).join("")
       : `<span class="loot-empty">No recoverable contents</span>`;
 
+    const linkedObjective = raid.poiObjectives.objectives.find((objective) => container.id === `${objective.id}-reward-chest`);
+    const source = linkedObjective
+      ? `Unlocked by: ${linkedObjective.poiName} ${linkedObjective.title}`
+      : container.id.includes("reward-chest") ? raid.mission.rewardStatus : "Recovered from local cache route";
+    const title = container.id.includes("reward-chest") ? "Objective Reward Cache" : container.title;
+    const depleted = container.status !== "loading" && container.items.length === 0;
+
     return `
       <section class="loot-container-panel">
         <header>
-          <strong>${container.title}</strong>
+          <div>
+            <strong>${title}</strong>
+            <span class="loot-cache-source">${source}</span>
+            ${depleted ? `<span class="loot-cache-source depleted">Cache depleted / claimed</span>` : ""}
+          </div>
           <button type="button" data-loot-action="close" data-container-id="${container.id}">Close</button>
         </header>
         <div>${items}</div>
@@ -1092,6 +1106,7 @@ export class CombatHud {
           tracked: selectedPoint.tracked === true,
           remainingSeconds: selectedPoint.remainingSeconds,
           copy: this.formatMapTargetCopy(selectedPoint.kind),
+          mission: this.formatMapTargetMissionCopy(selectedPoint, map.mission),
         }
       : selectedPoi
         ? {
@@ -1105,6 +1120,7 @@ export class CombatHud {
             tracked: map.trackedTarget?.id === `poi-${selectedPoi.id}`,
             remainingSeconds: undefined,
             copy: selectedPoi.activeContract ? "Route to active contract area. Rewards not confirmed from map data." : "Known location route only. Rewards not confirmed.",
+            mission: selectedPoi.activeContract ? "POI route supports the active contract." : "POI route is optional tactical context.",
           }
         : null;
     const playerX = toPercent(map.player.x);
@@ -1195,6 +1211,12 @@ export class CombatHud {
             <span class="tactical-map-player" style="left: ${playerX}%; top: ${playerY}%; transform: translate(-50%, -50%) rotate(${map.player.yaw}rad)"></span>
           </div>
           <aside>
+            <section class="tactical-map-mission">
+              <span>${map.mission.familyName}</span>
+              <strong>${map.mission.title}</strong>
+              <p>${map.mission.currentStep}</p>
+              <small>${map.mission.routeContext}</small>
+            </section>
             <span>Selected Target</span>
             <strong>${selectedTarget?.label ?? "No target selected"}</strong>
             <p>${selectedTarget
@@ -1205,6 +1227,7 @@ export class CombatHud {
               <span>Status</span><b>${selectedTarget.status}</b>
               <span>Source</span><b>${selectedTarget.source}</b>
               <span>Distance</span><b>${selectedTarget.distance !== undefined ? `${Math.round(selectedTarget.distance)}m` : "Pending"}</b>
+              <span>Mission</span><b>${selectedTarget.mission}</b>
             </div>` : ""}
             ${selectedTarget?.remainingSeconds !== undefined ? `<em>${Math.ceil(selectedTarget.remainingSeconds)}s signal window</em>` : ""}
             ${selectedTarget?.trackable
@@ -1298,6 +1321,16 @@ export class CombatHud {
     if (kind === "objective") return "Route to active objective. Objective completion clears this route.";
     if (kind === "ship" || kind === "cargo" || kind === "launch") return "Ship systems location route available.";
     return "Known location route only. Rewards not confirmed.";
+  }
+
+  private formatMapTargetMissionCopy(point: TacticalMapPointMarker, mission: MissionPresentation): string {
+    if (point.kind === "signal") return "Reveal signal context, not primary mission.";
+    if (point.kind === "extraction" || point.kind === "launch") return "Extraction route updates mission tracker.";
+    if (point.kind === "poiObjective") return "POI contract route with reward cache status.";
+    if (point.kind === "contract") return "Active contract staging area.";
+    if (point.kind === "objective") return mission.status === "complete" ? "Primary objective complete." : "Primary mission route.";
+    if (point.kind === "ship" || point.kind === "cargo") return "Ship route supports extraction and heavy cargo.";
+    return "Optional route context.";
   }
 
   private getSignalLabelOffsets(
@@ -1539,17 +1572,31 @@ export class CombatHud {
     return "Crater event";
   }
 
-  private formatObjective(objective: ObjectiveState, heavyCargo: HeavyCargoViewState): string {
+  private formatMissionObjective(
+    mission: MissionPresentation,
+    objective: ObjectiveState,
+    heavyCargo: HeavyCargoViewState,
+    routeHint: TacticalRouteHint | null,
+  ): string {
     const distance = Math.max(0, Math.round(objective.distance));
     const progress = Math.round(objective.progress * 100);
     const progressBar = objective.progress > 0 && !objective.completed
       ? `<div><span style="width: ${progress}%"></span></div>`
       : "";
     const heavyCargoLine = this.formatHeavyCargoObjectiveLine(heavyCargo);
+    const routeLine = routeHint
+      ? routeHint.type === "reveal-signal"
+        ? `Tracked tactical signal: ${routeHint.label} // ${Math.round(routeHint.distance)}m`
+        : `Tracked: ${routeHint.label} // ${Math.round(routeHint.distance)}m`
+      : "No route tracked";
 
     return `
-      <strong>${objective.completed ? "Objective Complete" : objective.title}</strong>
-      <span>${objective.description}</span>
+      <small class="mission-kicker">CONTRACT // ${mission.familyName}</small>
+      <strong>${mission.title}</strong>
+      <span>${mission.primaryObjective}</span>
+      <span>Step: ${mission.currentStep}</span>
+      <em>${mission.status.toUpperCase()} | ${routeLine}</em>
+      <span class="mission-optional">${mission.optionalObjective}</span>
       ${heavyCargoLine}
       <em>${distance}m</em>
       ${progressBar}
@@ -1614,11 +1661,18 @@ export class CombatHud {
 
     return `
       <span class="poi-objective-row ${objective.completed ? "complete" : ""} ${objective.contractLinked ? "contract-linked" : ""}" style="--rarity-color: ${color}">
-        <b>${objective.contractLinked ? "CONTRACT: " : ""}${objective.title}</b>
-        <em>${Math.round(objective.distance)}m | ${objective.poiName} | Threat ${objective.threatRating} | ${objective.rewardRarity}</em>
+        <b>${objective.contractLinked ? "CONTRACT: " : ""}${objective.poiName} ${objective.title}</b>
+        <em>${this.formatPoiContractStatus(objective)} | ${Math.round(objective.distance)}m | Threat ${objective.threatRating} | ${objective.rewardRarity}</em>
         ${progressBar}
       </span>
     `;
+  }
+
+  private formatPoiContractStatus(objective: POIObjectiveView): string {
+    if (objective.completed && objective.chestUnlocked) return "Reward available";
+    if (objective.completed) return "Objective complete";
+    if (objective.progress > 0) return "Interacting";
+    return objective.distance <= 18 ? "Approach and interact" : "Approach POI";
   }
 
   private formatActiveContract(contract: ActiveContractState | null, poiObjectives: POIObjectiveState): string {
@@ -1692,6 +1746,10 @@ export class CombatHud {
       <strong>${summary.title}</strong>
       <span>${summary.survivalStatus}</span>
       <section>
+        <div class="mission-outcome-summary">
+          <b>MISSION OUTCOME</b>
+          <span>Contract: ${raid.mission.title}<br>Family: ${raid.mission.familyName}<br>Result: ${raid.mission.result}<br>Primary: ${raid.mission.currentStep}<br>POI Contracts: ${raid.mission.poiContracts}<br>Reward Cache: ${raid.mission.rewardStatus}<br>Next: ${raid.mission.nextAction}</span>
+        </div>
         ${primaryRecovery}
         <div><b>Survival</b><span>${summary.survivalStatus}</span></div>
         <div><b>Run Duration</b><span>${this.formatDuration(summary.raidDurationSeconds)}</span></div>

@@ -445,6 +445,18 @@ body.input-mode-ui #app {
   gap: 8px;
 }
 
+.loot-cache-source {
+  display: block;
+  margin-top: 2px;
+  color: rgba(186, 230, 253, 0.82);
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.loot-cache-source.depleted {
+  color: rgba(250, 204, 21, 0.86);
+}
+
 .loot-container-panel header button,
 .loot-container-panel > button {
   border: 1px solid rgba(255, 255, 255, 0.22);
@@ -595,13 +607,30 @@ body.input-mode-ui #app {
 
 .objective-panel strong,
 .objective-panel span,
+.objective-panel small,
 .objective-panel em {
   display: block;
+}
+
+.objective-panel .mission-kicker {
+  margin-bottom: 3px;
+  color: rgba(65, 217, 255, 0.82);
+  font-size: 9px;
+  font-weight: 950;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .objective-panel strong {
   color: #f8fafc;
   font-size: 13px;
+}
+
+.objective-panel .mission-optional {
+  margin-top: 4px;
+  color: rgba(186, 230, 253, 0.82);
+  font-size: 10px;
+  font-weight: 800;
 }
 
 .objective-panel em {
@@ -1386,6 +1415,26 @@ body.input-mode-ui #app {
   border: 1px solid rgba(174, 182, 191, 0.16);
   border-radius: 8px;
   background: rgba(17, 23, 32, 0.58);
+}
+
+.tactical-map-mission {
+  border: 1px solid rgba(65, 217, 255, 0.24);
+  border-left: 3px solid rgba(65, 217, 255, 0.68);
+  border-radius: 8px;
+  margin-bottom: 9px;
+  padding: 8px 9px;
+  background: rgba(5, 7, 10, 0.44);
+}
+
+.tactical-map-mission span,
+.tactical-map-mission strong,
+.tactical-map-mission p,
+.tactical-map-mission small {
+  display: block;
+}
+
+.tactical-map-mission p {
+  margin: 4px 0 0;
 }
 
 .tactical-map-panel aside p,
@@ -6432,6 +6481,14 @@ body.input-mode-ui #app {
   border-radius: 8px;
   padding: 10px;
   background: rgba(15, 23, 42, 0.58);
+}
+
+.raid-outcome section .mission-outcome-summary {
+  border-color: rgba(65, 217, 255, 0.36);
+  border-left: 3px solid rgba(65, 217, 255, 0.82);
+  background:
+    linear-gradient(135deg, rgba(65, 217, 255, 0.1), transparent 48%),
+    rgba(8, 25, 34, 0.58);
 }
 
 .raid-outcome section b {
