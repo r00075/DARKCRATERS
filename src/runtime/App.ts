@@ -117,7 +117,7 @@ import { InputController, type InputMode, type InputSnapshot } from "../input/In
 import { clamp, yawToBasis } from "../math/angles";
 import { createWorld, type WorldMap } from "../world/createWorld";
 import { extractionZoneDefinitions, mapLayoutConfig, poiDefinitions, type ExtractionZoneDefinition } from "../world/MapLayout";
-import { CombatHud, type HudNavigationMarker, type RaidOutcome, type RaidScreen, type RevealSignalHudState, type TacticalMapData } from "../ui/CombatHud";
+import { CombatHud, type HudNavigationMarker, type RaidOutcome, type RaidScreen, type RevealSignalHudState, type TacticalMapData, type TacticalNavTarget, type TacticalRouteHint } from "../ui/CombatHud";
 import { LoadingScreenManager } from "../ui/LoadingScreenManager";
 import { VisibilityToolManager, type VisibilityToolState } from "../visibility/VisibilityToolManager";
 import {
@@ -379,9 +379,12 @@ export class App {
   private raidUiNavigationCooldown = 0;
   private tacticalMapOpen = false;
   private tacticalMapSelectedPoiId: string | null = null;
+  private tacticalMapSelectedTargetId: string | null = null;
+  private tacticalNavTarget: TacticalNavTarget | null = null;
   private lastRevealHudLogAt = 0;
   private lastRevealHudLogKey = "";
   private lastTacticalMapRevealLogKey = "";
+  private lastTacticalNavLogKey = "";
   private poiArrivalVisited = new Set<string>();
   private travelEventCooldown = 32;
   private lastTravelEvent = "none";
@@ -739,6 +742,7 @@ export class App {
           heavyCargo: this.heavyCargoState,
           landingSequence: this.shipLandingState,
           navigationMarkers: this.getNavigationMarkers(),
+          routeHint: this.getTacticalRouteHint(),
           tacticalMap: this.getTacticalMapData(),
           revealSignal: this.getRevealSignalHudState(),
           revealAffinity: this.getRevealAffinityState(),
@@ -1605,13 +1609,78 @@ export class App {
 
     if (action === "map-center-player") {
       this.tacticalMapSelectedPoiId = null;
+      this.tacticalMapSelectedTargetId = null;
       this.combatHud.showLootNotification("Map centered on player");
       return;
     }
 
     if (action?.startsWith("map-select-poi-")) {
       this.tacticalMapSelectedPoiId = action.replace("map-select-poi-", "");
+      this.tacticalMapSelectedTargetId = `poi-${this.tacticalMapSelectedPoiId}`;
+      console.info(`[TacticalMap] selected marker id=${this.tacticalMapSelectedTargetId} type=poi`);
+      return;
     }
+
+    if (action?.startsWith("map-select-target-")) {
+      const targetId = action.replace("map-select-target-", "");
+      this.selectTacticalMapTarget(targetId);
+      return;
+    }
+
+    if (action?.startsWith("map-track-")) {
+      const targetId = action.replace("map-track-", "");
+      this.trackTacticalMapTarget(targetId);
+      return;
+    }
+
+    if (action === "map-clear-tracking") {
+      this.clearTacticalNavTarget("manual");
+      this.combatHud.showLootNotification("Route tracking cleared");
+    }
+  }
+
+  private selectTacticalMapTarget(targetId: string): void {
+    const target = this.getTacticalNavTargetById(targetId);
+    if (!target) {
+      this.tacticalMapSelectedTargetId = null;
+      console.info(`[TacticalMap] selected marker id=${targetId} type=unknown unavailable=true`);
+      this.combatHud.showLootNotification("Map target unavailable");
+      return;
+    }
+
+    this.tacticalMapSelectedTargetId = target.id;
+    this.tacticalMapSelectedPoiId = target.id.startsWith("poi-") ? target.id.replace("poi-", "") : null;
+    console.info(`[TacticalMap] selected marker id=${target.id} type=${target.type}`);
+  }
+
+  private trackTacticalMapTarget(targetId: string): void {
+    const target = this.getTacticalNavTargetById(targetId);
+    if (!target) {
+      console.info(`[TacticalNav] target unavailable id=${targetId} reason=not-found`);
+      this.combatHud.showLootNotification("Route target unavailable");
+      return;
+    }
+
+    const selectedAt = performance.now();
+    this.tacticalNavTarget = { ...target, selectedAt };
+    this.tacticalMapSelectedTargetId = target.id;
+    this.tacticalMapSelectedPoiId = target.id.startsWith("poi-") ? target.id.replace("poi-", "") : null;
+    const logKey = `${target.id}:${target.type}:${target.source}`;
+    if (this.lastTacticalNavLogKey !== logKey) {
+      this.lastTacticalNavLogKey = logKey;
+      console.info(`[TacticalNav] track id=${target.id} type=${target.type} source=${target.source}`);
+    }
+    this.combatHud.showLootNotification(`Tracking ${target.label}`);
+  }
+
+  private clearTacticalNavTarget(reason: string): void {
+    if (!this.tacticalNavTarget) {
+      return;
+    }
+
+    console.info(`[TacticalNav] clear reason=${reason}`);
+    this.tacticalNavTarget = null;
+    this.lastTacticalNavLogKey = "";
   }
 
   private useRaidInventorySlot(slotId: string): void {
@@ -2014,6 +2083,139 @@ export class App {
     return sortedMarkers;
   }
 
+  private getTacticalRouteHint(playerPosition: Vector3 = this.player.state.position): TacticalRouteHint | null {
+    if (!this.tacticalNavTarget || this.raidScreen !== "raid" || this.raidOutcome !== "active") {
+      return null;
+    }
+
+    const target = this.getTacticalNavTargetById(this.tacticalNavTarget.id, playerPosition);
+    if (!target) {
+      this.clearTacticalNavTarget("target-unavailable");
+      return null;
+    }
+
+    const distance = this.horizontalDistance(playerPosition, new Vector3(target.worldPosition.x, target.worldPosition.y, target.worldPosition.z));
+    this.tacticalNavTarget = {
+      ...target,
+      selectedAt: this.tacticalNavTarget.selectedAt,
+    };
+    return {
+      id: target.id,
+      label: target.label,
+      type: target.type,
+      source: target.source,
+      status: target.status ?? "active",
+      distance,
+      remainingSeconds: target.remainingSeconds,
+    };
+  }
+
+  private getTacticalNavTargetById(id: string, playerPosition: Vector3 = this.player.state.position): TacticalNavTarget | null {
+    return this.getTacticalNavCandidates(playerPosition).find((target) => target.id === id) ?? null;
+  }
+
+  private getTacticalNavCandidates(playerPosition: Vector3 = this.player.state.position): TacticalNavTarget[] {
+    const selectedAt = this.tacticalNavTarget?.selectedAt ?? 0;
+    const targets: TacticalNavTarget[] = [];
+    const addTarget = (
+      id: string,
+      label: string,
+      type: TacticalNavTarget["type"],
+      position: Vector3,
+      source: TacticalNavTarget["source"],
+      status = "active",
+      remainingSeconds?: number,
+    ): void => {
+      targets.push({
+        id,
+        label,
+        type,
+        worldPosition: { x: position.x, y: position.y, z: position.z },
+        selectedAt,
+        source,
+        status,
+        remainingSeconds,
+      });
+    };
+
+    addTarget("ship", "Ship", "extraction", mapLayoutConfig.shipLandingSitePosition, "extraction", "ship");
+    addTarget("ship-cargo", "Ship Cargo Bay", "extraction", this.landedShip.cargoAccessPosition, "extraction", "cargo bay");
+    if (this.isExtractionAvailable) {
+      addTarget("ship-launch", "Ship Launch", "extraction", this.landedShip.launchAccessPosition, "extraction", "launch ready");
+    }
+
+    const heavyObjectiveActive = this.objectiveState.type === "secure-rare-core";
+    if (heavyObjectiveActive && this.heavyCargoState.status !== "extracted" && !this.heavyCargoState.shipSecured) {
+      const remoteCarrier = this.getRemotePlayer(this.heavyCargoState.carrierPlayerId);
+      const heavyPointPosition = this.heavyCargoState.status === "carried" && !this.heavyCargoState.carriedByLocalPlayer && remoteCarrier
+        ? new Vector3(remoteCarrier.x, remoteCarrier.y, remoteCarrier.z)
+        : this.heavyCargoState.status === "carried"
+          ? this.landedShip.cargoAccessPosition
+          : this.heavyCargoState.position;
+      addTarget(
+        "heavy-core",
+        this.heavyCargoState.status === "dropped" ? "Dropped Helium-3 Core" : this.heavyCargoState.status === "carried" ? "Helium-3 Carrier" : "Helium-3 Core",
+        "objective",
+        heavyPointPosition,
+        "system",
+        this.heavyCargoState.status,
+      );
+    } else if (!this.objectiveState.completed) {
+      addTarget("primary-objective", this.objectiveState.title, "objective", this.objectiveState.targetPosition, "system", "active");
+    }
+
+    const downedTeammate = this.getNearestDownedTeammate(999);
+    if (downedTeammate) {
+      addTarget(`revive-${downedTeammate.id}`, `Revive ${downedTeammate.name}`, "objective", new Vector3(downedTeammate.x, downedTeammate.y, downedTeammate.z), "system", "downed");
+    }
+
+    for (const zone of extractionZoneDefinitions) {
+      const active = this.extractionState.activeZoneIds.includes(zone.id);
+      addTarget(zone.id, zone.name, "extraction", zone.center, "extraction", active ? "active" : "known");
+    }
+
+    const nearestPoiObjective = this.poiObjectiveState.nearest;
+    if (nearestPoiObjective) {
+      addTarget(nearestPoiObjective.id, `${nearestPoiObjective.title} - ${nearestPoiObjective.poiName}`, "objective", nearestPoiObjective.markerPosition, nearestPoiObjective.contractLinked ? "contract" : "map", "active");
+    }
+
+    const activeContractPoi = this.contractManager.snapshot.active?.definition.targetPoi;
+    const contractPoi = activeContractPoi
+      ? poiDefinitions.find((poi) => poi.id === activeContractPoi || poi.name === activeContractPoi)
+      : null;
+    if (contractPoi) {
+      addTarget(`contract-${contractPoi.id}`, `Contract: ${contractPoi.name}`, "objective", contractPoi.center, "contract", "active contract");
+    }
+
+    for (const poi of poiDefinitions) {
+      addTarget(`poi-${poi.id}`, poi.name, "poi", poi.center, "map", this.getPoiDangerLabel(poi.id));
+    }
+
+    const revealSignalState = this.lumenRevealSystem.getSignalState(this.enemyDebugStates);
+    const now = performance.now();
+    for (const signal of revealSignalState.signals) {
+      const remainingSeconds = Math.max(0, (signal.expiresAt - now) / 1000);
+      if (remainingSeconds <= 0) {
+        continue;
+      }
+      addTarget(
+        `reveal-${signal.id}`,
+        signal.label || "Lumen Signal",
+        "reveal-signal",
+        signal.position,
+        "reveal",
+        "last-known",
+        remainingSeconds,
+      );
+    }
+
+    return targets.sort((a, b) => {
+      const leftDistance = this.horizontalDistance(playerPosition, new Vector3(a.worldPosition.x, a.worldPosition.y, a.worldPosition.z));
+      const rightDistance = this.horizontalDistance(playerPosition, new Vector3(b.worldPosition.x, b.worldPosition.y, b.worldPosition.z));
+      return leftDistance - rightDistance;
+    });
+  }
+
   private getTacticalMapData(): TacticalMapData {
     if (this.shipLandingState.active) {
       return {
@@ -2025,6 +2227,8 @@ export class App {
           yaw: this.player.state.yaw,
         },
         selectedPoiId: null,
+        selectedTargetId: null,
+        trackedTarget: null,
         pois: [],
         points: [],
       };
@@ -2032,6 +2236,8 @@ export class App {
 
     const activeContractPoi = this.contractManager.snapshot.active?.definition.targetPoi;
     const playerPosition = this.player.state.position;
+    const routeHint = this.getTacticalRouteHint(playerPosition);
+    const trackedTargetId = routeHint?.id ?? null;
     const points: TacticalMapData["points"] = [
       {
         id: "ship",
@@ -2040,6 +2246,10 @@ export class App {
         z: mapLayoutConfig.shipLandingSitePosition.z,
         kind: "ship",
         active: true,
+        distance: this.horizontalDistance(playerPosition, mapLayoutConfig.shipLandingSitePosition),
+        selected: this.tacticalMapSelectedTargetId === "ship",
+        tracked: trackedTargetId === "ship",
+        trackable: true,
       },
       {
         id: "ship-cargo",
@@ -2047,6 +2257,10 @@ export class App {
         x: this.landedShip.cargoAccessPosition.x,
         z: this.landedShip.cargoAccessPosition.z,
         kind: "cargo",
+        distance: this.horizontalDistance(playerPosition, this.landedShip.cargoAccessPosition),
+        selected: this.tacticalMapSelectedTargetId === "ship-cargo",
+        tracked: trackedTargetId === "ship-cargo",
+        trackable: true,
       },
       {
         id: "ship-launch",
@@ -2055,6 +2269,10 @@ export class App {
         z: this.landedShip.launchAccessPosition.z,
         kind: "launch",
         active: this.isExtractionAvailable,
+        distance: this.horizontalDistance(playerPosition, this.landedShip.launchAccessPosition),
+        selected: this.tacticalMapSelectedTargetId === "ship-launch",
+        tracked: trackedTargetId === "ship-launch",
+        trackable: this.isExtractionAvailable,
       },
     ];
 
@@ -2077,6 +2295,10 @@ export class App {
         z: heavyPointPosition.z,
         kind: "objective",
         active: !this.heavyCargoState.shipSecured,
+        distance: this.horizontalDistance(playerPosition, heavyPointPosition),
+        selected: this.tacticalMapSelectedTargetId === "heavy-core",
+        tracked: trackedTargetId === "heavy-core",
+        trackable: !this.heavyCargoState.shipSecured,
       });
     }
 
@@ -2089,6 +2311,10 @@ export class App {
         z: downedTeammate.z,
         kind: "objective",
         active: true,
+        distance: this.horizontalDistance(playerPosition, new Vector3(downedTeammate.x, downedTeammate.y, downedTeammate.z)),
+        selected: this.tacticalMapSelectedTargetId === `revive-${downedTeammate.id}`,
+        tracked: trackedTargetId === `revive-${downedTeammate.id}`,
+        trackable: true,
       });
     }
 
@@ -2100,6 +2326,10 @@ export class App {
         z: zone.center.z,
         kind: "extraction",
         active: this.extractionState.activeZoneIds.includes(zone.id),
+        distance: this.horizontalDistance(playerPosition, zone.center),
+        selected: this.tacticalMapSelectedTargetId === zone.id,
+        tracked: trackedTargetId === zone.id,
+        trackable: true,
       });
     }
 
@@ -2111,6 +2341,10 @@ export class App {
         z: this.objectiveState.targetPosition.z,
         kind: "objective",
         active: true,
+        distance: this.horizontalDistance(playerPosition, this.objectiveState.targetPosition),
+        selected: this.tacticalMapSelectedTargetId === "primary-objective",
+        tracked: trackedTargetId === "primary-objective",
+        trackable: true,
       });
     }
 
@@ -2123,6 +2357,10 @@ export class App {
         z: nearestPoiObjective.markerPosition.z,
         kind: "poiObjective",
         active: true,
+        distance: nearestPoiObjective.distance,
+        selected: this.tacticalMapSelectedTargetId === nearestPoiObjective.id,
+        tracked: trackedTargetId === nearestPoiObjective.id,
+        trackable: true,
       });
     }
 
@@ -2137,6 +2375,10 @@ export class App {
         z: contractPoi.center.z,
         kind: "contract",
         active: true,
+        distance: this.horizontalDistance(playerPosition, contractPoi.center),
+        selected: this.tacticalMapSelectedTargetId === `contract-${contractPoi.id}`,
+        tracked: trackedTargetId === `contract-${contractPoi.id}`,
+        trackable: true,
       });
       points.push(...this.getContractBreadcrumbPoints(playerPosition, contractPoi.center));
     }
@@ -2154,6 +2396,9 @@ export class App {
         remainingSeconds: Math.max(0, (signal.expiresAt - performance.now()) / 1000),
         source: signal.source,
         status: "last-known",
+        selected: this.tacticalMapSelectedTargetId === `reveal-${signal.id}`,
+        tracked: trackedTargetId === `reveal-${signal.id}`,
+        trackable: true,
       });
     }
 
@@ -2172,6 +2417,8 @@ export class App {
         yaw: this.player.state.yaw,
       },
       selectedPoiId: this.tacticalMapSelectedPoiId,
+      selectedTargetId: this.tacticalMapSelectedTargetId,
+      trackedTarget: routeHint,
       pois: poiDefinitions.map((poi) => ({
         id: poi.id,
         name: poi.name,
@@ -2869,6 +3116,7 @@ export class App {
       this.raidBagOpen = false;
       this.selectedRaidBagIndex = 0;
       this.selectedLootIndex = 0;
+      this.clearTacticalNavTarget("extraction");
       this.raidOutcome = "extracted";
       if (!this.multiplayerExtractSent) {
         this.multiplayerExtractSent = true;
@@ -2902,6 +3150,7 @@ export class App {
     this.raidBagOpen = false;
     this.selectedRaidBagIndex = 0;
     this.selectedLootIndex = 0;
+    this.clearTacticalNavTarget(reason);
     this.raidOutcome = "lost";
     this.combatHud.showLootNotification(reason === "downed_abandon" ? "Crater Run abandoned - EVA Pack lost" : "BAG FUMBLED");
 
@@ -3952,6 +4201,10 @@ export class App {
     this.raidBagOpen = false;
     this.selectedRaidBagIndex = 0;
     this.selectedLootIndex = 0;
+    this.tacticalMapOpen = false;
+    this.tacticalMapSelectedPoiId = null;
+    this.tacticalMapSelectedTargetId = null;
+    this.clearTacticalNavTarget(`return-hq-${reason}`);
     this.coverController.reset();
     this.traversalController.reset();
     this.coverState = this.coverController.state;
@@ -4087,6 +4340,8 @@ export class App {
     this.selectedLootIndex = 0;
     this.tacticalMapOpen = false;
     this.tacticalMapSelectedPoiId = null;
+    this.tacticalMapSelectedTargetId = null;
+    this.clearTacticalNavTarget("reset");
     this.lastRevealHudLogAt = 0;
     this.lastRevealHudLogKey = "";
     this.lastTacticalMapRevealLogKey = "";
@@ -4319,6 +4574,9 @@ export class App {
 
     if (!previousCompleted && this.objectiveState.completed && !this.objectiveWasCompleted) {
       this.objectiveWasCompleted = true;
+      if (this.tacticalNavTarget?.id === "primary-objective") {
+        this.clearTacticalNavTarget("objective-complete");
+      }
       this.combatHud.showLootNotification("Objective complete");
     }
   }
@@ -4334,6 +4592,9 @@ export class App {
 
     for (const event of this.poiObjectiveManager.consumeEvents()) {
       if (event.type === "completed") {
+        if (this.tacticalNavTarget?.id === event.objectiveId) {
+          this.clearTacticalNavTarget("poi-objective-complete");
+        }
         const completedObjective = this.poiObjectiveState.objectives.find((objective) => objective.id === event.objectiveId);
         const label = completedObjective
           ? `${completedObjective.title} - ${completedObjective.poiName}`

@@ -208,6 +208,104 @@ body.input-mode-ui #app {
   overflow: auto;
 }
 
+.inventory-selected-detail {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--rarity-color, #41d9ff), transparent 58%);
+  border-left: 3px solid color-mix(in srgb, var(--rarity-color, #41d9ff), transparent 18%);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 12% 18%, rgba(103, 232, 249, 0.08), transparent 44%),
+    rgba(8, 13, 20, 0.78);
+  color: rgba(226, 232, 240, 0.94);
+  pointer-events: none;
+}
+
+.inventory-selected-detail header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.inventory-selected-detail strong,
+.inventory-selected-detail span,
+.inventory-selected-detail b,
+.inventory-selected-detail p {
+  display: block;
+}
+
+.inventory-selected-detail strong {
+  color: var(--rarity-color, #f8fafc);
+  font-size: 12px;
+  line-height: 1.15;
+}
+
+.inventory-selected-detail header span {
+  margin-top: 3px;
+  color: rgba(226, 232, 240, 0.76);
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.inventory-selected-detail b {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border: 1px solid rgba(103, 232, 249, 0.32);
+  border-radius: 999px;
+  color: rgba(207, 250, 254, 0.98);
+  background: rgba(8, 25, 34, 0.78);
+  font-size: 10px;
+  text-align: right;
+}
+
+.inventory-selected-detail p {
+  margin: 6px 0 0;
+  color: rgba(226, 232, 240, 0.86);
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.selected-detail-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 7px;
+}
+
+.selected-detail-chips span {
+  padding: 2px 6px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 999px;
+  color: rgba(226, 232, 240, 0.78);
+  background: rgba(15, 23, 42, 0.54);
+  font-size: 9px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.selected-detail-affinity {
+  margin-top: 7px;
+  padding: 6px 8px;
+  border: 1px solid rgba(103, 232, 249, 0.3);
+  border-left: 3px solid rgba(103, 232, 249, 0.86);
+  border-radius: 6px;
+  background: rgba(8, 25, 34, 0.68);
+  color: rgba(220, 252, 255, 0.98);
+  font-size: 10px;
+  font-weight: 950;
+  line-height: 1.25;
+}
+
+.selected-detail-boundary {
+  margin-top: 6px;
+  color: rgba(250, 204, 21, 0.9);
+  font-size: 10px;
+  font-weight: 900;
+}
+
 .inventory-slot,
 .loot-row,
 .loot-container-panel button {
@@ -744,6 +842,64 @@ body.input-mode-ui #app {
   border-left-color: rgba(122, 77, 255, calc(var(--marker-opacity, 1) * 0.9));
 }
 
+.route-hint {
+  position: fixed;
+  left: 18px;
+  top: 414px;
+  width: min(280px, calc(100vw - 36px));
+  padding: 9px 11px;
+  border: 1px solid rgba(114, 255, 157, 0.24);
+  border-left: 3px solid rgba(114, 255, 157, 0.76);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(65, 217, 255, 0.1), transparent 44%),
+    linear-gradient(180deg, rgba(5, 7, 10, 0.74), rgba(10, 13, 18, 0.58));
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.22), inset 0 0 18px rgba(114, 255, 157, 0.045);
+  color: rgba(230, 237, 243, 0.92);
+  font-size: 11px;
+  line-height: 1.25;
+  pointer-events: none;
+}
+
+.route-hint.hidden {
+  display: none;
+}
+
+.route-hint span,
+.route-hint strong,
+.route-hint div,
+.route-hint b,
+.route-hint em {
+  display: block;
+}
+
+.route-hint span {
+  color: rgba(174, 182, 191, 0.82);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.route-hint strong {
+  margin-top: 3px;
+  color: rgba(230, 237, 243, 0.95);
+  font-size: 12px;
+  line-height: 1.15;
+}
+
+.route-hint b {
+  margin-top: 5px;
+  color: var(--dc-helium-cyan, #41d9ff);
+  font-size: 15px;
+}
+
+.route-hint em {
+  color: rgba(174, 182, 191, 0.88);
+  font-style: normal;
+  font-weight: 800;
+}
+
 .reveal-signal-hud {
   position: fixed;
   left: 18px;
@@ -1022,6 +1178,11 @@ body.input-mode-ui #app {
   transform: translate(-50%, -50%);
 }
 
+.tactical-map-marker.poi,
+.tactical-map-marker.point {
+  padding: 0;
+}
+
 .tactical-map-marker.poi {
   min-width: 10px;
   min-height: 10px;
@@ -1054,9 +1215,18 @@ body.input-mode-ui #app {
   box-shadow: 0 0 0 4px rgba(65, 217, 255, 0.14), 0 0 18px rgba(65, 217, 255, 0.26);
 }
 
+.tactical-map-marker.poi.tracked,
+.tactical-map-marker.point.tracked {
+  border-color: rgba(122, 255, 189, 0.95);
+  box-shadow:
+    0 0 0 5px rgba(114, 255, 157, 0.16),
+    0 0 20px rgba(65, 217, 255, 0.36);
+}
+
 .tactical-map-marker.point {
   width: 9px;
   height: 9px;
+  border: 1px solid transparent;
   border-radius: 50%;
   background: rgba(174, 182, 191, 0.8);
 }
@@ -1106,13 +1276,15 @@ body.input-mode-ui #app {
 }
 
 .tactical-map-marker.point.signal b {
+  left: var(--signal-label-x, 12px);
+  top: var(--signal-label-y, -5px);
   color: rgba(224, 242, 254, 0.96);
 }
 
 .tactical-map-marker.point.signal em {
   position: absolute;
-  left: 12px;
-  top: 8px;
+  left: var(--signal-label-x, 12px);
+  top: calc(var(--signal-label-y, -5px) + 13px);
   min-width: 68px;
   color: rgba(196, 181, 253, 0.95);
   font-size: 9px;
@@ -1122,14 +1294,37 @@ body.input-mode-ui #app {
   text-shadow: 0 1px 4px #000;
 }
 
+.tactical-map-marker.point.signal.clustered b,
+.tactical-map-marker.point.signal.clustered em {
+  max-width: 92px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .tactical-map-marker.point.extraction.active {
   background: #22c55e;
+}
+
+.tactical-map-marker.point.selected {
+  box-shadow:
+    0 0 0 4px rgba(65, 217, 255, 0.16),
+    0 0 16px rgba(65, 217, 255, 0.28);
 }
 
 .tactical-map-marker.point.breadcrumb {
   width: 6px;
   height: 6px;
   background: rgba(255, 176, 46, 0.74);
+}
+
+.tactical-route-line {
+  position: absolute;
+  height: 2px;
+  transform-origin: 0 50%;
+  background: linear-gradient(90deg, rgba(65, 217, 255, 0.88), rgba(122, 77, 255, 0.68), rgba(114, 255, 157, 0.72));
+  box-shadow: 0 0 12px rgba(65, 217, 255, 0.28);
+  pointer-events: none;
+  z-index: 1;
 }
 
 .tactical-map-player {
@@ -1164,6 +1359,27 @@ body.input-mode-ui #app {
   font-weight: 800;
 }
 
+.tactical-track-button {
+  width: 100%;
+  margin: 4px 0 8px;
+  border-color: rgba(65, 217, 255, 0.42);
+  background: rgba(65, 217, 255, 0.14);
+  color: #dffbff;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.tactical-track-button.active {
+  border-color: rgba(114, 255, 157, 0.72);
+  background: rgba(114, 255, 157, 0.16);
+  color: #c8ffd9;
+}
+
+.tactical-map-tracked {
+  border-left: 3px solid rgba(114, 255, 157, 0.7);
+  padding-left: 8px;
+}
+
 .tactical-map-legend {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1193,6 +1409,39 @@ body.input-mode-ui #app {
 
 .tactical-map-legend .signal {
   border-left-color: #a78bfa;
+}
+
+.tactical-map-signal-list {
+  display: grid;
+  gap: 5px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(103, 232, 249, 0.14);
+}
+
+.tactical-map-signal-list span,
+.tactical-map-signal-list b,
+.tactical-map-signal-list em {
+  display: block;
+}
+
+.tactical-map-signal-list span {
+  padding: 5px 6px;
+  border-left: 2px solid rgba(167, 139, 250, 0.72);
+  background: rgba(15, 23, 42, 0.36);
+}
+
+.tactical-map-signal-list b {
+  color: rgba(224, 242, 254, 0.94);
+  font-size: 10px;
+}
+
+.tactical-map-signal-list em {
+  margin-top: 2px;
+  color: rgba(196, 181, 253, 0.9);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 850;
 }
 
 @media (max-width: 820px) {
