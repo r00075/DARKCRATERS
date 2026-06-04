@@ -31,8 +31,6 @@ import {
 } from "./PreviewLifecycle";
 
 const previewModelPath = "/models/player/obsidianSentinelPlayer.glb";
-const hostIds = new WeakMap<HTMLElement, number>();
-let nextHostId = 0;
 
 export type HabitatRunnerPreviewVariant = "habitat" | "class-selection";
 export type HabitatRunnerPreviewFraming = "fullBody" | "upperBody";
@@ -69,17 +67,6 @@ const classPreviewTuning: Partial<Record<ClassId, Partial<HabitatRunnerPreviewOp
   "systems-specialist": { targetHeight: 1.46, verticalLift: 0.02, yaw: Math.PI * 1.5 },
 };
 
-const getHostId = (host: HTMLElement): number => {
-  const existing = hostIds.get(host);
-  if (existing) {
-    return existing;
-  }
-
-  nextHostId += 1;
-  hostIds.set(host, nextHostId);
-  return nextHostId;
-};
-
 export class HabitatRunnerPreview {
   private canvas: HTMLCanvasElement | null = null;
   private engine: Engine | null = null;
@@ -94,6 +81,7 @@ export class HabitatRunnerPreview {
   private loadToken = 0;
   private currentKey: string | null = null;
   private currentModelKey: string | null = null;
+  private loadingKey: string | null = null;
   private currentModelMeshes: AbstractMesh[] = [];
   private renderLoopRunning = false;
   private renderLoop: (() => void) | null = null;
@@ -121,10 +109,10 @@ export class HabitatRunnerPreview {
       this.canvas.remove();
       host.append(this.canvas);
       this.host = host;
-      recordRunnerAttach(this.instanceId, this.describeHost(host));
+      recordRunnerAttach(this.instanceId, this.describeHost(host), this.attached ? "host-changed" : "host-attached");
     } else if (!this.canvas.parentElement) {
       host.append(this.canvas);
-      recordRunnerAttach(this.instanceId, this.describeHost(host));
+      recordRunnerAttach(this.instanceId, this.describeHost(host), "canvas-reattached");
     }
 
     this.attached = true;
@@ -152,6 +140,11 @@ export class HabitatRunnerPreview {
       return;
     }
 
+    if (this.currentKey === request.key && this.loadingKey === request.key && !this.contextLost) {
+      recordRunnerRemountSkipped("load-pending");
+      return;
+    }
+
     recordRunnerUpdate(this.instanceId, request.key);
     this.currentKey = request.key;
     this.applyCameraDefaults(request);
@@ -164,7 +157,7 @@ export class HabitatRunnerPreview {
     this.replaceModel(request, 0);
   }
 
-  public detach(): void {
+  public detach(reason = "screen-exit"): void {
     if (!this.attached && !this.canvas?.parentElement) {
       return;
     }
@@ -174,7 +167,7 @@ export class HabitatRunnerPreview {
     this.canvas?.remove();
     this.host = null;
     this.attached = false;
-    recordRunnerDetach(this.instanceId);
+    recordRunnerDetach(this.instanceId, reason);
   }
 
   public dispose(): void {
@@ -203,6 +196,7 @@ export class HabitatRunnerPreview {
     this.host = null;
     this.currentKey = null;
     this.currentModelKey = null;
+    this.loadingKey = null;
     this.loaded = false;
     this.contextLost = false;
     this.renderLoop = null;
@@ -303,6 +297,7 @@ export class HabitatRunnerPreview {
     const scene = this.scene;
     if (candidateIndex === 0) {
       this.loadToken = token;
+      this.loadingKey = request.key;
       if (hadVisibleModel) {
         this.retainFallbackHidden("model-swap-pending");
       } else {
@@ -323,6 +318,9 @@ export class HabitatRunnerPreview {
         const inactiveReason = this.getInactiveReason(scene, token);
         if (inactiveReason) {
           this.disposeImportedMeshes(result.meshes);
+          if (this.loadToken === token) {
+            this.loadingKey = null;
+          }
           recordPreviewAsyncIgnored("runner", inactiveReason);
           return;
         }
@@ -343,6 +341,7 @@ export class HabitatRunnerPreview {
         this.fitModelToPreview(root, meshes, request);
         this.loaded = true;
         this.currentModelKey = request.modelKey;
+        this.loadingKey = null;
         this.hideFallback("model-loaded");
         this.disposeImportedMeshes(previousMeshes);
         recordRunnerModelReplaced(token);
@@ -350,6 +349,9 @@ export class HabitatRunnerPreview {
       .catch((error) => {
         const inactiveReason = this.getInactiveReason(scene, token);
         if (inactiveReason) {
+          if (this.loadToken === token) {
+            this.loadingKey = null;
+          }
           recordPreviewAsyncIgnored("runner", inactiveReason);
           return;
         }
@@ -362,12 +364,14 @@ export class HabitatRunnerPreview {
         if (hadVisibleModel && this.currentModelMeshes.length > 0) {
           this.loaded = true;
           this.currentKey = null;
+          this.loadingKey = null;
           this.retainFallbackHidden("model-swap-pending");
           console.warn("[HabitatRunnerPreview] runner preview swap failed; retaining previous model.", error);
           return;
         }
 
         this.loaded = false;
+        this.loadingKey = null;
         console.warn("[HabitatRunnerPreview] runner preview failed; CSS fallback remains active.", error);
         this.showFallback("model-load-failed");
       });
@@ -508,7 +512,6 @@ export class HabitatRunnerPreview {
       : options.yaw ?? tuning.yaw ?? Math.PI * 1.5;
     const modelKey = modelPaths.join(",");
     const key = [
-      getHostId(host),
       variant,
       framingMode,
       typeof options === "string" ? "none" : options.classId ?? "none",

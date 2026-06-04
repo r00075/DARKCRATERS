@@ -380,6 +380,7 @@ export class App {
   private tacticalMapOpen = false;
   private tacticalMapSelectedPoiId: string | null = null;
   private lastRevealHudLogAt = 0;
+  private lastRevealHudLogKey = "";
   private lastTacticalMapRevealLogKey = "";
   private poiArrivalVisited = new Set<string>();
   private travelEventCooldown = 32;
@@ -2151,10 +2152,12 @@ export class App {
         active: true,
         distance: signal.distance,
         remainingSeconds: Math.max(0, (signal.expiresAt - performance.now()) / 1000),
+        source: signal.source,
+        status: "last-known",
       });
     }
 
-    const revealMapLogKey = `${revealSignalState.signals.length}:${Math.ceil(revealSignalState.remainingSeconds)}`;
+    const revealMapLogKey = `${revealSignalState.signals.length}:${revealSignalState.surveyorAffinity ? "surveyor" : "base"}:${revealSignalState.lastResult}`;
     if (this.tacticalMapOpen && revealSignalState.active && this.lastTacticalMapRevealLogKey !== revealMapLogKey) {
       this.lastTacticalMapRevealLogKey = revealMapLogKey;
       console.info(`[TacticalMap] reveal markers count=${revealSignalState.signals.length}`);
@@ -2189,8 +2192,10 @@ export class App {
     const nearest = state.nearest;
     const contextHint = nearest ? this.getRevealSignalContextHint(nearest) : null;
     const now = performance.now();
-    if (state.active && now - this.lastRevealHudLogAt >= 1000) {
+    const revealHudLogKey = `${state.count}:${nearest ? Math.round(nearest.distance / 5) * 5 : "none"}:${state.surveyorAffinity ? "surveyor" : "base"}:${state.lastResult}`;
+    if (state.active && this.lastRevealHudLogKey !== revealHudLogKey && now - this.lastRevealHudLogAt >= 1200) {
       this.lastRevealHudLogAt = now;
+      this.lastRevealHudLogKey = revealHudLogKey;
       console.info(`[HUD] reveal signal count=${state.count} nearest=${nearest ? nearest.distance.toFixed(1) : "none"}`);
     }
     return {
@@ -4083,6 +4088,7 @@ export class App {
     this.tacticalMapOpen = false;
     this.tacticalMapSelectedPoiId = null;
     this.lastRevealHudLogAt = 0;
+    this.lastRevealHudLogKey = "";
     this.lastTacticalMapRevealLogKey = "";
     this.poiArrivalVisited = new Set<string>();
     this.travelEventCooldown = 34;
@@ -4400,8 +4406,7 @@ export class App {
 
   private showMainMenu(): void {
     this.raidScreen = "menu";
-    this.habitatPreview.detach();
-    this.shipDashboardPreview.dispose();
+    this.shipDashboardPreview.detach("screen-exit");
     this.menuContent.classList.remove("class-deploy-content", "ship-dashboard-content", "arsenal-workbench-content");
     this.menuContent.classList.add("hq-command-content");
     this.cosmeticManager.setActiveClass(this.classManager.snapshot.selectedClassId);
@@ -4737,7 +4742,6 @@ export class App {
 
   private showPreDeploymentClassMenu(mode: "assignment" | "solo" | "multiplayer" = "assignment"): void {
     this.raidScreen = "class-assignment";
-    this.habitatPreview.detach();
     this.preDeploymentMode = mode;
     this.menuContent.classList.remove("hq-command-content");
     this.menuContent.classList.add("class-deploy-content");
@@ -5484,7 +5488,6 @@ export class App {
 
   private showLoadoutMenu(): void {
     this.raidScreen = "loadout";
-    this.habitatPreview.detach();
     try {
       this.loadoutManager.initialize(this.loadout, this.persistentStash.items);
       this.loadout.clampToStash(this.persistentStash.items);
@@ -7711,9 +7714,9 @@ export class App {
     const action = button.dataset.action;
     if (action !== "debug-grant-resources" && action !== "debug-reset-save") {
       if (!this.shouldKeepRunnerPreviewForMenuAction(action)) {
-        this.habitatPreview.detach();
+        this.habitatPreview.detach("menu-action");
       }
-      this.shipDashboardPreview.dispose();
+      this.shipDashboardPreview.detach("menu-action");
       if (!this.shouldKeepWeaponPreviewForMenuAction(action)) {
         this.weaponBenchPreview.dispose();
       }
