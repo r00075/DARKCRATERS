@@ -206,11 +206,11 @@ const weaponUpgradeCategories: Array<{
   partsBase: number;
 }> = [
   { id: "damage", label: "Damage", effect: "+4% damage tuning", scrapBase: 8, partsBase: 1 },
-  { id: "recoil", label: "Recoil Control", effect: "+6% recoil control", scrapBase: 7, partsBase: 1 },
+  { id: "recoil", label: "Recoil Control", effect: "+6% recoil control", scrapBase: 6, partsBase: 1 },
   { id: "ads", label: "ADS Speed", effect: "+5% ready speed", scrapBase: 6, partsBase: 1 },
-  { id: "reload", label: "Reload Speed", effect: "+5% reload speed", scrapBase: 7, partsBase: 1 },
-  { id: "durability", label: "Durability", effect: "+8% service life", scrapBase: 9, partsBase: 2 },
-  { id: "magazine", label: "Magazine Efficiency", effect: "+1 handling tier", scrapBase: 8, partsBase: 2 },
+  { id: "reload", label: "Reload Speed", effect: "+5% reload speed", scrapBase: 6, partsBase: 1 },
+  { id: "durability", label: "Durability", effect: "+8% service life", scrapBase: 10, partsBase: 1 },
+  { id: "magazine", label: "Magazine Efficiency", effect: "+1 handling tier", scrapBase: 10, partsBase: 1 },
 ];
 const maxWeaponUpgradeTier = 3;
 
@@ -6575,15 +6575,21 @@ export class App {
       const maxed = tier >= maxWeaponUpgradeTier;
       const requirements = this.getWeaponUpgradeRequirements(category.id, tier);
       const affordable = requirements.every((requirement) => this.getStashQuantity(requirement.type) >= requirement.quantity);
+      const missing = this.getMissingBenchRequirements(requirements);
+      const buttonLabel = maxed
+        ? "Max Tier"
+        : affordable
+          ? `Upgrade to Tier ${tier + 1}`
+          : this.getBenchRequirementButtonLabel(missing, "Need Materials");
       return `
         <article class="upgrade-row ${maxed ? "maxed" : affordable ? "" : "locked"}">
           <div>
             <span>${category.label}</span>
-            <strong>Tier ${tier}/${maxWeaponUpgradeTier}</strong>
-            <small>${maxed ? "Maxed" : `Next: ${category.effect}`}</small>
+            <strong>Tier ${tier}/${maxWeaponUpgradeTier}${maxed ? " - Max tier reached" : ` -> ${tier + 1}`}</strong>
+            <small>${maxed ? "Max tier reached" : `Next Tier ${tier + 1}: ${category.effect}`}</small>
           </div>
           <div class="bench-materials">${maxed ? `<em>Fully tuned</em>` : this.renderBenchMaterialRequirements(requirements)}</div>
-          <button type="button" data-action="inspect-upgrade-${category.id}" ${maxed ? "disabled" : ""}>${maxed ? "Maxed" : affordable ? "Upgrade" : "Locked"}</button>
+          <button type="button" data-action="inspect-upgrade-${category.id}" ${maxed || !affordable ? "disabled" : ""}>${buttonLabel}</button>
         </article>
       `;
     }).join("");
@@ -6609,23 +6615,34 @@ export class App {
       : [];
     const canRepairWithScrap = repairCost > 0 && scrapRequirements.every((requirement) => this.getStashQuantity(requirement.type) >= requirement.quantity);
     const canRepairWithKit = repairCost > 0 && kitRequirements.every((requirement) => this.getStashQuantity(requirement.type) >= requirement.quantity);
+    const scrapButtonLabel = repairCost <= 0
+      ? "Full Condition"
+      : canRepairWithScrap
+        ? "Full Repair With Scrap"
+        : this.getBenchRequirementButtonLabel(this.getMissingBenchRequirements(scrapRequirements), "Need Scrap");
+    const kitButtonLabel = repairCost <= 0
+      ? "Kit Not Needed"
+      : canRepairWithKit
+        ? "Restore to 100% With Kit"
+        : this.getBenchRequirementButtonLabel(this.getMissingBenchRequirements(kitRequirements), "Need Repair Kit");
     const nextJam = repairCost > 0 ? 0 : durability.jamChance;
 
     return `
       <section class="inspect-card repair-panel ${durability.jamWarning ? "warning" : ""}">
         <h3>Repair</h3>
         ${this.renderStatBar("Current Durability", durability.durability, 100, `${Math.round(durability.durability)}%`)}
-        <p>${durability.jamWarning ? "Low durability is raising jam risk." : "Weapon is serviceable for the next Crater Run."}</p>
+        <p>${repairCost <= 0 ? "Weapon already at full condition." : durability.jamWarning ? "Low durability is raising jam risk. Scrap service and repair kits both restore this weapon to full condition." : "Scrap service restores full condition; repair kits are the premium one-click option."}</p>
         <div class="inspect-meta-grid">
-          <div><span>Bench Repair</span><strong>${repairCost <= 0 ? "No service needed" : "Scrap service"}</strong></div>
+          <div><span>Scrap Service</span><strong>${repairCost <= 0 ? "No service needed" : "Full repair"}</strong></div>
+          <div><span>Repair Kit</span><strong>${repairCost <= 0 ? "Not needed" : "Restores to 100%"}</strong></div>
           <div><span>Jam Preview</span><strong>${Math.round(durability.jamChance * 100)}% -> ${Math.round(nextJam * 100)}%</strong></div>
         </div>
         <div class="bench-materials repair-cost">
           ${repairCost <= 0 ? `<em>Fully Repaired</em>` : this.renderBenchMaterialRequirements(scrapRequirements)}
         </div>
         <div class="bench-action-row">
-          <button type="button" data-action="inspect-repair-${weaponId}" ${repairCost <= 0 ? "disabled" : ""}>${repairCost <= 0 ? "Fully Repaired" : canRepairWithScrap ? "Repair With Scrap" : "Need Scrap"}</button>
-          <button type="button" data-action="inspect-repair-kit-${weaponId}" ${repairCost <= 0 ? "disabled" : ""}>${repairCost <= 0 ? "Kit Not Needed" : canRepairWithKit ? "Use Repair Kit" : "Need Repair Kit"}</button>
+          <button type="button" data-action="inspect-repair-${weaponId}" ${repairCost <= 0 || !canRepairWithScrap ? "disabled" : ""}>${scrapButtonLabel}</button>
+          <button type="button" data-action="inspect-repair-kit-${weaponId}" ${repairCost <= 0 || !canRepairWithKit ? "disabled" : ""}>${kitButtonLabel}</button>
         </div>
         <div class="bench-materials kit-cost">${repairCost <= 0 ? "" : this.renderBenchMaterialRequirements(kitRequirements)}</div>
       </section>
@@ -6747,11 +6764,75 @@ export class App {
       const status = owned >= requirement.quantity ? "ok" : "missing";
       return `
         <span class="${status}">
-          ${definition.label}
-          <strong>${owned}/${requirement.quantity}</strong>
+          <b>${definition.label}</b>
+          <strong>${owned} / ${requirement.quantity}</strong>
         </span>
       `;
     }).join("");
+  }
+
+  private getMissingBenchRequirements(requirements: readonly BenchMaterialRequirement[]): BenchMaterialRequirement[] {
+    return requirements
+      .map((requirement) => ({
+        ...requirement,
+        quantity: Math.max(0, requirement.quantity - this.getStashQuantity(requirement.type)),
+      }))
+      .filter((requirement) => requirement.quantity > 0);
+  }
+
+  private getBenchRequirementButtonLabel(
+    missingRequirements: readonly BenchMaterialRequirement[],
+    fallback: string,
+  ): string {
+    if (missingRequirements.length === 0) {
+      return fallback;
+    }
+
+    const primary = getItemDefinition(missingRequirements[0].type).label;
+    return missingRequirements.length === 1 ? `Need ${primary}` : "Need Materials";
+  }
+
+  private formatBenchRequirements(requirements: readonly BenchMaterialRequirement[]): string {
+    return requirements
+      .map((requirement) => `${requirement.type}:${this.getStashQuantity(requirement.type)}/${requirement.quantity}`)
+      .join(",");
+  }
+
+  private consumeBenchMaterials(requirements: readonly BenchMaterialRequirement[]): boolean {
+    if (!requirements.every((requirement) => this.getStashQuantity(requirement.type) >= requirement.quantity)) {
+      return false;
+    }
+
+    const consumed: LootStack[] = [];
+
+    for (const requirement of requirements) {
+      if (requirement.quantity <= 0) {
+        continue;
+      }
+
+      if (!this.persistentStash.remove(requirement.type, requirement.quantity)) {
+        if (consumed.length > 0) {
+          this.persistentStash.addItems(consumed);
+        }
+        return false;
+      }
+
+      consumed.push({
+        type: requirement.type,
+        label: getItemDefinition(requirement.type).label,
+        quantity: requirement.quantity,
+      });
+    }
+
+    if (consumed.length > 0) {
+      console.info(`[Workbench] consumed materials=${consumed.map((item) => `${item.type}:${item.quantity}`).join(",")}`);
+    }
+
+    return true;
+  }
+
+  private getWeaponUpgradeCategoryLabel(category: WeaponUpgradeCategory): string {
+    return weaponUpgradeCategories.find((item) => item.id === category)?.label ?? this.capitalize(category);
   }
 
   private upgradeInspectedWeapon(category: WeaponUpgradeCategory): string {
@@ -6764,19 +6845,21 @@ export class App {
     const currentTier = this.weaponUpgrades[weaponId][category] ?? 0;
 
     if (currentTier >= maxWeaponUpgradeTier) {
-      return "Upgrade already maxed";
+      console.info(`[Workbench] upgrade weapon=${weaponId} category=${category} ok=false reason=max-tier tier=${currentTier}`);
+      return "Max tier reached";
     }
 
+    const requirements = this.getWeaponUpgradeRequirements(category, currentTier);
     const cost = this.getWeaponUpgradeCost(category, currentTier);
 
     if (this.getStashQuantity("scrap") < cost.scrap) {
       console.info(`[Workbench] upgrade weapon=${weaponId} category=${category} ok=false reason=missing-scrap materials=scrap:${this.getStashQuantity("scrap")}/${cost.scrap}`);
-      return "Not enough scrap";
+      return "Not enough Regolith Scrap.";
     }
 
     if (this.getStashQuantity("weapon-parts") < cost.parts) {
       console.info(`[Workbench] upgrade weapon=${weaponId} category=${category} ok=false reason=missing-weapon-parts materials=weapon-parts:${this.getStashQuantity("weapon-parts")}/${cost.parts}`);
-      return "Not enough weapon parts";
+      return "Not enough Mining Weapon Parts.";
     }
 
     if (cost.rareKits > 0 && this.getStashQuantity("rare-upgrade-kit") < cost.rareKits) {
@@ -6784,11 +6867,11 @@ export class App {
       return "Rare Upgrade Kit required";
     }
 
-    this.persistentStash.remove("scrap", cost.scrap);
-    this.persistentStash.remove("weapon-parts", cost.parts);
-    if (cost.rareKits > 0) {
-      this.persistentStash.remove("rare-upgrade-kit", cost.rareKits);
+    if (!this.consumeBenchMaterials(requirements)) {
+      console.info(`[Workbench] upgrade weapon=${weaponId} category=${category} ok=false reason=consume-failed materials=${this.formatBenchRequirements(requirements)}`);
+      return "Upgrade materials changed. Try again.";
     }
+
     this.weaponUpgrades = {
       ...this.weaponUpgrades,
       [weaponId]: {
@@ -6798,7 +6881,7 @@ export class App {
     };
     this.saveWeaponUpgrades();
     console.info(`[Workbench] upgrade weapon=${weaponId} category=${category} ok=true tier=${currentTier + 1} materials=scrap:${cost.scrap},weapon-parts:${cost.parts},rare-upgrade-kit:${cost.rareKits}`);
-    return `${weaponDefinitions[weaponId].name} ${this.capitalize(category)} upgraded to tier ${currentTier + 1}`;
+    return `${this.getWeaponUpgradeCategoryLabel(category)} tuning upgraded to tier ${currentTier + 1}.`;
   }
 
   private refreshInspectWeaponMenuPreservingScroll(): void {
@@ -7874,16 +7957,23 @@ export class App {
       const weaponId = action.replace("inspect-repair-kit-", "") as WeaponId;
       this.inspectedWeaponId = weaponId;
       const currentCondition = this.weaponController.getDurabilityState(weaponId).durability;
-      if (this.getStashQuantity("weapon-repair-kit") <= 0) {
-        console.info(`[Workbench] repair weapon=${weaponId} ok=false reason=missing-weapon-repair-kit condition=${Math.round(currentCondition)} materials=weapon-repair-kit:0/1`);
-        this.combatHud.showLootNotification("Weapon Repair Kit required");
+      if (this.weaponController.getFullRepairCost(weaponId) <= 0) {
+        console.info(`[Workbench] repair weapon=${weaponId} ok=false reason=full-condition condition=${Math.round(currentCondition)} materials=weapon-repair-kit:not-needed`);
+        this.combatHud.showLootNotification("Weapon already at full condition.");
         this.refreshInspectWeaponMenuPreservingScroll();
         return;
       }
 
-      if (!this.persistentStash.remove("weapon-repair-kit", 1)) {
+      if (this.getStashQuantity("weapon-repair-kit") <= 0) {
+        console.info(`[Workbench] repair weapon=${weaponId} ok=false reason=missing-weapon-repair-kit condition=${Math.round(currentCondition)} materials=weapon-repair-kit:0/1`);
+        this.combatHud.showLootNotification("Repair kit required.");
+        this.refreshInspectWeaponMenuPreservingScroll();
+        return;
+      }
+
+      if (!this.consumeBenchMaterials([{ type: "weapon-repair-kit", quantity: 1 }])) {
         console.info(`[Workbench] repair weapon=${weaponId} ok=false reason=consume-failed condition=${Math.round(currentCondition)} materials=weapon-repair-kit:0/1`);
-        this.combatHud.showLootNotification("Weapon Repair Kit required");
+        this.combatHud.showLootNotification("Repair kit required.");
         this.refreshInspectWeaponMenuPreservingScroll();
         return;
       }
@@ -7896,7 +7986,7 @@ export class App {
         this.persistentStash.addItems([{ type: "weapon-repair-kit", label: getItemDefinition("weapon-repair-kit").label, quantity: 1 }]);
         console.info(`[Workbench] repair weapon=${weaponId} ok=false reason=not-needed condition=${Math.round(currentCondition)} materials=weapon-repair-kit:refunded`);
       }
-      this.combatHud.showLootNotification(result.repaired ? "Repaired" : result.message);
+      this.combatHud.showLootNotification(result.repaired ? "Repair complete: condition restored to 100%." : result.message);
       this.refreshInspectWeaponMenuPreservingScroll();
     } else if (action?.startsWith("inspect-repair-")) {
       const weaponId = action.replace("inspect-repair-", "") as WeaponId;
@@ -7904,6 +7994,12 @@ export class App {
       const previousScrapSpent = this.craftingManager.snapshot.scrapSpent;
       const currentCondition = this.weaponController.getDurabilityState(weaponId).durability;
       const repairCost = this.weaponController.getFullRepairCost(weaponId);
+      if (repairCost <= 0) {
+        console.info(`[Workbench] repair weapon=${weaponId} ok=false reason=full-condition condition=${Math.round(currentCondition)} materials=scrap:not-needed`);
+        this.combatHud.showLootNotification("Weapon already at full condition.");
+        this.refreshInspectWeaponMenuPreservingScroll();
+        return;
+      }
       const result = this.weaponController.repairWeaponFully(
         weaponId,
         (quantity) => this.persistentStash.remove("scrap", quantity),
@@ -7913,7 +8009,7 @@ export class App {
         this.recordPrepScrapSpend(previousScrapSpent);
       }
       console.info(`[Workbench] repair weapon=${weaponId} ok=${result.repaired} reason=${result.repaired ? "scrap" : result.message.replace(/\s+/g, "-").toLowerCase()} condition=${Math.round(currentCondition)} materials=scrap:${result.scrapCost}/${repairCost}`);
-      this.combatHud.showLootNotification(result.repaired ? "Repaired" : result.message);
+      this.combatHud.showLootNotification(result.repaired ? "Repair complete: condition restored to 100%." : "Not enough scrap for repair.");
       this.refreshInspectWeaponMenuPreservingScroll();
     } else if (action?.startsWith("inspect-upgrade-")) {
       const category = action.replace("inspect-upgrade-", "") as WeaponUpgradeCategory;

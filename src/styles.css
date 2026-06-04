@@ -5073,7 +5073,7 @@ body.input-mode-ui #app {
 }
 
 .upgrade-row {
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) minmax(156px, 0.88fr) minmax(120px, auto);
   align-items: center;
 }
 
@@ -5094,9 +5094,11 @@ body.input-mode-ui #app {
 }
 
 .bench-materials span {
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 5px;
+  max-width: 100%;
   border: 1px solid rgba(148, 163, 184, 0.24);
   border-radius: 999px;
   padding: 3px 7px;
@@ -5104,7 +5106,15 @@ body.input-mode-ui #app {
   background: rgba(2, 6, 12, 0.42);
   font-size: 11px;
   font-weight: 850;
-  white-space: nowrap;
+  line-height: 1.15;
+}
+
+.bench-materials b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font: inherit;
+  color: inherit;
 }
 
 .bench-materials span.ok {
@@ -5120,6 +5130,7 @@ body.input-mode-ui #app {
 .bench-materials strong {
   color: inherit;
   font-size: 11px;
+  white-space: nowrap;
 }
 
 .bench-materials em {
@@ -5143,6 +5154,32 @@ body.input-mode-ui #app {
 .kit-cost {
   justify-content: flex-start;
   margin-top: 6px;
+}
+
+.arsenal-service-panel .upgrade-row {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.arsenal-service-panel .upgrade-row .bench-materials {
+  justify-content: flex-start;
+}
+
+.arsenal-service-panel .bench-action-row {
+  grid-template-columns: 1fr;
+}
+
+@media (max-width: 1420px), (max-height: 820px) {
+  .upgrade-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .upgrade-row .bench-materials {
+    justify-content: flex-start;
+  }
+
+  .bench-action-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 .repair-panel.warning {
