@@ -117,7 +117,7 @@ import { InputController, type InputMode, type InputSnapshot } from "../input/In
 import { clamp, yawToBasis } from "../math/angles";
 import { createWorld, type WorldMap } from "../world/createWorld";
 import { extractionZoneDefinitions, mapLayoutConfig, poiDefinitions, type ExtractionZoneDefinition } from "../world/MapLayout";
-import { CombatHud, type HudNavigationMarker, type RaidOutcome, type RaidScreen, type RevealSignalHudState, type TacticalMapData, type TacticalNavTarget, type TacticalRouteHint } from "../ui/CombatHud";
+import { CombatHud, type HudNavigationMarker, type RaidOutcome, type RaidScreen, type RevealSignalHudState, type TacticalMapData, type TacticalNavTarget, type TacticalRouteFeedback, type TacticalRouteHint } from "../ui/CombatHud";
 import { LoadingScreenManager } from "../ui/LoadingScreenManager";
 import { VisibilityToolManager, type VisibilityToolState } from "../visibility/VisibilityToolManager";
 import {
@@ -381,10 +381,12 @@ export class App {
   private tacticalMapSelectedPoiId: string | null = null;
   private tacticalMapSelectedTargetId: string | null = null;
   private tacticalNavTarget: TacticalNavTarget | null = null;
+  private tacticalRouteFeedback: TacticalRouteFeedback | null = null;
   private lastRevealHudLogAt = 0;
   private lastRevealHudLogKey = "";
   private lastTacticalMapRevealLogKey = "";
   private lastTacticalNavLogKey = "";
+  private lastTacticalNavUnavailableLogKey = "";
   private poiArrivalVisited = new Set<string>();
   private travelEventCooldown = 32;
   private lastTravelEvent = "none";
@@ -743,6 +745,7 @@ export class App {
           landingSequence: this.shipLandingState,
           navigationMarkers: this.getNavigationMarkers(),
           routeHint: this.getTacticalRouteHint(),
+          routeFeedback: this.getTacticalRouteFeedback(),
           tacticalMap: this.getTacticalMapData(),
           revealSignal: this.getRevealSignalHudState(),
           revealAffinity: this.getRevealAffinityState(),
@@ -1656,13 +1659,15 @@ export class App {
   private trackTacticalMapTarget(targetId: string): void {
     const target = this.getTacticalNavTargetById(targetId);
     if (!target) {
-      console.info(`[TacticalNav] target unavailable id=${targetId} reason=not-found`);
+      this.logTacticalNavUnavailable(targetId, "not-found");
+      this.setTacticalRouteFeedback("Target unavailable", "target-unavailable");
       this.combatHud.showLootNotification("Route target unavailable");
       return;
     }
 
     const selectedAt = performance.now();
     this.tacticalNavTarget = { ...target, selectedAt };
+    this.tacticalRouteFeedback = null;
     this.tacticalMapSelectedTargetId = target.id;
     this.tacticalMapSelectedPoiId = target.id.startsWith("poi-") ? target.id.replace("poi-", "") : null;
     const logKey = `${target.id}:${target.type}:${target.source}`;
@@ -1678,9 +1683,54 @@ export class App {
       return;
     }
 
+    const label = this.tacticalNavTarget.label;
     console.info(`[TacticalNav] clear reason=${reason}`);
+    this.setTacticalRouteFeedback(label, this.getTacticalRouteFeedbackStatus(reason));
     this.tacticalNavTarget = null;
     this.lastTacticalNavLogKey = "";
+  }
+
+  private getTacticalRouteFeedback(): TacticalRouteFeedback | null {
+    if (!this.tacticalRouteFeedback) {
+      return null;
+    }
+
+    const remainingSeconds = this.tacticalRouteFeedback.remainingSeconds - 1 / 60;
+    if (remainingSeconds <= 0 || this.raidScreen !== "raid") {
+      this.tacticalRouteFeedback = null;
+      return null;
+    }
+
+    this.tacticalRouteFeedback = {
+      ...this.tacticalRouteFeedback,
+      remainingSeconds,
+    };
+    return this.tacticalRouteFeedback;
+  }
+
+  private setTacticalRouteFeedback(label: string, status: TacticalRouteFeedback["status"]): void {
+    this.tacticalRouteFeedback = {
+      label,
+      status,
+      remainingSeconds: 2.2,
+    };
+  }
+
+  private getTacticalRouteFeedbackStatus(reason: string): TacticalRouteFeedback["status"] {
+    if (reason.includes("signal") || reason.includes("reveal")) return "signal-lost";
+    if (reason.includes("objective-complete")) return "objective-complete";
+    if (reason.includes("unavailable")) return "target-unavailable";
+    return "route-cleared";
+  }
+
+  private logTacticalNavUnavailable(id: string, reason: string): void {
+    const key = `${id}:${reason}`;
+    if (this.lastTacticalNavUnavailableLogKey === key) {
+      return;
+    }
+
+    this.lastTacticalNavUnavailableLogKey = key;
+    console.info(`[TacticalNav] target unavailable id=${id} reason=${reason}`);
   }
 
   private useRaidInventorySlot(slotId: string): void {
@@ -2090,7 +2140,9 @@ export class App {
 
     const target = this.getTacticalNavTargetById(this.tacticalNavTarget.id, playerPosition);
     if (!target) {
-      this.clearTacticalNavTarget("target-unavailable");
+      const previousTarget = this.tacticalNavTarget;
+      this.logTacticalNavUnavailable(previousTarget.id, previousTarget.type === "reveal-signal" ? "signal-lost" : "target-unavailable");
+      this.clearTacticalNavTarget(previousTarget.type === "reveal-signal" ? "signal-lost" : "target-unavailable");
       return null;
     }
 
@@ -2204,7 +2256,7 @@ export class App {
         "reveal-signal",
         signal.position,
         "reveal",
-        "last-known",
+        "signal active",
         remainingSeconds,
       );
     }
@@ -2395,7 +2447,7 @@ export class App {
         distance: signal.distance,
         remainingSeconds: Math.max(0, (signal.expiresAt - performance.now()) / 1000),
         source: signal.source,
-        status: "last-known",
+        status: "live",
         selected: this.tacticalMapSelectedTargetId === `reveal-${signal.id}`,
         tracked: trackedTargetId === `reveal-${signal.id}`,
         trackable: true,

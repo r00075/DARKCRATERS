@@ -104,6 +104,11 @@ export type TacticalRouteHint = Readonly<{
   distance: number;
   remainingSeconds?: number;
 }>;
+export type TacticalRouteFeedback = Readonly<{
+  label: string;
+  status: "route-cleared" | "signal-lost" | "target-unavailable" | "objective-complete";
+  remainingSeconds: number;
+}>;
 export type TacticalMapData = Readonly<{
   open: boolean;
   mapSize: number;
@@ -184,6 +189,7 @@ export type RaidHudState = Readonly<{
   landingSequence: OrbitalDeploymentSequenceState;
   navigationMarkers: HudNavigationMarker[];
   routeHint: TacticalRouteHint | null;
+  routeFeedback: TacticalRouteFeedback | null;
   tacticalMap: TacticalMapData;
   revealSignal: RevealSignalHudState;
   revealAffinity: RevealAffinityHudState;
@@ -449,8 +455,9 @@ export class CombatHud {
     this.condition.classList.toggle("hidden", !showRaidHud || landingActive);
     this.navigation.innerHTML = this.formatNavigationMarkers(raid.navigationMarkers);
     this.navigation.classList.toggle("hidden", !showRaidHud || landingActive || raid.navigationMarkers.length === 0);
-    this.routeHint.innerHTML = this.formatRouteHint(raid.routeHint);
-    this.routeHint.classList.toggle("hidden", !showRaidHud || landingActive || raid.routeHint === null);
+    this.routeHint.innerHTML = this.formatRouteHint(raid.routeHint, raid.routeFeedback);
+    this.routeHint.classList.toggle("hidden", !showRaidHud || landingActive || (raid.routeHint === null && raid.routeFeedback === null));
+    this.routeHint.classList.toggle("route-feedback", raid.routeHint === null && raid.routeFeedback !== null);
     this.revealSignal.innerHTML = this.formatRevealSignal(raid.revealSignal);
     this.revealSignal.classList.toggle("hidden", !showRaidHud || landingActive || !raid.revealSignal.active);
     this.revealSignal.classList.toggle("empty", raid.revealSignal.active && raid.revealSignal.count === 0);
@@ -1005,21 +1012,36 @@ export class CombatHud {
     `;
   }
 
-  private formatRouteHint(hint: TacticalRouteHint | null): string {
+  private formatRouteHint(hint: TacticalRouteHint | null, feedback: TacticalRouteFeedback | null): string {
+    if (!hint && feedback) {
+      return `
+        <span>${feedback.status === "signal-lost" ? "Signal Update" : "Navigation"}</span>
+        <strong>${this.formatRouteFeedbackLabel(feedback)}</strong>
+        <div><b>${feedback.label}</b><em>${Math.ceil(feedback.remainingSeconds)}s</em></div>
+      `;
+    }
+
     if (!hint) {
       return "";
     }
 
     const distance = Math.max(0, Math.round(hint.distance));
     const timer = hint.remainingSeconds !== undefined
-      ? `<em>${Math.ceil(hint.remainingSeconds)}s signal</em>`
+      ? `<em>${Math.ceil(hint.remainingSeconds)}s signal window</em>`
       : "";
     return `
-      <span>Tracking</span>
+      <span>Tracking //</span>
       <strong>${hint.label}</strong>
-      <div><b>${distance}m</b><em>${this.formatRouteType(hint.type)} | ${hint.status}</em></div>
+      <div><b>${distance}m</b><em>${this.formatRouteType(hint.type)} // ${this.formatRouteStatus(hint)}</em></div>
       ${timer}
     `;
+  }
+
+  private formatRouteFeedbackLabel(feedback: TacticalRouteFeedback): string {
+    if (feedback.status === "signal-lost") return "SIGNAL LOST";
+    if (feedback.status === "target-unavailable") return "TARGET UNAVAILABLE";
+    if (feedback.status === "objective-complete") return "OBJECTIVE COMPLETE - ROUTE CLEARED";
+    return "ROUTE CLEARED";
   }
 
   private formatRouteType(type: TacticalRouteHint["type"]): string {
@@ -1028,6 +1050,22 @@ export class CombatHud {
     if (type === "objective") return "Objective";
     if (type === "cache") return "Cache";
     return "POI";
+  }
+
+  private formatRouteStatus(hint: TacticalRouteHint): string {
+    if (hint.type === "reveal-signal") {
+      return hint.remainingSeconds !== undefined ? "Temporary signal" : "Last known";
+    }
+    if (hint.type === "extraction") {
+      return hint.status === "active" || hint.status === "launch ready" ? "Extraction route" : "Return route";
+    }
+    if (hint.type === "objective") {
+      return hint.status === "tracked" ? "Tracked objective" : "Active objective";
+    }
+    if (hint.type === "poi") {
+      return "Known location";
+    }
+    return hint.status;
   }
 
   private formatTacticalMap(map: TacticalMapData, affinity?: RevealAffinityHudState): string {
@@ -1046,20 +1084,14 @@ export class CombatHud {
       ? {
           id: selectedPoint.id,
           label: selectedPoint.label,
-          type: selectedPoint.kind === "signal"
-            ? "Reveal Signal"
-            : selectedPoint.kind === "extraction"
-              ? "Extraction"
-              : selectedPoint.kind === "poiObjective"
-                ? "POI Objective"
-                : selectedPoint.kind === "contract"
-                  ? "Contract"
-                  : "Objective",
+          type: this.formatMapTargetType(selectedPoint.kind),
           distance: selectedPoint.distance,
-          status: selectedPoint.status ?? (selectedPoint.active ? "active" : "known"),
+          status: selectedPoint.tracked ? "Tracked" : this.formatMapTargetStatus(selectedPoint.kind, selectedPoint.status ?? (selectedPoint.active ? "active" : "known")),
+          source: this.formatMapTargetSource(selectedPoint.kind, selectedPoint.source),
           trackable: selectedPoint.trackable !== false && selectedPoint.kind !== "breadcrumb",
           tracked: selectedPoint.tracked === true,
           remainingSeconds: selectedPoint.remainingSeconds,
+          copy: this.formatMapTargetCopy(selectedPoint.kind),
         }
       : selectedPoi
         ? {
@@ -1067,10 +1099,12 @@ export class CombatHud {
             label: selectedPoi.name,
             type: selectedPoi.activeContract ? "Contract POI" : "POI",
             distance: selectedPoi.distance,
-            status: selectedPoi.activeContract ? "active contract" : selectedPoi.danger,
+            status: map.trackedTarget?.id === `poi-${selectedPoi.id}` ? "Tracked" : selectedPoi.activeContract ? "Active contract" : "Known location",
+            source: selectedPoi.activeContract ? "Contract" : "Map",
             trackable: true,
             tracked: map.trackedTarget?.id === `poi-${selectedPoi.id}`,
             remainingSeconds: undefined,
+            copy: selectedPoi.activeContract ? "Route to active contract area. Rewards not confirmed from map data." : "Known location route only. Rewards not confirmed.",
           }
         : null;
     const playerX = toPercent(map.player.x);
@@ -1151,8 +1185,8 @@ export class CombatHud {
             <button type="button" data-raid-action="close-tactical-map">Close</button>
           </nav>
         </header>
-        <div class="tactical-map-body">
-            <div class="tactical-map-grid">
+          <div class="tactical-map-body">
+          <div class="tactical-map-grid">
             <div class="tactical-map-risk core"></div>
             <div class="tactical-map-risk alien"></div>
             ${routeLine}
@@ -1164,8 +1198,14 @@ export class CombatHud {
             <span>Selected Target</span>
             <strong>${selectedTarget?.label ?? "No target selected"}</strong>
             <p>${selectedTarget
-              ? `${selectedTarget.type}. ${selectedTarget.status}. ${selectedTarget.distance !== undefined ? `${Math.round(selectedTarget.distance)}m from current position.` : "Distance pending."}`
+              ? `${selectedTarget.copy} ${selectedTarget.distance !== undefined ? `${Math.round(selectedTarget.distance)}m from current position.` : "Distance pending."}`
               : "Select a marker for details."}</p>
+            ${selectedTarget ? `<div class="tactical-map-detail-grid">
+              <span>Type</span><b>${selectedTarget.type}</b>
+              <span>Status</span><b>${selectedTarget.status}</b>
+              <span>Source</span><b>${selectedTarget.source}</b>
+              <span>Distance</span><b>${selectedTarget.distance !== undefined ? `${Math.round(selectedTarget.distance)}m` : "Pending"}</b>
+            </div>` : ""}
             ${selectedTarget?.remainingSeconds !== undefined ? `<em>${Math.ceil(selectedTarget.remainingSeconds)}s signal window</em>` : ""}
             ${selectedTarget?.trackable
               ? selectedTarget.tracked
@@ -1209,8 +1249,55 @@ export class CombatHud {
     const deltaX = endX - startX;
     const deltaY = endY - startY;
     const length = Math.hypot(deltaX, deltaY);
+    if (length < 1.4) {
+      return `<span class="tactical-route-endpoint close" style="left: ${endX}%; top: ${endY}%"></span>`;
+    }
     const angle = Math.atan2(deltaY, deltaX);
-    return `<span class="tactical-route-line" style="left: ${startX}%; top: ${startY}%; width: ${length}%; transform: rotate(${angle}rad)"></span>`;
+    return `
+      <span class="tactical-route-line" style="left: ${startX}%; top: ${startY}%; width: ${length}%; transform: rotate(${angle}rad)"></span>
+      <span class="tactical-route-endpoint" style="left: ${endX}%; top: ${endY}%"></span>
+    `;
+  }
+
+  private formatMapTargetStatus(kind: TacticalMapPointMarker["kind"], status: string): string {
+    if (kind === "signal") {
+      return status === "live" ? "Signal active" : "Last known";
+    }
+    if (kind === "extraction") {
+      return status === "active" ? "Active" : "Available";
+    }
+    if (kind === "objective" || kind === "poiObjective" || kind === "contract") {
+      return status === "active" ? "Active" : status;
+    }
+    return status;
+  }
+
+  private formatMapTargetType(kind: TacticalMapPointMarker["kind"]): string {
+    if (kind === "signal") return "Lumen Signal";
+    if (kind === "extraction") return "Extraction";
+    if (kind === "poiObjective") return "POI Objective";
+    if (kind === "contract") return "Contract";
+    if (kind === "ship" || kind === "cargo" || kind === "launch") return "Extraction";
+    if (kind === "objective") return "Objective";
+    return "Map Point";
+  }
+
+  private formatMapTargetSource(kind: TacticalMapPointMarker["kind"], source?: TacticalMapPointMarker["source"]): string {
+    if (kind === "signal") return source === "essence-flare" ? "Essence Flare" : "Reveal";
+    if (kind === "extraction") return "Extraction";
+    if (kind === "contract" || kind === "poiObjective") return "Contract";
+    if (kind === "ship" || kind === "cargo" || kind === "launch" || kind === "objective") return "System";
+    return "Map";
+  }
+
+  private formatMapTargetCopy(kind: TacticalMapPointMarker["kind"]): string {
+    if (kind === "signal") return "Temporary Lumen signal. Signal will be lost when the flare expires.";
+    if (kind === "extraction") return "Extraction route available. Route clears on extraction or return to Habitat.";
+    if (kind === "contract") return "Route to active contract area. Objective rewards are not changed by tracking.";
+    if (kind === "poiObjective") return "Objective route available. Tracking does not complete or alter rewards.";
+    if (kind === "objective") return "Route to active objective. Objective completion clears this route.";
+    if (kind === "ship" || kind === "cargo" || kind === "launch") return "Ship systems location route available.";
+    return "Known location route only. Rewards not confirmed.";
   }
 
   private getSignalLabelOffsets(

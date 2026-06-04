@@ -900,6 +900,17 @@ body.input-mode-ui #app {
   font-weight: 800;
 }
 
+.route-hint.route-feedback {
+  border-left-color: rgba(255, 176, 46, 0.82);
+  background:
+    linear-gradient(135deg, rgba(255, 176, 46, 0.11), transparent 44%),
+    linear-gradient(180deg, rgba(5, 7, 10, 0.78), rgba(10, 13, 18, 0.6));
+}
+
+.route-hint.route-feedback strong {
+  color: #ffb02e;
+}
+
 .reveal-signal-hud {
   position: fixed;
   left: 18px;
@@ -1212,7 +1223,9 @@ body.input-mode-ui #app {
 }
 
 .tactical-map-marker.poi.selected {
-  box-shadow: 0 0 0 4px rgba(65, 217, 255, 0.14), 0 0 18px rgba(65, 217, 255, 0.26);
+  outline: 1px solid rgba(207, 250, 254, 0.9);
+  outline-offset: 4px;
+  box-shadow: 0 0 16px rgba(65, 217, 255, 0.28);
 }
 
 .tactical-map-marker.poi.tracked,
@@ -1221,6 +1234,17 @@ body.input-mode-ui #app {
   box-shadow:
     0 0 0 5px rgba(114, 255, 157, 0.16),
     0 0 20px rgba(65, 217, 255, 0.36);
+}
+
+.tactical-map-marker.poi.tracked::after,
+.tactical-map-marker.point.tracked::after {
+  content: "";
+  position: absolute;
+  inset: -9px;
+  border: 1px solid rgba(114, 255, 157, 0.58);
+  border-radius: 999px;
+  animation: tactical-route-pulse 1.6s ease-in-out infinite;
+  pointer-events: none;
 }
 
 .tactical-map-marker.point {
@@ -1306,9 +1330,9 @@ body.input-mode-ui #app {
 }
 
 .tactical-map-marker.point.selected {
-  box-shadow:
-    0 0 0 4px rgba(65, 217, 255, 0.16),
-    0 0 16px rgba(65, 217, 255, 0.28);
+  outline: 1px solid rgba(207, 250, 254, 0.9);
+  outline-offset: 5px;
+  box-shadow: 0 0 16px rgba(65, 217, 255, 0.28);
 }
 
 .tactical-map-marker.point.breadcrumb {
@@ -1321,10 +1345,29 @@ body.input-mode-ui #app {
   position: absolute;
   height: 2px;
   transform-origin: 0 50%;
-  background: linear-gradient(90deg, rgba(65, 217, 255, 0.88), rgba(122, 77, 255, 0.68), rgba(114, 255, 157, 0.72));
+  background: repeating-linear-gradient(90deg, rgba(65, 217, 255, 0.86) 0 10px, rgba(122, 77, 255, 0.54) 10px 17px, transparent 17px 24px);
   box-shadow: 0 0 12px rgba(65, 217, 255, 0.28);
+  opacity: 0.82;
   pointer-events: none;
   z-index: 1;
+}
+
+.tactical-route-endpoint {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border: 1px solid rgba(114, 255, 157, 0.78);
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
+  background: rgba(65, 217, 255, 0.16);
+  box-shadow: 0 0 14px rgba(65, 217, 255, 0.32);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.tactical-route-endpoint.close {
+  border-color: rgba(255, 176, 46, 0.76);
+  box-shadow: 0 0 12px rgba(255, 176, 46, 0.3);
 }
 
 .tactical-map-player {
@@ -1359,6 +1402,32 @@ body.input-mode-ui #app {
   font-weight: 800;
 }
 
+.tactical-map-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(72px, auto) 1fr;
+  gap: 4px 10px;
+  margin: 9px 0;
+  padding: 8px;
+  border: 1px solid rgba(65, 217, 255, 0.13);
+  border-radius: 7px;
+  background: rgba(2, 6, 12, 0.34);
+}
+
+.tactical-map-detail-grid span,
+.tactical-map-detail-grid b {
+  display: block;
+  font-size: 10px;
+}
+
+.tactical-map-detail-grid span {
+  color: rgba(174, 182, 191, 0.74);
+  text-transform: uppercase;
+}
+
+.tactical-map-detail-grid b {
+  color: rgba(230, 237, 243, 0.94);
+}
+
 .tactical-track-button {
   width: 100%;
   margin: 4px 0 8px;
@@ -1378,6 +1447,23 @@ body.input-mode-ui #app {
 .tactical-map-tracked {
   border-left: 3px solid rgba(114, 255, 157, 0.7);
   padding-left: 8px;
+}
+
+@keyframes tactical-route-pulse {
+  0% {
+    opacity: 0.38;
+    transform: scale(0.92);
+  }
+
+  55% {
+    opacity: 0.9;
+    transform: scale(1.1);
+  }
+
+  100% {
+    opacity: 0.38;
+    transform: scale(0.92);
+  }
 }
 
 .tactical-map-legend {
