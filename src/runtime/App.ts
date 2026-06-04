@@ -384,6 +384,7 @@ export class App {
   private lastTravelEvent = "none";
   private boundaryWarningCooldown = 0;
   private inspectedWeaponId: WeaponId | null = null;
+  private lastInvalidInspectWeaponId: string | null = null;
   private inspectWeaponContext: "inspect" | "arsenal" | "habitat" = "inspect";
   private selectedLoadoutSlot: EquipmentSlot = "primary";
   private loadoutStashCompatibilityOpen = false;
@@ -788,6 +789,21 @@ export class App {
       return;
     }
 
+    if (event.code === "Escape" && this.raidScreen === "raid" && this.inventoryManager.snapshot.activeContainer !== null) {
+      const container = this.inventoryManager.snapshot.activeContainer;
+      console.info(`[Input] escape action=close-loot reason=loot-open container=${container.id}`);
+      this.closeLootPanel(container.id, "escape");
+      event.preventDefault();
+      return;
+    }
+
+    if (event.code === "Escape" && this.raidScreen === "raid" && this.raidBagOpen) {
+      console.info("[Input] escape action=close-eva reason=eva-open");
+      this.closeRaidBag("escape");
+      event.preventDefault();
+      return;
+    }
+
     if (event.code === "Escape" && this.tacticalMapOpen) {
       this.closeTacticalMap();
       event.preventDefault();
@@ -796,14 +812,6 @@ export class App {
 
     if (event.code === "KeyM" && this.raidScreen === "raid" && this.raidOutcome === "active" && this.playerHealth.snapshot.alive && !this.shipLandingState.active) {
       this.toggleTacticalMap();
-      event.preventDefault();
-      return;
-    }
-
-    if (event.code === "Escape" && this.raidScreen === "raid" && this.inventoryManager.snapshot.activeContainer !== null) {
-      const container = this.inventoryManager.snapshot.activeContainer;
-      this.closeLootPanel(container.id);
-      this.setInputMode("gameplay", "gameplay");
       event.preventDefault();
       return;
     }
@@ -981,20 +989,28 @@ export class App {
       return;
     }
 
+    const activeContainer = this.inventoryManager.snapshot.activeContainer;
+
     if (this.gameplayInput.raidBagTogglePressed) {
       this.lastInteractConsumedBy = "EVA-Pack";
-      this.raidBagOpen = !this.raidBagOpen;
-      this.clampRaidBagSelection();
-      if (this.raidBagOpen) {
-        this.setInputMode("ui", "raid-bag");
-      } else {
-        this.setInputMode("gameplay", "gameplay");
-        this.input.captureGameplayPointer();
+      if (activeContainer) {
+        console.info(`[Input] tab action=close-loot reason=loot-open container=${activeContainer.id}`);
+        this.closeLootPanel(activeContainer.id, "tab");
+        return;
       }
-      this.combatHud.showLootNotification(this.raidBagOpen ? "EVA Pack open" : "EVA Pack closed");
+      if (this.raidBagOpen) {
+        console.info("[Input] tab action=close-eva reason=eva-open");
+        this.closeRaidBag("tab");
+        return;
+      } else {
+        this.raidBagOpen = true;
+        this.clampRaidBagSelection();
+        this.setInputMode("ui", "raid-bag");
+        console.info("[Input] tab action=open-eva reason=eva-closed");
+        this.combatHud.showLootNotification("EVA Pack open");
+      }
     }
 
-    const activeContainer = this.inventoryManager.snapshot.activeContainer;
     const uiOpen = this.raidBagOpen || activeContainer !== null;
 
     if (!uiOpen) {
@@ -1002,7 +1018,6 @@ export class App {
     }
 
     if (activeContainer) {
-      this.raidBagOpen = true;
       this.selectedLootIndex = this.clampIndex(this.selectedLootIndex, activeContainer.items.length);
 
       if (this.gameplayInput.takeAllPressed) {
@@ -1018,7 +1033,8 @@ export class App {
         console.info(`[ClientLoot] repeated open blocked container=${activeContainer.id} reason=${reason}`);
         this.lastSharedContainerClaimRefresh = `repeated open blocked ${activeContainer.id} ${reason}`;
       } else if (this.gameplayInput.uiBackPressed) {
-        this.closeLootPanel(activeContainer.id);
+        console.info(`[Input] escape action=close-loot reason=loot-open container=${activeContainer.id}`);
+        this.closeLootPanel(activeContainer.id, "escape");
       } else {
         this.navigateRaidUiSelection(activeContainer.items.length, "loot");
       }
@@ -1026,10 +1042,8 @@ export class App {
       this.clampRaidBagSelection();
 
       if (this.gameplayInput.uiBackPressed) {
-        this.raidBagOpen = false;
-        this.setInputMode("gameplay", "gameplay");
-        this.input.captureGameplayPointer();
-        this.combatHud.showLootNotification("EVA Pack closed");
+        console.info("[Input] escape action=close-eva reason=eva-open");
+        this.closeRaidBag("escape");
       } else if (this.gameplayInput.uiDropPressed) {
         this.dropSelectedRaidBagItem();
       } else if (this.gameplayInput.uiConfirmPressed) {
@@ -1193,12 +1207,12 @@ export class App {
     }
 
     if (action === "close-bag") {
-      this.inventoryManager.setActiveContainer(null);
-      this.inventoryManager.clearWarning();
-      this.raidBagOpen = false;
-      this.setInputMode("gameplay", "gameplay");
-      this.input.captureGameplayPointer();
-      this.combatHud.showLootNotification("EVA Pack closed");
+      const activeContainer = this.inventoryManager.snapshot.activeContainer;
+      if (activeContainer) {
+        this.closeLootPanel(activeContainer.id, "close-bag-click");
+      } else {
+        this.closeRaidBag("button");
+      }
       return true;
     }
 
@@ -2700,7 +2714,7 @@ export class App {
 
       if (container) {
         this.lastInteractConsumedBy = "loot-cache";
-        this.raidBagOpen = true;
+        this.raidBagOpen = false;
         this.selectedLootIndex = 0;
         this.noiseSystem.emit("loot", this.player.state.position, this.environmentState.gameplay);
         this.setActiveSharedContainerPanel(container.id, "player-open");
@@ -2886,8 +2900,19 @@ export class App {
     this.activeSharedContainerPanelId = null;
   }
 
-  private closeLootPanel(containerId: string): void {
-    console.info(`[ClientLoot] panel close active=${this.activeSharedContainerPanelId ?? containerId}`);
+  private closeRaidBag(reason: "button" | "escape" | "tab"): void {
+    this.inventoryManager.clearWarning();
+    this.raidBagOpen = false;
+    if (this.inventoryManager.snapshot.activeContainer === null) {
+      this.setInputMode("gameplay", "gameplay");
+      this.input.captureGameplayPointer();
+    }
+    console.info(`[EvaPack] close reason=${reason}`);
+    this.combatHud.showLootNotification("EVA Pack closed");
+  }
+
+  private closeLootPanel(containerId: string, reason: "close" | "close-bag-click" | "escape" | "tab" = "close"): void {
+    console.info(`[ClientLoot] panel close active=${this.activeSharedContainerPanelId ?? containerId} reason=${reason}`);
     this.lootDirector.closeContainer(containerId);
     this.inventoryManager.setActiveContainer(null);
     this.inventoryManager.clearWarning();
@@ -6361,14 +6386,22 @@ export class App {
     const candidate = this.inspectedWeaponId ?? selectedWeapon ?? equipped ?? stashWeapon;
 
     if (candidate && this.weaponExistsForInspect(candidate)) {
+      this.lastInvalidInspectWeaponId = null;
       return candidate;
     }
 
+    const fallback = stashWeapon ?? equipped ?? null;
     if (candidate) {
-      console.warn(`InspectWeapon: invalid or unavailable weapon id "${candidate}"; falling back.`);
+      if (this.lastInvalidInspectWeaponId !== candidate) {
+        console.warn(`InspectWeapon: invalid or unavailable weapon id "${candidate}"; falling back.`);
+        this.lastInvalidInspectWeaponId = candidate;
+      }
+      if (fallback && fallback !== candidate) {
+        this.inspectedWeaponId = fallback;
+      }
     }
 
-    return stashWeapon ?? equipped ?? null;
+    return fallback;
   }
 
   private getAvailableWeaponIds(): WeaponId[] {
@@ -7550,7 +7583,9 @@ export class App {
         this.habitatPreview.detach();
       }
       this.shipDashboardPreview.dispose();
-      this.weaponBenchPreview.dispose();
+      if (!this.shouldKeepWeaponPreviewForMenuAction(action)) {
+        this.weaponBenchPreview.dispose();
+      }
     }
     this.sfxAudio.playEvent(action === "start" || action === "multiplayer-start" || action?.startsWith("launch-raid-") || action?.startsWith("class-deploy-")
       ? "ui.deploy"
@@ -8157,6 +8192,22 @@ export class App {
     }
   };
 
+  private shouldKeepWeaponPreviewForMenuAction(action: string | undefined): boolean {
+    if (!action) {
+      return false;
+    }
+
+    if (action === "arsenal") {
+      return true;
+    }
+
+    return action.startsWith("inspect-select-") ||
+      action.startsWith("inspect-equip-") ||
+      action.startsWith("inspect-repair-") ||
+      action.startsWith("inspect-upgrade-") ||
+      action.startsWith("inspect-attachment-");
+  }
+
   private get startingReserveAmmo(): number {
     const loadout = this.activeLoadout;
     return (loadoutConfig.freeStarterMags + loadout.extraAmmoMags) * loadoutConfig.roundsPerMagazine;
@@ -8362,7 +8413,7 @@ export class App {
       const reason = isPendingOpenResponse ? "pending-match" : "active-match";
       if (isPendingOpenResponse) {
         this.pendingSharedContainerOpenId = null;
-        this.raidBagOpen = true;
+        this.raidBagOpen = false;
         this.selectedLootIndex = 0;
         this.setInputMode("ui", "loot-panel");
         this.combatHud.showLootNotification(view.items.length > 0 ? "Recovery cache opened" : "Cache empty");

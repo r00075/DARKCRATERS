@@ -2796,12 +2796,13 @@ body.input-mode-ui #app {
   width: 100vw;
   max-width: 100vw;
   height: 100vh;
+  box-sizing: border-box;
   display: grid;
   grid-template:
     "top top top" 74px
     "list preview details" minmax(0, 1fr)
     "list mods service" minmax(176px, 0.44fr)
-    "rail rail rail" 90px / minmax(0, 0.64fr) minmax(0, 1.18fr) minmax(0, 0.9fr);
+    "rail rail rail" minmax(96px, 0.18fr) / minmax(0, 0.64fr) minmax(0, 1.18fr) minmax(0, 0.9fr);
   gap: 10px;
   padding: 12px 14px;
   overflow: hidden;
@@ -2942,8 +2943,10 @@ body.input-mode-ui #app {
 .arsenal-service-panel {
   grid-area: service;
   display: grid;
+  align-content: start;
   gap: 10px;
   overflow: auto;
+  padding-bottom: 18px;
 }
 
 .arsenal-action-rail {
@@ -2952,7 +2955,8 @@ body.input-mode-ui #app {
   grid-template-columns: minmax(0, 1fr) minmax(0, auto);
   align-items: center;
   gap: 10px;
-  overflow: hidden;
+  overflow: auto;
+  padding-bottom: 14px;
 }
 
 .arsenal-action-rail p {
@@ -2962,6 +2966,9 @@ body.input-mode-ui #app {
 
 .arsenal-action-rail .hq-action-bar {
   max-width: 680px;
+  max-height: 100%;
+  overflow: auto;
+  padding-bottom: 2px;
 }
 
 @media (max-width: 1420px), (max-height: 820px) {
@@ -3013,8 +3020,8 @@ body.input-mode-ui #app {
     grid-template:
       "top top top" 64px
       "list preview details" minmax(0, 1fr)
-      "list mods service" 156px
-      "rail rail rail" 80px / minmax(0, 0.6fr) minmax(0, 1.14fr) minmax(0, 0.84fr);
+      "list mods service" minmax(150px, 0.32fr)
+      "rail rail rail" minmax(92px, 0.17fr) / minmax(0, 0.6fr) minmax(0, 1.14fr) minmax(0, 0.84fr);
     gap: 8px;
     padding: 9px 10px;
   }
