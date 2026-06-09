@@ -6518,6 +6518,12 @@ body.input-mode-ui #app {
   margin: 6px auto;
 }
 
+.raid-outcome section.raid-result-grid {
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  width: min(1040px, calc(100vw - 42px));
+  max-height: min(58vh, 520px);
+}
+
 .raid-outcome section div {
   border: 2px solid rgba(255, 255, 255, 0.16);
   border-radius: 8px;
@@ -6531,6 +6537,10 @@ body.input-mode-ui #app {
   background:
     linear-gradient(135deg, rgba(65, 217, 255, 0.1), transparent 48%),
     rgba(8, 25, 34, 0.58);
+}
+
+.raid-outcome section .wide {
+  grid-column: span 2;
 }
 
 .raid-outcome section b {
@@ -6608,6 +6618,14 @@ body.input-mode-ui #app {
   .raid-outcome section {
     grid-template-columns: 1fr;
     max-height: 56vh;
+  }
+
+  .raid-outcome section.raid-result-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .raid-outcome section .wide {
+    grid-column: span 1;
   }
 }
 

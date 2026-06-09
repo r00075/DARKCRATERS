@@ -8,12 +8,22 @@ import type { POIObjectiveState } from "./POIObjectiveManager";
 import type { RaidTimerState } from "./RaidTimer";
 
 export type RaidPressurePhase = "quiet" | "contact" | "escalating" | "critical" | "extraction";
+export type RaidPressureReasonCategory =
+  | "initial-approach"
+  | "local-patrols"
+  | "objective-approach"
+  | "objective-contested"
+  | "heavy-cargo-exposed"
+  | "extraction-route-active"
+  | "critical-timer"
+  | "reveal-contact";
 
 export type RaidPressureState = Readonly<{
   phase: RaidPressurePhase;
   threatLevel: number;
   pressureLabel: string;
   reason: string;
+  reasonCategory: RaidPressureReasonCategory;
   objectivePressure: boolean;
   heavyCargoPressure: boolean;
   extractionPressure: boolean;
@@ -42,6 +52,7 @@ const emptyPressure: RaidPressureState = {
   threatLevel: 1,
   pressureLabel: "Quiet Survey",
   reason: "Initial approach. Keep the route short.",
+  reasonCategory: "initial-approach",
   objectivePressure: false,
   heavyCargoPressure: false,
   extractionPressure: false,
@@ -61,7 +72,8 @@ export function buildRaidPressureState(input: RaidPressureInput): RaidPressureSt
   const objectiveDistance = horizontalDistance(input.objective.targetPosition, input.playerPosition);
   const nearestPoi = input.poiObjectives.nearest;
   const poiDistance = nearestPoi?.distance ?? Number.POSITIVE_INFINITY;
-  const objectivePressure = !input.objective.completed && (objectiveDistance <= 52 || poiDistance <= 46 || (nearestPoi?.progress ?? 0) > 0);
+  const objectiveProgress = nearestPoi?.progress ?? 0;
+  const objectivePressure = !input.objective.completed && (objectiveDistance <= 52 || poiDistance <= 46 || objectiveProgress > 0);
   const heavyCargoPressure = input.heavyCargo.status === "available" ||
     input.heavyCargo.status === "dropped" ||
     input.heavyCargo.status === "carried" ||
@@ -69,6 +81,7 @@ export function buildRaidPressureState(input: RaidPressureInput): RaidPressureSt
   const extractionPressure = input.extraction.extracting || input.extraction.insideZone || input.missionComplete || input.timer.extractionUnlocked;
   const objectiveZoneContested = objectivePressure && nearbyEnemies.length > 0;
   const activePatrolCount = livingEnemies.filter((enemy) => enemy.state === "patrol" || enemy.state === "search" || enemy.state === "alert").length;
+  const revealPressure = input.revealActive && (objectivePressure || extractionPressure || nearbyEnemies.length > 0);
   const pressureScore =
     (timeRatio <= 0.7 ? 1 : 0) +
     (timeRatio <= 0.4 ? 1 : 0) +
@@ -78,16 +91,17 @@ export function buildRaidPressureState(input: RaidPressureInput): RaidPressureSt
     (objectivePressure ? 1 : 0) +
     (heavyCargoPressure ? 2 : 0) +
     (extractionPressure ? 1 : 0) +
-    (input.revealActive ? 1 : 0);
-  const phase = selectPressurePhase(timeRatio, pressureScore, nearbyEnemies.length, objectivePressure, heavyCargoPressure, extractionPressure);
-  const reason = selectReason(phase, {
+    (revealPressure ? 1 : 0);
+  const phase = selectPressurePhase(timeRatio, pressureScore, nearbyEnemies.length, objectivePressure, heavyCargoPressure, extractionPressure, input.missionComplete);
+  const reasonCategory = selectReasonCategory(phase, {
     objectivePressure,
     heavyCargoPressure,
     extractionPressure,
     objectiveZoneContested,
-    revealActive: input.revealActive,
+    revealActive: revealPressure,
     timeRatio,
   });
+  const reason = reasonForCategory(reasonCategory);
 
   return {
     ...emptyPressure,
@@ -95,6 +109,7 @@ export function buildRaidPressureState(input: RaidPressureInput): RaidPressureSt
     threatLevel: Math.max(1, Math.min(5, pressureScore + 1)),
     pressureLabel: pressureLabelForPhase(phase),
     reason,
+    reasonCategory,
     objectivePressure,
     heavyCargoPressure,
     extractionPressure,
@@ -102,7 +117,7 @@ export function buildRaidPressureState(input: RaidPressureInput): RaidPressureSt
     nearbyEnemyCount: nearbyEnemies.length,
     activePatrolCount,
     familyHint: familyPressureHint(input.familyId, phase),
-    contactFeed: buildContactFeed(nearbyEnemies, objectiveZoneContested, heavyCargoPressure, extractionPressure, input.revealActive),
+    contactFeed: buildContactFeed(nearbyEnemies, objectiveZoneContested, heavyCargoPressure, extractionPressure, revealPressure),
   };
 }
 
@@ -113,8 +128,9 @@ function selectPressurePhase(
   objectivePressure: boolean,
   heavyCargoPressure: boolean,
   extractionPressure: boolean,
+  missionComplete: boolean,
 ): RaidPressurePhase {
-  if (extractionPressure && (timeRatio <= 0.4 || pressureScore >= 4)) return "extraction";
+  if (extractionPressure && (missionComplete || timeRatio <= 0.4 || pressureScore >= 4)) return "extraction";
   if (timeRatio <= 0.15 || heavyCargoPressure || pressureScore >= 5) return "critical";
   if (timeRatio <= 0.4 || objectivePressure || pressureScore >= 3) return "escalating";
   if (timeRatio <= 0.7 || nearbyEnemyCount > 0) return "contact";
@@ -122,14 +138,14 @@ function selectPressurePhase(
 }
 
 function pressureLabelForPhase(phase: RaidPressurePhase): string {
-  if (phase === "quiet") return "Quiet Survey";
-  if (phase === "contact") return "Patrol Contact";
-  if (phase === "escalating") return "Crater Pressure Rising";
-  if (phase === "critical") return "Critical Pressure";
-  return "Extraction Pressure";
+  if (phase === "quiet") return "Quiet approach";
+  if (phase === "contact") return "Local patrol contact";
+  if (phase === "escalating") return "Objective zone pressure";
+  if (phase === "critical") return "Critical crater pressure";
+  return "Extraction route active";
 }
 
-function selectReason(
+function selectReasonCategory(
   phase: RaidPressurePhase,
   flags: {
     objectivePressure: boolean;
@@ -139,16 +155,26 @@ function selectReason(
     revealActive: boolean;
     timeRatio: number;
   },
-): string {
-  if (flags.objectiveZoneContested) return "Objective zone contested.";
-  if (flags.heavyCargoPressure) return "Heavy cargo exposed. Patrols converging.";
-  if (flags.extractionPressure) return "Extraction route active. Late patrols crossing return paths.";
-  if (flags.revealActive) return "Revealed contacts near the route.";
-  if (flags.objectivePressure) return "Objective area drawing patrol attention.";
-  if (flags.timeRatio <= 0.15) return "Extraction window unstable.";
-  if (flags.timeRatio <= 0.4) return "Patrol activity increasing.";
-  if (phase === "contact") return "Local patrols detected.";
-  return "Initial approach. Keep the route short.";
+): RaidPressureReasonCategory {
+  if (flags.objectiveZoneContested) return "objective-contested";
+  if (flags.heavyCargoPressure) return "heavy-cargo-exposed";
+  if (flags.extractionPressure) return "extraction-route-active";
+  if (flags.timeRatio <= 0.15) return "critical-timer";
+  if (flags.revealActive) return "reveal-contact";
+  if (flags.objectivePressure) return "objective-approach";
+  if (flags.timeRatio <= 0.4 || phase === "contact") return "local-patrols";
+  return "initial-approach";
+}
+
+function reasonForCategory(category: RaidPressureReasonCategory): string {
+  if (category === "objective-contested") return "Objective guards are converging.";
+  if (category === "heavy-cargo-exposed") return "Cargo handling has drawn patrol attention.";
+  if (category === "extraction-route-active") return "Return path activity rising.";
+  if (category === "critical-timer") return "Extraction window unstable.";
+  if (category === "reveal-contact") return "Revealed contacts near objective route.";
+  if (category === "objective-approach") return "Objective area drawing patrol attention.";
+  if (category === "local-patrols") return "Local patrols detected.";
+  return "Keep the route short.";
 }
 
 function familyPressureHint(familyId: MissionFamilyId, phase: RaidPressurePhase): string {
@@ -171,17 +197,17 @@ function buildContactFeed(
   revealActive: boolean,
 ): string[] {
   const feed: string[] = [];
-  if (objectiveZoneContested) feed.push("Objective guard contact");
-  if (heavyCargoPressure) feed.push("Cargo signature exposed");
-  if (extractionPressure) feed.push("Extraction route pressure");
-  if (revealActive) feed.push("Lumen signatures revealed");
 
   const eliteCount = nearbyEnemies.filter((enemy) => enemy.elite || enemy.type === "elite").length;
   const guards = nearbyEnemies.filter((enemy) => enemy.type === "guard" || enemy.type === "spitter").length;
   const patrols = Math.max(0, nearbyEnemies.length - eliteCount - guards);
-  if (eliteCount > 0) feed.push(`${eliteCount} elite threat${eliteCount === 1 ? "" : "s"}`);
-  if (guards > 0) feed.push(`${guards} objective guard${guards === 1 ? "" : "s"}`);
-  if (patrols > 0) feed.push(`${patrols} patrol contact${patrols === 1 ? "" : "s"}`);
+  if (objectiveZoneContested) feed.push(`Objective guards active x${Math.max(1, guards)}`);
+  if (eliteCount > 0) feed.push(eliteCount === 1 ? "Elite threat nearby" : `Elite threats nearby x${eliteCount}`);
+  if (extractionPressure) feed.push("Extraction route contact");
+  if (heavyCargoPressure) feed.push("Cargo signature exposed");
+  if (revealActive) feed.push("Revealed signatures");
+  if (patrols > 0) feed.push(`Local patrols detected x${patrols}`);
+  if (!objectiveZoneContested && guards > 0) feed.push(`Objective guards nearby x${guards}`);
 
   return feed.slice(0, 4);
 }

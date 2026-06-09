@@ -17,6 +17,7 @@ import type { MissionPresentation } from "../raid/MissionPresentation";
 import type { POIObjectiveState, POIObjectiveView } from "../raid/POIObjectiveManager";
 import type { InventorySlot, LootEvent, LootStack } from "../raid/RaidInventory";
 import type { RaidPressureState } from "../raid/RaidPressure";
+import type { RaidResultPresentation, RaidResultItem } from "../raid/RaidResultPresentation";
 import type { RaidResultSummary } from "../raid/RaidResultSummary";
 import type { RaidTimerState } from "../raid/RaidTimer";
 import type { SettingsManager } from "../settings/SettingsManager";
@@ -152,6 +153,7 @@ export type RaidHudState = Readonly<{
   outcomeItems: LootStack[];
   lootLostItems: LootStack[];
   resultSummary: RaidResultSummary;
+  resultPresentation: RaidResultPresentation | null;
   armorDurability: number;
   inventorySlots: number;
   inventoryCapacity: number;
@@ -254,6 +256,7 @@ export class CombatHud {
   private raidActionHandler: ((action: string) => void) | null = null;
   private previousInventoryMarkup = "";
   private previousOutcomeMarkup = "";
+  private previousRaidResultDisplayKey = "";
   private suppressNextRaidActionClick = false;
   private suppressNextLootActionClick = false;
 
@@ -1715,6 +1718,7 @@ export class CombatHud {
 
   private formatOutcome(raid: RaidHudState, playerHealth: PlayerHealthSnapshot): string {
     if (raid.outcome === "active" && playerHealth.alive) {
+      this.previousRaidResultDisplayKey = "";
       return "";
     }
 
@@ -1731,6 +1735,72 @@ export class CombatHud {
     }
 
     const summary = raid.resultSummary;
+    const presentation = raid.resultPresentation;
+    if (presentation) {
+      const displayKey = `${presentation.missionId}:${presentation.result}`;
+      if (this.previousRaidResultDisplayKey !== displayKey) {
+        this.previousRaidResultDisplayKey = displayKey;
+        console.info(`[RaidResult] displayed result=${presentation.result}`);
+      }
+
+      return `
+        <strong>${summary.title}</strong>
+        <span>${presentation.extractionStatus}</span>
+        <section class="raid-result-grid">
+          <div class="mission-outcome-summary wide">
+            <b>MISSION OUTCOME</b>
+            <span>Contract: ${presentation.missionTitle}<br>Family: ${presentation.familyName}<br>Result: ${presentation.resultLabel}</span>
+          </div>
+          <div>
+            <b>PRIMARY OBJECTIVE</b>
+            <span>${presentation.primaryObjectiveStatus}<br>${presentation.primaryObjectiveDetail}<br>${presentation.heavyCargoStatus}</span>
+          </div>
+          <div>
+            <b>POI CONTRACTS</b>
+            <span>${presentation.poiCompleted}/${presentation.poiTotalKnown} completed<br>${this.formatResultLines(presentation.poiLines, 4)}</span>
+          </div>
+          <div>
+            <b>REWARD CACHES</b>
+            <span>${presentation.rewardCachesClaimed}/${presentation.rewardCachesAvailable} claimed<br>${this.formatResultLines(presentation.rewardCacheLines, 3)}</span>
+          </div>
+          <div>
+            <b>RECOVERED ITEMS</b>
+            <span>${this.formatResultItems(presentation.recoveredItems, "No loot extracted")}</span>
+          </div>
+          <div>
+            <b>NOTABLE FINDS</b>
+            <span>${this.formatResultItems(presentation.notableFinds, "No notable finds secured")}</span>
+          </div>
+          <div>
+            <b>FIELD RISK</b>
+            <span>${this.formatResultLines(presentation.pressureSummary, 4)}</span>
+          </div>
+          <div>
+            <b>TYCHOSTAR ASSESSMENT</b>
+            <span>${presentation.corporateAssessment}<br>${presentation.narrativeLine}</span>
+          </div>
+          <div>
+            <b>PROGRESSION BRIDGE</b>
+            <span>${this.formatResultLines([...presentation.craftingOpportunities, ...presentation.repairOpportunities], 4)}</span>
+          </div>
+          <div>
+            <b>RECOMMENDED NEXT ACTIONS</b>
+            <span>${this.formatResultLines(presentation.nextRecommendedActions, 5)}</span>
+          </div>
+          <div>
+            <b>REWARDS</b>
+            <span>+${summary.xpGained} XP<br>+${summary.creditsGained} credits<br>+${summary.scrapGained} regolith scrap<br>${summary.scrapSpent} scrap spent</span>
+          </div>
+          <div>
+            <b>SHIP / EVA</b>
+            <span>Ship Cargo Secured: ${summary.shipCargoUsed} / ${summary.shipCargoCapacity}<br>Landing Quality: ${summary.shipLandingQuality}<br>Repair Status: ${summary.shipRepairStatus}<br>EVA Pack Left: ${summary.evaPackItemsLeft} item${summary.evaPackItemsLeft === 1 ? "" : "s"}</span>
+          </div>
+        </section>
+        <button type="button" data-raid-action="return-hq">Continue to Habitat</button>
+        <em>Habitat Stash is safe. EVA Pack rules have been applied. Hold N / B also returns to the habitat.</em>
+      `;
+    }
+
     const primaryRecovery = summary.lootExtracted.some((item) => item.type === "helium-drill-core")
       ? `<div class="primary-recovery"><b>Primary Recovery Secured</b><span>HELIUM-3 DRILL CORE<br>Heavy Objective Reward Confirmed</span></div>`
       : "";
@@ -1788,6 +1858,27 @@ export class CombatHud {
     return items
       .map((item) => `${item.label}${item.quantity > 1 ? ` x${item.quantity}` : ""}`)
       .join("<br>");
+  }
+
+  private formatResultItems(items: readonly RaidResultItem[], emptyLabel: string): string {
+    if (items.length === 0) {
+      return emptyLabel;
+    }
+
+    return items
+      .slice(0, 8)
+      .map((item) => `${item.notable ? "* " : ""}${item.label}${item.quantity > 1 ? ` x${item.quantity}` : ""}`)
+      .join("<br>");
+  }
+
+  private formatResultLines(lines: readonly string[], maxLines: number): string {
+    if (lines.length === 0) {
+      return "None";
+    }
+
+    const visible = lines.slice(0, maxLines);
+    const hidden = lines.length - visible.length;
+    return `${visible.join("<br>")}${hidden > 0 ? `<br>+${hidden} more` : ""}`;
   }
 
   private updateOutcomeMarkup(raid: RaidHudState, playerHealth: PlayerHealthSnapshot): void {
