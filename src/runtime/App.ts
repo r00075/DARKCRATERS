@@ -94,6 +94,7 @@ import {
 } from "../raid/RaidResultSummary";
 import { RaidTimer, type RaidTimerState } from "../raid/RaidTimer";
 import { buildMissionPresentation, type MissionPresentation } from "../raid/MissionPresentation";
+import { buildRaidPressureState, type RaidPressureState } from "../raid/RaidPressure";
 import { Reputation } from "../raid/Reputation";
 import {
   controllerButtonLabels,
@@ -391,6 +392,10 @@ export class App {
   private lastMissionBriefingLogKey = "";
   private lastMissionObjectiveLogKey = "";
   private lastMissionOutcomeLogKey = "";
+  private lastRaidPressureLogKey = "";
+  private lastRaidPressureToastKey = "";
+  private objectivePressureSpawned = false;
+  private extractionPressureSpawned = false;
   private poiArrivalVisited = new Set<string>();
   private travelEventCooldown = 32;
   private lastTravelEvent = "none";
@@ -668,6 +673,7 @@ export class App {
         this.updateContractAlertState();
         this.updateObjective(dt);
         this.updatePoiObjectives(dt);
+        this.updateRaidPressurePacing();
         this.flushContractMessages();
       } else {
         this.currentPoiName = null;
@@ -747,6 +753,7 @@ export class App {
           shipCargoItems: this.shipManager.cargoItems,
           heavyCargo: this.heavyCargoState,
           mission: this.getMissionPresentation(),
+          pressure: this.getRaidPressureState(),
           landingSequence: this.shipLandingState,
           navigationMarkers: this.getNavigationMarkers(),
           routeHint: this.getTacticalRouteHint(),
@@ -2225,6 +2232,105 @@ export class App {
     console.info(`[MissionUX] outcome result=${mission.result} primary=${mission.status} poi=${this.poiObjectiveOutcomesThisRaid.length}`);
   }
 
+  private getRaidPressureState(): RaidPressureState {
+    const mission = this.getMissionPresentation();
+    const revealState = this.lumenRevealSystem.getSignalState(this.enemyDebugStates);
+    return buildRaidPressureState({
+      timer: this.raidTimerState,
+      familyId: mission.familyId,
+      objective: this.objectiveState,
+      poiObjectives: this.poiObjectiveState,
+      heavyCargo: this.heavyCargoState,
+      extraction: this.extractionState,
+      playerPosition: this.player.state.position,
+      enemies: this.enemyDebugStates,
+      revealActive: revealState.active && revealState.count > 0,
+      missionComplete: this.objectiveWasCompleted,
+    });
+  }
+
+  private updateRaidPressurePacing(): void {
+    if (this.raidOutcome !== "active" || this.shipLandingState.active) {
+      return;
+    }
+
+    const pressure = this.getRaidPressureState();
+    const logKey = `${pressure.phase}:${pressure.threatLevel}:${pressure.reason}`;
+    if (this.lastRaidPressureLogKey !== logKey) {
+      this.lastRaidPressureLogKey = logKey;
+      console.info(`[RaidPressure] phase=${pressure.phase} threat=${pressure.threatLevel} reason=${pressure.reason}`);
+      if (pressure.objectivePressure) {
+        console.info(`[EncounterPacing] objective-zone pressure=${pressure.threatLevel} poi=${this.poiObjectiveState.nearest?.poiId ?? "primary"}`);
+      }
+      if (pressure.extractionPressure) {
+        console.info(`[EncounterPacing] extraction pressure active=true`);
+      }
+    }
+
+    if (pressure.phase !== "quiet" && pressure.reason !== this.lastRaidPressureToastKey) {
+      this.lastRaidPressureToastKey = pressure.reason;
+      this.combatHud.showLootNotification(pressure.reason);
+    }
+
+    this.maybeSpawnObjectivePressure(pressure);
+    this.maybeSpawnExtractionPressure(pressure);
+  }
+
+  private maybeSpawnObjectivePressure(pressure: RaidPressureState): void {
+    if (this.multiplayerMode || this.objectivePressureSpawned || !pressure.objectivePressure || pressure.nearbyEnemyCount > 0) {
+      return;
+    }
+
+    const nearest = this.poiObjectiveState.nearest;
+    if (!nearest || nearest.progress <= 0 || this.enemyDirector.activeEnemyCount >= 6) {
+      return;
+    }
+
+    const spawn = this.findFairPressureSpawn(nearest.markerPosition, 24, 34);
+    if (!spawn) {
+      return;
+    }
+
+    this.objectivePressureSpawned = true;
+    const type: EnemyType = nearest.threatRating >= 4 ? "guard" : nearest.threatRating >= 3 ? "charger" : "grunt";
+    this.enemyDirector.spawnEventEnemy(`objective-pressure-${nearest.id}`, type, spawn, nearest.threatRating >= 4);
+    console.info(`[EncounterPacing] objective-zone reinforcement poi=${nearest.poiId} type=${type}`);
+  }
+
+  private maybeSpawnExtractionPressure(pressure: RaidPressureState): void {
+    if (this.multiplayerMode || this.extractionPressureSpawned || !pressure.extractionPressure || !this.objectiveWasCompleted) {
+      return;
+    }
+
+    if (this.enemyDirector.activeEnemyCount >= 7) {
+      return;
+    }
+
+    const spawn = this.findFairPressureSpawn(mapLayoutConfig.shipLandingSitePosition, 34, 48);
+    if (!spawn) {
+      return;
+    }
+
+    this.extractionPressureSpawned = true;
+    this.enemyDirector.spawnEventEnemy("extraction-route-pressure", "grunt", spawn, false);
+    console.info("[EncounterPacing] extraction pressure active=true spawn=return-route");
+  }
+
+  private findFairPressureSpawn(anchor: Vector3, minDistance: number, maxDistance: number): Vector3 | null {
+    for (let index = 0; index < 8; index += 1) {
+      const angle = Math.random() * Math.PI * 2;
+      const radius = minDistance + Math.random() * Math.max(1, maxDistance - minDistance);
+      const candidate = anchor.add(new Vector3(Math.sin(angle) * radius, 0, Math.cos(angle) * radius));
+      const playerDistance = this.horizontalDistance(candidate, this.player.state.position);
+
+      if (playerDistance >= 28 && playerDistance <= 150) {
+        return candidate;
+      }
+    }
+
+    return null;
+  }
+
   private getTacticalNavTargetById(id: string, playerPosition: Vector3 = this.player.state.position): TacticalNavTarget | null {
     return this.getTacticalNavCandidates(playerPosition).find((target) => target.id === id) ?? null;
   }
@@ -3596,8 +3702,9 @@ export class App {
         this.multiplayerClient.requestHeavyCargoRelease(heliumDrillCoreHeavyCargoId);
       } else if (this.heavyCargoManager.tryLocalRelease(this.player.state.position)) {
         this.heavyCargoState = this.heavyCargoManager.update(this.player.state, this.landedShip.cargoAccessPosition);
-        this.combatHud.showLootNotification("HEAVY CORE RELEASED | E: Carry core");
+        this.combatHud.showLootNotification("HEAVY CORE RELEASED | Patrols converging | E: Carry core");
         this.logMissionObjectiveUpdate("core released");
+        console.info("[EncounterPacing] heavy-cargo pressure action=release");
         this.sfxAudio.playEvent("heavy.release");
       }
       this.lastInteractConsumedBy = "heavy-cargo-release";
@@ -3633,8 +3740,9 @@ export class App {
   }
 
   private onHeavyCargoPickedUp(): void {
-    this.combatHud.showLootNotification("CORE SIGNATURE EXPOSED | LUMEN RESPONSE INBOUND | RETURN CORE TO SHIP");
+    this.combatHud.showLootNotification("CORE SIGNATURE EXPOSED | PATROLS CONVERGING | RETURN CORE TO SHIP");
     this.logMissionObjectiveUpdate("return core to ship");
+    console.info("[EncounterPacing] heavy-cargo pressure action=pickup");
     this.sfxAudio.playEvent("heavy.pickup");
     this.sfxAudio.playEvent("heavy.exposed");
     this.noiseSystem.emit("loot", this.heavyCargoState.position, this.environmentState.gameplay, 1.6);
@@ -3657,7 +3765,8 @@ export class App {
       this.combatHud.showLootNotification("Route cleared: objective complete");
     }
     this.logMissionObjectiveComplete();
-    this.combatHud.showLootNotification("HEAVY CARGO LOADED | EXTRACTION SIGNAL AVAILABLE");
+    this.combatHud.showLootNotification("HEAVY CARGO LOADED | EXTRACTION ROUTE STABILIZING");
+    console.info("[EncounterPacing] heavy-cargo pressure action=secure");
     this.sfxAudio.playEvent("heavy.secure");
   }
 
@@ -4473,6 +4582,10 @@ export class App {
     this.lastTacticalMapRevealLogKey = "";
     this.lastMissionObjectiveLogKey = "";
     this.lastMissionOutcomeLogKey = "";
+    this.lastRaidPressureLogKey = "";
+    this.lastRaidPressureToastKey = "";
+    this.objectivePressureSpawned = false;
+    this.extractionPressureSpawned = false;
     this.poiArrivalVisited = new Set<string>();
     this.travelEventCooldown = 34;
     this.lastTravelEvent = "none";

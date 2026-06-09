@@ -16,6 +16,7 @@ import type { LootContainerView } from "../raid/LootDirector";
 import type { MissionPresentation } from "../raid/MissionPresentation";
 import type { POIObjectiveState, POIObjectiveView } from "../raid/POIObjectiveManager";
 import type { InventorySlot, LootEvent, LootStack } from "../raid/RaidInventory";
+import type { RaidPressureState } from "../raid/RaidPressure";
 import type { RaidResultSummary } from "../raid/RaidResultSummary";
 import type { RaidTimerState } from "../raid/RaidTimer";
 import type { SettingsManager } from "../settings/SettingsManager";
@@ -189,6 +190,7 @@ export type RaidHudState = Readonly<{
   shipCargoItems: LootStack[];
   heavyCargo: HeavyCargoViewState;
   mission: MissionPresentation;
+  pressure: RaidPressureState;
   landingSequence: OrbitalDeploymentSequenceState;
   navigationMarkers: HudNavigationMarker[];
   routeHint: TacticalRouteHint | null;
@@ -418,12 +420,14 @@ export class CombatHud {
     this.movementDebug.textContent = `Hop ${motor.consecutiveHopCount} | Momentum ${motor.bunnyhopMomentumMultiplier.toFixed(2)}x | Speed ${motor.horizontalSpeed.toFixed(1)}`;
     this.movementDebug.classList.toggle("hidden", landingActive || !showRaidHud);
     this.aiDebug.textContent = enemies
+      .slice(0, 6)
       .map((enemy) => {
         const marker = enemy.elite ? "ELITE " : "";
         const cover = enemy.coverTarget ? " cover" : "";
         const faction = themeConfig.enemyFactionNames[enemy.type];
         return `${faction}: ${marker}${enemy.role.toUpperCase()} ${enemy.state.toUpperCase()} ${enemy.tactic}${cover} ${Math.ceil(enemy.health)}hp`;
       })
+      .concat(enemies.length > 6 ? [`+${enemies.length - 6} contacts bucketed`] : [])
       .join("\n");
     this.aiDebug.classList.toggle("hidden", landingActive || !showRaidHud);
     this.damageFlash.classList.toggle("active", playerHealth.recentDamage);
@@ -491,7 +495,7 @@ export class CombatHud {
     this.ship.classList.toggle("readiness-compromised", raid.ship.readiness === "compromised");
     this.shoulder.textContent = `Shoulder: ${raid.shoulderSide === "right" ? "R" : "L"}`;
     this.shoulder.classList.toggle("hidden", !showRaidHud || landingActive);
-    this.objective.innerHTML = this.formatMissionObjective(raid.mission, raid.objective, raid.heavyCargo, raid.routeHint);
+    this.objective.innerHTML = this.formatMissionObjective(raid.mission, raid.objective, raid.heavyCargo, raid.routeHint, raid.pressure);
     this.objective.classList.toggle("hidden", !showRaidHud || landingActive);
     this.poiObjectives.innerHTML = this.formatPoiObjectives(raid.poiObjectives);
     this.poiObjectives.classList.toggle("hidden", !showRaidHud || landingActive || !raid.poiObjectives.active);
@@ -1577,6 +1581,7 @@ export class CombatHud {
     objective: ObjectiveState,
     heavyCargo: HeavyCargoViewState,
     routeHint: TacticalRouteHint | null,
+    pressure: RaidPressureState,
   ): string {
     const distance = Math.max(0, Math.round(objective.distance));
     const progress = Math.round(objective.progress * 100);
@@ -1596,6 +1601,12 @@ export class CombatHud {
       <span>${mission.primaryObjective}</span>
       <span>Step: ${mission.currentStep}</span>
       <em>${mission.status.toUpperCase()} | ${routeLine}</em>
+      <span class="mission-pressure ${pressure.phase}">
+        ${pressure.pressureLabel} // Threat ${pressure.threatLevel}<br>
+        ${pressure.reason}<br>
+        ${pressure.familyHint}
+      </span>
+      ${pressure.contactFeed.length > 0 ? `<span class="mission-contact-feed">${pressure.contactFeed.join(" // ")}</span>` : ""}
       <span class="mission-optional">${mission.optionalObjective}</span>
       ${heavyCargoLine}
       <em>${distance}m</em>
