@@ -23,7 +23,7 @@ import { AmmoPool } from "./AmmoPool";
 import { FireRateGate } from "./FireRateGate";
 import { buildRuntimeWeaponDefinition } from "./WeaponStatModifiers";
 import { WeaponDurabilitySystem, type WeaponDurabilityState } from "./WeaponDurabilitySystem";
-import { type RuntimeWeaponDefinition, type WeaponId } from "./WeaponDefinitions";
+import { weaponDefinitions, type RuntimeWeaponDefinition, type WeaponId } from "./WeaponDefinitions";
 
 export type WeaponState = Readonly<{
   equippedId: WeaponId;
@@ -119,7 +119,7 @@ export class WeaponController {
     damageDealt: 0,
     hitZone: null,
     distance: 0,
-    weaponName: "Pistol",
+    weaponName: weaponDefinitions.pistol.name,
     laserActive: false,
   };
   private activeDurabilityState: WeaponDurabilityState = {

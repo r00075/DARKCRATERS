@@ -87,6 +87,8 @@ type RuntimePOIObjective = {
   definition: POIObjectiveDefinition;
   marker: AbstractMesh;
   prop: AbstractMesh;
+  surveyRing: AbstractMesh | null;
+  surveyProgress: AbstractMesh | null;
   lockedChest: AbstractMesh;
   completed: boolean;
   chestUnlocked: boolean;
@@ -147,6 +149,8 @@ export class POIObjectiveManager {
   private readonly markerMaterial: StandardMaterial;
   private readonly completeMaterial: StandardMaterial;
   private readonly propMaterial: StandardMaterial;
+  private readonly surveyFieldMaterial: StandardMaterial;
+  private readonly surveyProgressMaterial: StandardMaterial;
   private readonly lockedChestMaterials: Record<LootRarity, StandardMaterial>;
   private readonly objectives: RuntimePOIObjective[] = [];
   private readonly pendingSpawnRequests: POIObjectiveSpawnRequest[] = [];
@@ -167,6 +171,16 @@ export class POIObjectiveManager {
     this.propMaterial = new StandardMaterial("poi-objective-prop-material", scene);
     this.propMaterial.diffuseColor = new Color3(0.12, 0.14, 0.22);
     this.propMaterial.emissiveColor = themeConfig.colors.purple.scale(0.22);
+
+    this.surveyFieldMaterial = new StandardMaterial("poi-objective-survey-field-material", scene);
+    this.surveyFieldMaterial.diffuseColor = new Color3(0.035, 0.22, 0.2);
+    this.surveyFieldMaterial.emissiveColor = themeConfig.colors.rootGreen.scale(0.34).add(themeConfig.colors.cyan.scale(0.12));
+    this.surveyFieldMaterial.alpha = 0.54;
+
+    this.surveyProgressMaterial = new StandardMaterial("poi-objective-survey-progress-material", scene);
+    this.surveyProgressMaterial.diffuseColor = new Color3(0.04, 0.34, 0.36);
+    this.surveyProgressMaterial.emissiveColor = themeConfig.colors.cyan.scale(0.48);
+    this.surveyProgressMaterial.alpha = 0.72;
 
     this.lockedChestMaterials = {
       common: this.createChestMaterial("poi-chest-common-material", "common"),
@@ -278,6 +292,7 @@ export class POIObjectiveManager {
       return false;
     }
 
+    this.createSurveyRevealPulse(objective.definition.position, Math.min(radius, 18));
     this.completeObjective(objective);
     return true;
   }
@@ -419,6 +434,7 @@ export class POIObjectiveManager {
     marker.metadata = { gameplayTag: "poi-objective-marker", objectiveType: definition.type };
 
     const prop = this.createObjectiveProp(definition);
+    const surveyVisuals = this.createSurveyVisuals(definition);
     const lockedChest = MeshBuilder.CreateBox(
       `${definition.id}-locked-chest`,
       { width: 1.35, height: 0.78, depth: 1 },
@@ -437,6 +453,8 @@ export class POIObjectiveManager {
       definition,
       marker,
       prop,
+      surveyRing: surveyVisuals.ring,
+      surveyProgress: surveyVisuals.progress,
       lockedChest,
       completed: false,
       chestUnlocked: false,
@@ -455,6 +473,38 @@ export class POIObjectiveManager {
     prop.checkCollisions = definition.type !== "retrieve-core-fragment";
     prop.metadata = { gameplayTag: "poi-objective-prop", objectiveType: definition.type };
     return prop;
+  }
+
+  private createSurveyVisuals(definition: POIObjectiveDefinition): { ring: AbstractMesh | null; progress: AbstractMesh | null } {
+    if (definition.type !== "survey-residue-field") {
+      return { ring: null, progress: null };
+    }
+
+    const ring = MeshBuilder.CreateTorus(
+      `${definition.id}-survey-field-ring`,
+      { diameter: 6.2, thickness: 0.045, tessellation: 64 },
+      this.scene,
+    );
+    ring.position.copyFrom(definition.position.add(new Vector3(0, 0.09, 0)));
+    ring.rotation.x = Math.PI * 0.5;
+    ring.material = this.surveyFieldMaterial;
+    ring.checkCollisions = false;
+    ring.isPickable = false;
+    ring.metadata = { gameplayTag: "survey-residue-field", objectiveType: definition.type };
+
+    const progress = MeshBuilder.CreateTorus(
+      `${definition.id}-survey-progress-ring`,
+      { diameter: 3.1, thickness: 0.05, tessellation: 48 },
+      this.scene,
+    );
+    progress.position.copyFrom(definition.position.add(new Vector3(0, 0.13, 0)));
+    progress.rotation.x = Math.PI * 0.5;
+    progress.material = this.surveyProgressMaterial;
+    progress.checkCollisions = false;
+    progress.isPickable = false;
+    progress.metadata = { gameplayTag: "survey-residue-progress", objectiveType: definition.type };
+
+    return { ring, progress };
   }
 
   private queueEnemyAttraction(definition: POIObjectiveDefinition): void {
@@ -490,6 +540,44 @@ export class POIObjectiveManager {
     objective.prop.setEnabled(!objective.completed);
     objective.marker.rotation.y += 0.018;
     objective.lockedChest.rotation.y = Math.sin(performance.now() * 0.0018) * 0.05;
+    if (objective.surveyRing) {
+      const progress = objective.definition.duration > 0 ? objective.progressSeconds / objective.definition.duration : Number(objective.completed);
+      const pulse = 1 + Math.sin(performance.now() * 0.0032) * 0.035;
+      const stable = objective.completed ? 0.78 : 1;
+      objective.surveyRing.setEnabled(true);
+      objective.surveyRing.rotation.z += objective.completed ? 0.003 : 0.008;
+      objective.surveyRing.scaling.set(stable * pulse, stable * pulse, stable * pulse);
+      objective.surveyRing.material = objective.completed ? this.completeMaterial : this.surveyFieldMaterial;
+      if (objective.surveyProgress) {
+        objective.surveyProgress.setEnabled(!objective.completed && progress > 0);
+        const scale = Math.max(0.24, progress);
+        objective.surveyProgress.scaling.set(scale, scale, scale);
+        objective.surveyProgress.rotation.z -= 0.014;
+      }
+    }
+  }
+
+  private createSurveyRevealPulse(position: Vector3, radius: number): void {
+    const pulse = MeshBuilder.CreateTorus(
+      "survey-residue-flare-response",
+      { diameter: 1.3, thickness: 0.035, tessellation: 64 },
+      this.scene,
+    );
+    pulse.position.copyFrom(position.add(new Vector3(0, 0.18, 0)));
+    pulse.rotation.x = Math.PI * 0.5;
+    pulse.material = this.surveyProgressMaterial;
+    pulse.checkCollisions = false;
+    pulse.isPickable = false;
+    const startedAt = performance.now();
+    const observer = this.scene.onBeforeRenderObservable.add(() => {
+      const t = Math.min(1, (performance.now() - startedAt) / 850);
+      const scale = Math.max(0.1, radius * t);
+      pulse.scaling.set(scale, scale, scale);
+      if (t >= 1) {
+        this.scene.onBeforeRenderObservable.remove(observer);
+        pulse.dispose(false, false);
+      }
+    });
   }
 
   private toView(objective: RuntimePOIObjective, playerPosition: Vector3): POIObjectiveView {
@@ -619,6 +707,8 @@ export class POIObjectiveManager {
     for (const objective of this.objectives) {
       objective.marker.dispose();
       objective.prop.dispose();
+      objective.surveyRing?.dispose();
+      objective.surveyProgress?.dispose();
       objective.lockedChest.dispose();
     }
 

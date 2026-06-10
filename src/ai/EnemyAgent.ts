@@ -173,12 +173,12 @@ export class EnemyAgent implements Damageable {
     this.shotsUntilReload = roleDefinition.reloadAfterShots;
     this.liveMaterial = new StandardMaterial(`${config.id}-material`, scene);
     this.liveMaterial.diffuseColor = config.materialColor ?? typeDefinition.materialColor;
-    this.liveMaterial.emissiveColor = this.liveMaterial.diffuseColor.scale(this.enemyType === "elite" ? 0.22 : 0.08);
-    this.liveMaterial.specularColor = new Color3(0.16, 0.12, 0.18);
+    this.liveMaterial.emissiveColor = this.liveMaterial.diffuseColor.scale(this.enemyType === "elite" ? 0.28 : 0.13);
+    this.liveMaterial.specularColor = new Color3(0.22, 0.18, 0.24);
 
     this.hitMaterial = new StandardMaterial(`${config.id}-hit-material`, scene);
     this.hitMaterial.diffuseColor = new Color3(1, 0.62, 0.24);
-    this.hitMaterial.emissiveColor = new Color3(0.35, 0.12, 0.02);
+    this.hitMaterial.emissiveColor = new Color3(0.48, 0.18, 0.035);
 
     this.deadMaterial = new StandardMaterial(`${config.id}-dead-material`, scene);
     this.deadMaterial.diffuseColor = new Color3(0.18, 0.18, 0.18);

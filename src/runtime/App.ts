@@ -166,6 +166,17 @@ type LoopProfile = Readonly<{
 type RaidExitReason = "dead" | "downed_abandon" | "abandoned" | "extracted" | "manual_debug" | "timer_expired";
 type RaidWeaponEquipSlot = "primary" | "sidearm";
 type CampaignCodexFilter = "all" | "discovered" | "sealed" | "lumen" | "corporate" | "signal" | "crew" | "restricted";
+type MenuScrollPosition = Readonly<{
+  key: string;
+  top: number;
+  left: number;
+}>;
+type MenuScrollSnapshot = Readonly<{
+  action: string;
+  screen: RaidScreen;
+  viewKey: string;
+  positions: readonly MenuScrollPosition[];
+}>;
 type UiOverlayState =
   | "gameplay"
   | "raidBag"
@@ -451,16 +462,19 @@ export class App {
     this.scene = new Scene(this.engine);
     this.scene.collisionsEnabled = true;
     this.scene.clearColor.set(0.02, 0.025, 0.04, 1);
+    this.scene.fogMode = Scene.FOGMODE_EXP2;
+    this.scene.fogColor = new Color3(0.024, 0.034, 0.052);
+    this.scene.fogDensity = 0.004;
     this.scene.gravity = new Vector3(0, -24, 0);
 
     const skyLight = new HemisphericLight("sky-light", new Vector3(0.25, 1, 0.1), this.scene);
-    skyLight.diffuse = new Color3(0.56, 0.68, 0.86);
-    skyLight.groundColor = new Color3(0.035, 0.045, 0.062);
-    skyLight.intensity = 0.62;
+    skyLight.diffuse = new Color3(0.62, 0.76, 0.98);
+    skyLight.groundColor = new Color3(0.042, 0.052, 0.074);
+    skyLight.intensity = 0.66;
     const rimLight = new DirectionalLight("stylized-rim-light", new Vector3(0.5, -0.45, -0.35), this.scene);
     rimLight.diffuse = themeConfig.colors.cyan;
     rimLight.specular = themeConfig.colors.purple;
-    rimLight.intensity = 1.05;
+    rimLight.intensity = 1.16;
     PlaceholderWeaponAudio.setSettingsProvider(() => this.settingsManager.snapshot.audio);
     setMusicSettingsProvider(() => this.settingsManager.snapshot.audio);
     this.shipAudio.setSettingsProvider(() => this.settingsManager.snapshot.audio);
@@ -2381,21 +2395,24 @@ export class App {
 
   private logRaidPressureDiagnostics(pressure: RaidPressureState): void {
     const threatBucket = this.getPressureDiagnosticThreatBucket(pressure);
-    const pressureKey = `raid-pressure:${pressure.phase}:${threatBucket}:${pressure.reasonCategory}`;
-    if (this.shouldLogPressureDiagnostic("raid-pressure", pressureKey, 12000)) {
+    const phaseBucket = pressure.reasonCategory === "heavy-cargo-exposed" || pressure.reasonCategory === "extraction-route-active"
+      ? pressure.reasonCategory
+      : pressure.phase;
+    const pressureKey = `raid-pressure:${phaseBucket}:${threatBucket}:${pressure.reasonCategory}`;
+    if (this.shouldLogPressureDiagnostic("raid-pressure", pressureKey, 45000)) {
       console.info(`[RaidPressure] phase=${pressure.phase} threat=${pressure.threatLevel} reason=${pressure.reasonCategory}`);
     }
 
     if (pressure.objectivePressure) {
       const objectiveKey = `objective-zone:${this.poiObjectiveState.nearest?.poiId ?? "primary"}:${threatBucket}:${pressure.reasonCategory}`;
-      if (this.shouldLogPressureDiagnostic("objective-zone", objectiveKey, 15000)) {
+      if (this.shouldLogPressureDiagnostic("objective-zone", objectiveKey, 45000)) {
         console.info(`[EncounterPacing] objective-zone pressure=${pressure.threatLevel} poi=${this.poiObjectiveState.nearest?.poiId ?? "primary"} reason=${pressure.reasonCategory}`);
       }
     }
 
     if (pressure.extractionPressure) {
       const extractionKey = `extraction-pressure:${pressure.reasonCategory}`;
-      if (this.shouldLogPressureDiagnostic("extraction-pressure", extractionKey, 18000)) {
+      if (this.shouldLogPressureDiagnostic("extraction-pressure", extractionKey, 60000)) {
         console.info(`[EncounterPacing] extraction pressure active=true reason=${pressure.reasonCategory}`);
       }
     }
@@ -2485,7 +2502,7 @@ export class App {
   }
 
   private logPressureReinforcementSkip(key: string, zone: "objective-zone" | "extraction-route", reason: string): void {
-    if (!this.shouldLogPressureDiagnostic(`reinforcement-skip:${zone}`, `reinforcement-skip:${key}:${reason}`, 24000)) {
+    if (!this.shouldLogPressureDiagnostic(`reinforcement-skip:${zone}`, `reinforcement-skip:${key}:${reason}`, 30000)) {
       return;
     }
 
@@ -5797,7 +5814,7 @@ export class App {
       .map((sort) => `<button type="button" class="${this.stashSort === sort ? "active" : ""}" data-action="stash-sort-${sort}">${this.capitalize(sort)}</button>`)
       .join("");
     this.menuContent.innerHTML = `
-      <div class="stash-screen inspect-screen">
+      <div class="stash-screen inspect-screen" data-scroll-view="stash-main" data-scroll-key="stash-main">
         <header class="inspect-header">
           <div>
             <span>Persistent Habitat Vault</span>
@@ -5984,7 +6001,7 @@ export class App {
     const progress = Math.round(this.vendorManager.reputationProgress(vendor.id) * 100);
 
     this.menuContent.innerHTML = `
-      <div class="vendor-screen inspect-screen" style="--vendor-accent: ${vendor.accentPrimary}; --vendor-accent-secondary: ${vendor.accentSecondary}">
+      <div class="vendor-screen inspect-screen" data-scroll-view="vendors-main" data-scroll-key="vendors-main" style="--vendor-accent: ${vendor.accentPrimary}; --vendor-accent-secondary: ${vendor.accentSecondary}">
         <header class="inspect-header vendor-hero">
           <div>
             <span>Faction Vendor Economy</span>
@@ -6385,7 +6402,7 @@ export class App {
     const codexMarkup = this.renderEvidenceCodex(campaign);
 
     this.menuContent.innerHTML = `
-      <div class="intel-board-screen inspect-screen">
+      <div class="intel-board-screen inspect-screen" data-scroll-view="contracts-campaign" data-scroll-key="contracts-campaign">
         <header class="inspect-header">
           <div>
             <span>Lunar Terminal</span>
@@ -6543,7 +6560,7 @@ export class App {
     const stashRows = this.renderLoadoutStashRows(manager.filter);
 
     return `
-      <div class="loadout-locker-screen hq-dashboard-shell">
+      <div class="loadout-locker-screen hq-dashboard-shell" data-scroll-view="loadout-main" data-scroll-key="loadout-main">
         <header class="loadout-locker-top hq-panel-header">
           <div>
             <span>Loadout Locker</span>
@@ -7426,7 +7443,7 @@ export class App {
     ].map(([label, value]) => `<span>${label}<strong>${Number(value).toLocaleString()}</strong></span>`).join("");
 
     this.menuContent.innerHTML = `
-      <div class="arsenal-workbench-screen hq-dashboard-shell" style="--rarity-color: ${rarityColor}">
+      <div class="arsenal-workbench-screen hq-dashboard-shell" data-scroll-view="arsenal-main" data-scroll-key="arsenal-main" style="--rarity-color: ${rarityColor}">
         <header class="arsenal-workbench-top hq-panel-header">
           <div>
             <span>Weapon Workbench</span>
@@ -7444,7 +7461,7 @@ export class App {
             </div>
             <small>Prototype entries are inspect-only references.</small>
           </div>
-          <div class="arsenal-weapon-list">${this.renderArsenalWeaponRows(weaponId)}</div>
+          <div class="arsenal-weapon-list" data-scroll-key="arsenal-weapon-list">${this.renderArsenalWeaponRows(weaponId)}</div>
         </section>
         <section class="arsenal-preview-panel hq-panel hq-preview-panel">
           <div class="hq-panel-header compact">
@@ -7556,18 +7573,7 @@ export class App {
   }
 
   private getWeaponDisplayName(weaponId: WeaponId): string {
-    const names: Partial<Record<WeaponId, string>> = {
-      pistol: "MK-3 Survey Pistol",
-      "burst-pistol": "MK-3 Survey Pistol Alt",
-      revolver: "Flare Spike Launcher",
-      "compact-smg": "TY-7 Crater Carbine",
-      smg: "TY-7 Crater Carbine",
-      shotgun: "Breach-12 Scattergun",
-      "assault-rifle": "PR4 Pulse Rifle",
-      rifle: "Longline Marksman Rifle",
-      knife: "Industrial Mining Laser",
-    };
-    return names[weaponId] ?? weaponDefinitions[weaponId].name;
+    return weaponDefinitions[weaponId].name;
   }
 
   private getWeaponRoleLabel(weaponId: WeaponId): string {
@@ -7638,7 +7644,7 @@ export class App {
           const equipped = this.getEquippedWeaponSlot(weaponId);
           return `
             <button type="button" class="${weaponId === selectedWeaponId ? "active" : ""}" data-action="inspect-select-${weaponId}" style="--rarity-color: ${color}">
-              <strong>${weaponDefinitions[weaponId].name}</strong>
+              <strong>${this.getWeaponDisplayName(weaponId)}</strong>
               <span>${equipped ? this.capitalize(equipped) : `${this.getStashQuantity(weaponLootTypes[weaponId])} in stash`}</span>
             </button>
           `;
@@ -7829,7 +7835,7 @@ export class App {
 
     return `
       <section class="inspect-card compare-panel">
-        <h3>Compare vs ${compare.name}</h3>
+        <h3>Compare vs ${this.getWeaponDisplayName(compareWeaponId)}</h3>
         ${rows.map(([label, delta]) => `
           <div class="compare-row ${delta >= 0 ? "positive" : "negative"}">
             <span>${label}</span>
@@ -8042,15 +8048,13 @@ export class App {
   }
 
   private refreshInspectWeaponMenuPreservingScroll(): void {
-    const scrollTop = this.menuContent.scrollTop;
+    const snapshot = this.captureMenuScrollSnapshot("inspect-refresh");
     if (this.inspectWeaponContext === "arsenal" || this.raidScreen === "arsenal") {
       this.showArsenalWorkbenchMenu();
     } else {
       this.showInspectWeaponMenu(this.inspectWeaponContext);
     }
-    window.requestAnimationFrame(() => {
-      this.menuContent.scrollTop = scrollTop;
-    });
+    this.restoreMenuScrollSnapshot(snapshot);
   }
 
   private showWorkbenchMenu(): void {
@@ -8075,7 +8079,7 @@ export class App {
       : "All recipe tiers unlocked";
 
     this.menuContent.innerHTML = `
-      <div class="crafting-screen inspect-screen">
+      <div class="crafting-screen inspect-screen" data-scroll-view="workbench-main" data-scroll-key="workbench-main">
         <section class="crafting-hero">
           <div>
             <span>Fabrication Bench</span>
@@ -8706,9 +8710,176 @@ export class App {
     window.setTimeout(() => this.menuContent.classList.remove("screen-transition-in"), 260);
   }
 
+  private captureMenuScrollSnapshot(action: string | undefined): MenuScrollSnapshot | null {
+    if (!action || this.menu.classList.contains("hidden")) {
+      return null;
+    }
+
+    return {
+      action,
+      screen: this.raidScreen,
+      viewKey: this.getMenuScrollViewKey(),
+      positions: this.getMenuScrollContainers().map((element) => ({
+        key: this.getMenuScrollElementKey(element),
+        top: element.scrollTop,
+        left: element.scrollLeft,
+      })),
+    };
+  }
+
+  private restoreMenuScrollSnapshot(snapshot: MenuScrollSnapshot | null): void {
+    if (!snapshot || !this.shouldPreserveMenuScroll(snapshot)) {
+      return;
+    }
+
+    const restore = (): void => {
+      if (!this.shouldPreserveMenuScroll(snapshot)) {
+        return;
+      }
+
+      const containers = new Map(this.getMenuScrollContainers().map((element) => [this.getMenuScrollElementKey(element), element]));
+      for (const position of snapshot.positions) {
+        const element = containers.get(position.key);
+        if (!element) {
+          continue;
+        }
+
+        const maxTop = Math.max(0, element.scrollHeight - element.clientHeight);
+        const maxLeft = Math.max(0, element.scrollWidth - element.clientWidth);
+        element.scrollTop = Math.min(position.top, maxTop);
+        element.scrollLeft = Math.min(position.left, maxLeft);
+      }
+    };
+
+    window.requestAnimationFrame(() => {
+      restore();
+      window.requestAnimationFrame(restore);
+    });
+  }
+
+  private shouldPreserveMenuScroll(snapshot: MenuScrollSnapshot): boolean {
+    if (this.menu.classList.contains("hidden") || this.raidScreen !== snapshot.screen || this.getMenuScrollViewKey() !== snapshot.viewKey) {
+      return false;
+    }
+
+    const action = snapshot.action;
+    return action.startsWith("campaign-select-") ||
+      action.startsWith("codex-filter-") ||
+      action.startsWith("codex-select-") ||
+      action.startsWith("contract-") ||
+      action.startsWith("class-select-") ||
+      action.startsWith("skill-acquire-") ||
+      action.startsWith("stash-") ||
+      action.startsWith("vendor-") ||
+      action.startsWith("settings-") ||
+      action.startsWith("loadout-") ||
+      action.startsWith("cosmetic-") ||
+      action.startsWith("craft-") ||
+      action.startsWith("inspect-select-") ||
+      action.startsWith("inspect-equip-") ||
+      action.startsWith("inspect-unequip-") ||
+      action.startsWith("inspect-repair-") ||
+      action.startsWith("inspect-upgrade-") ||
+      action.startsWith("inspect-attachment-") ||
+      action.startsWith("ship-upgrade-") ||
+      action.startsWith("workbench-") ||
+      action === "campaign-dev-signals" ||
+      action === "campaign-dev-unlock-act-one" ||
+      action === "campaign-dev-state" ||
+      action === "campaign-reset-dev" ||
+      action === "codex-dev-discover-one" ||
+      action === "codex-dev-discover-all" ||
+      action === "codex-dev-reset" ||
+      action === "contract-dev-evidence-refresh" ||
+      action === "contract-refresh" ||
+      action === "contract-submit" ||
+      action === "contract-abandon" ||
+      action === "inspect-refresh" ||
+      action === "debug-grant-resources";
+  }
+
+  private getMenuScrollContainers(): HTMLElement[] {
+    const selector = [
+      "[data-scroll-key]",
+      ".intel-board-screen",
+      ".codex-list",
+      ".codex-detail-card",
+      ".arsenal-workbench-screen",
+      ".arsenal-weapon-list",
+      ".loadout-locker-screen",
+      ".loadout-detail-panel",
+      ".loadout-slot-grid",
+      ".loadout-compat-list",
+      ".loadout-compat-detail",
+      ".stash-screen",
+      ".vendor-screen",
+      ".raid-outcome",
+      ".inspect-screen",
+      ".crafting-screen",
+      ".settings-screen",
+      ".skill-matrix-screen",
+      ".ship-dashboard-screen",
+    ].join(",");
+    const elements = [this.menuContent, ...Array.from(this.menuContent.querySelectorAll<HTMLElement>(selector))];
+    const unique: HTMLElement[] = [];
+
+    for (const element of elements) {
+      if (unique.includes(element)) {
+        continue;
+      }
+
+      const hasScrollKey = element.dataset.scrollKey !== undefined;
+      const scrollable = element.scrollHeight > element.clientHeight + 1 || element.scrollWidth > element.clientWidth + 1;
+      if (element === this.menuContent || hasScrollKey || scrollable) {
+        unique.push(element);
+      }
+    }
+
+    return unique;
+  }
+
+  private getMenuScrollElementKey(element: HTMLElement): string {
+    if (element === this.menuContent) {
+      return "main-menu-content";
+    }
+
+    if (element.dataset.scrollKey) {
+      return element.dataset.scrollKey;
+    }
+
+    const classKey = Array.from(element.classList).find((className) => className.endsWith("-screen") || className.endsWith("-panel") || className.endsWith("-list"));
+    return classKey ?? element.tagName.toLowerCase();
+  }
+
+  private getMenuScrollViewKey(): string {
+    const keyed = this.menuContent.querySelector<HTMLElement>("[data-scroll-view]");
+    if (keyed?.dataset.scrollView) {
+      return keyed.dataset.scrollView;
+    }
+
+    const root = this.menuContent.firstElementChild as HTMLElement | null;
+    if (root?.dataset.scrollKey) {
+      return root.dataset.scrollKey;
+    }
+
+    if (root?.classList.contains("intel-board-screen")) return "contracts-campaign";
+    if (root?.classList.contains("arsenal-workbench-screen")) return "arsenal-main";
+    if (root?.classList.contains("loadout-locker-screen")) return "loadout-main";
+    if (root?.classList.contains("stash-screen")) return "stash-main";
+    if (root?.classList.contains("vendor-screen")) return "vendors-main";
+    if (root?.classList.contains("raid-outcome")) return "result-screen";
+    if (root?.classList.contains("crafting-screen")) return "workbench-main";
+    if (root?.classList.contains("inspect-screen")) return "inspect-weapon";
+    return this.raidScreen;
+  }
+
   private readonly handleMenuClick = (event: Event): void => {
+    event.preventDefault();
+    event.stopPropagation();
     const button = event.currentTarget as HTMLButtonElement;
     const action = button.dataset.action;
+    const scrollSnapshot = this.captureMenuScrollSnapshot(action);
+    window.setTimeout(() => this.restoreMenuScrollSnapshot(scrollSnapshot), 0);
     if (action !== "debug-grant-resources" && action !== "debug-reset-save") {
       if (!this.shouldKeepRunnerPreviewForMenuAction(action)) {
         this.habitatPreview.detach("menu-action");
@@ -8814,6 +8985,7 @@ export class App {
       this.campaignPresentation = this.campaignProgress.presentation;
       this.contractManager.refreshContracts(this.getEvidenceContractContext());
       this.combatHud.showLootNotification(message);
+      this.hqManager.open("intel-board");
       this.showIntelMenu();
     } else if (action === "campaign-reset-dev") {
       if (window.confirm("Reset local campaign progress?")) {
@@ -9143,7 +9315,7 @@ export class App {
       } else if (weaponId === "knife") {
         this.loadout.equipMelee(weaponId);
         this.loadoutManager.captureFromLoadout(this.loadout);
-        this.combatHud.showLootNotification("Suit Knife equipped");
+        this.combatHud.showLootNotification(`${this.getWeaponDisplayName(weaponId)} equipped`);
       } else if (!this.weaponExistsForInspect(weaponId)) {
         console.warn(`InspectWeapon: cannot equip missing weapon "${weaponId}".`);
         this.combatHud.showLootNotification("Weapon unavailable");

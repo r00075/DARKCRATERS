@@ -1,4 +1,5 @@
 import type { LootRarity } from "../theme/ThemeConfig";
+import { getWeaponDisplayName } from "../weapons/WeaponDefinitions";
 
 export type LootType =
   | "credits"
@@ -484,7 +485,7 @@ export const itemDefinitions: Record<LootType, ItemDefinition> = {
   },
   "weapon-pistol": {
     type: "weapon-pistol",
-    label: "Pistol",
+    label: getWeaponDisplayName("pistol"),
     rarity: "epic",
     category: "gear",
     stackable: false,
@@ -495,7 +496,7 @@ export const itemDefinitions: Record<LootType, ItemDefinition> = {
   },
   "weapon-burst-pistol": {
     type: "weapon-burst-pistol",
-    label: "Burst Pistol",
+    label: getWeaponDisplayName("burst-pistol"),
     rarity: "rare",
     category: "gear",
     stackable: false,
@@ -506,7 +507,7 @@ export const itemDefinitions: Record<LootType, ItemDefinition> = {
   },
   "weapon-revolver": {
     type: "weapon-revolver",
-    label: "Revolver",
+    label: getWeaponDisplayName("revolver"),
     rarity: "rare",
     category: "gear",
     stackable: false,
@@ -517,7 +518,7 @@ export const itemDefinitions: Record<LootType, ItemDefinition> = {
   },
   "weapon-compact-smg": {
     type: "weapon-compact-smg",
-    label: "Compact SMG",
+    label: getWeaponDisplayName("compact-smg"),
     rarity: "epic",
     category: "gear",
     stackable: false,
@@ -528,7 +529,7 @@ export const itemDefinitions: Record<LootType, ItemDefinition> = {
   },
   "weapon-smg": {
     type: "weapon-smg",
-    label: "SMG",
+    label: getWeaponDisplayName("smg"),
     rarity: "epic",
     category: "gear",
     stackable: false,
@@ -539,7 +540,7 @@ export const itemDefinitions: Record<LootType, ItemDefinition> = {
   },
   "weapon-shotgun": {
     type: "weapon-shotgun",
-    label: "Shotgun",
+    label: getWeaponDisplayName("shotgun"),
     rarity: "epic",
     category: "gear",
     stackable: false,
@@ -550,7 +551,7 @@ export const itemDefinitions: Record<LootType, ItemDefinition> = {
   },
   "weapon-assault-rifle": {
     type: "weapon-assault-rifle",
-    label: "Assault Rifle",
+    label: getWeaponDisplayName("assault-rifle"),
     rarity: "epic",
     category: "gear",
     stackable: false,
@@ -561,7 +562,7 @@ export const itemDefinitions: Record<LootType, ItemDefinition> = {
   },
   "weapon-rifle": {
     type: "weapon-rifle",
-    label: "Sniper Rifle",
+    label: getWeaponDisplayName("rifle"),
     rarity: "legendary",
     category: "gear",
     stackable: false,
@@ -572,7 +573,7 @@ export const itemDefinitions: Record<LootType, ItemDefinition> = {
   },
   "weapon-knife": {
     type: "weapon-knife",
-    label: "Suit Knife",
+    label: getWeaponDisplayName("knife"),
     rarity: "common",
     category: "gear",
     stackable: false,

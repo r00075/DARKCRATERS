@@ -37,10 +37,24 @@ export type RuntimeWeaponDefinition = WeaponDefinition & Readonly<{
   adsSensitivityMultiplier: number;
 }>;
 
+export const canonicalWeaponDisplayNames: Record<WeaponId, string> = {
+  pistol: "MK3 Survey Pistol",
+  "burst-pistol": "MK3 Survey Pistol Alt",
+  revolver: "Flare Spike Launcher",
+  "compact-smg": "TY-7 Crater Carbine",
+  smg: "TY-7 Crater Carbine",
+  shotgun: "Breach-12 Scattergun",
+  "assault-rifle": "PR-4 Pulse Rifle",
+  rifle: "Longline Marksman Rifle",
+  knife: "Industrial Mining Laser",
+};
+
+export const getWeaponDisplayName = (weaponId: WeaponId): string => canonicalWeaponDisplayNames[weaponId];
+
 export const weaponDefinitions: Record<WeaponId, WeaponDefinition> = {
   pistol: {
     id: "pistol",
-    name: "Pistol",
+    name: canonicalWeaponDisplayNames.pistol,
     damage: 25,
     headshotMultiplier: 2,
     fireRateRpm: 300,
@@ -59,7 +73,7 @@ export const weaponDefinitions: Record<WeaponId, WeaponDefinition> = {
   },
   "burst-pistol": {
     id: "burst-pistol",
-    name: "Burst Pistol",
+    name: canonicalWeaponDisplayNames["burst-pistol"],
     damage: 18,
     headshotMultiplier: 1.9,
     fireRateRpm: 520,
@@ -78,7 +92,7 @@ export const weaponDefinitions: Record<WeaponId, WeaponDefinition> = {
   },
   revolver: {
     id: "revolver",
-    name: "Revolver",
+    name: canonicalWeaponDisplayNames.revolver,
     damage: 42,
     headshotMultiplier: 2,
     fireRateRpm: 165,
@@ -97,7 +111,7 @@ export const weaponDefinitions: Record<WeaponId, WeaponDefinition> = {
   },
   "compact-smg": {
     id: "compact-smg",
-    name: "Compact SMG",
+    name: canonicalWeaponDisplayNames["compact-smg"],
     damage: 13,
     headshotMultiplier: 1.75,
     fireRateRpm: 830,
@@ -116,7 +130,7 @@ export const weaponDefinitions: Record<WeaponId, WeaponDefinition> = {
   },
   smg: {
     id: "smg",
-    name: "SMG",
+    name: canonicalWeaponDisplayNames.smg,
     damage: 16,
     headshotMultiplier: 1.8,
     fireRateRpm: 760,
@@ -135,7 +149,7 @@ export const weaponDefinitions: Record<WeaponId, WeaponDefinition> = {
   },
   shotgun: {
     id: "shotgun",
-    name: "Shotgun",
+    name: canonicalWeaponDisplayNames.shotgun,
     damage: 13,
     headshotMultiplier: 1.35,
     fireRateRpm: 85,
@@ -154,7 +168,7 @@ export const weaponDefinitions: Record<WeaponId, WeaponDefinition> = {
   },
   "assault-rifle": {
     id: "assault-rifle",
-    name: "Assault Rifle",
+    name: canonicalWeaponDisplayNames["assault-rifle"],
     damage: 22,
     headshotMultiplier: 2,
     fireRateRpm: 600,
@@ -173,7 +187,7 @@ export const weaponDefinitions: Record<WeaponId, WeaponDefinition> = {
   },
   rifle: {
     id: "rifle",
-    name: "Sniper Rifle",
+    name: canonicalWeaponDisplayNames.rifle,
     damage: 90,
     headshotMultiplier: 2,
     fireRateRpm: 55,
@@ -196,7 +210,7 @@ export const weaponDefinitions: Record<WeaponId, WeaponDefinition> = {
   },
   knife: {
     id: "knife",
-    name: "Suit Knife",
+    name: canonicalWeaponDisplayNames.knife,
     damage: 40,
     headshotMultiplier: 1,
     fireRateRpm: 120,

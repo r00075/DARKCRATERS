@@ -280,8 +280,12 @@ export class HeavyCargoManager {
     this.securedCore.setEnabled(this.shipSecured);
     this.locator.setEnabled(showWorld);
     this.locator.position.copyFrom(worldPosition.add(new Vector3(0, 0.07, 0)));
+    this.locator.rotation.z += this.status === "dropped" ? 0.028 : 0.012;
+    const locatorScale = this.status === "dropped" || this.status === "available" ? 1.18 : 1;
+    this.locator.scaling.set(locatorScale, locatorScale, locatorScale);
     this.coreLight.position.copyFrom(showWorld ? worldPosition.add(new Vector3(0, 2.1, 0)) : this.shipSecured ? securedPosition.add(new Vector3(0, 1.2, 0)) : carriedPosition);
-    this.coreLight.intensity = this.shipSecured ? 0.42 : showWorld ? 0.68 : 0.34;
+    this.coreLight.intensity = this.shipSecured ? 0.42 : this.status === "dropped" || this.status === "available" ? 0.9 : showWorld ? 0.68 : 0.46;
+    this.coreLight.range = this.status === "dropped" || this.status === "available" ? 12 : 9;
     if (this.status === "dropped") {
       this.position.y = 0.35;
     }

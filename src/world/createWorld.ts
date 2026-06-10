@@ -32,6 +32,7 @@ export const createWorld = (scene: Scene): WorldMap => {
   createLunarTerrainVariation(scene);
   createPoiPads(scene);
   createMapProps(scene);
+  createCraterReadabilityAnchors(scene);
   createTychoScarVisualSlice(scene);
   const extractionMeshes = createExtractionZones(scene);
   const contractVariantMeshes = createContractVariantMarkers(scene);
@@ -65,9 +66,9 @@ export const createWorld = (scene: Scene): WorldMap => {
 
 const createGround = (scene: Scene): void => {
   const groundMaterial = new StandardMaterial("ground-material", scene);
-  groundMaterial.diffuseColor = themeConfig.colors.ground;
-  groundMaterial.emissiveColor = themeConfig.colors.cyan.scale(0.012);
-  groundMaterial.specularColor = new Color3(0.02, 0.025, 0.035);
+  groundMaterial.diffuseColor = new Color3(0.055, 0.066, 0.084);
+  groundMaterial.emissiveColor = themeConfig.colors.cyan.scale(0.018);
+  groundMaterial.specularColor = new Color3(0.028, 0.032, 0.043);
 
   const ground = MeshBuilder.CreateGround(
     "map-floor",
@@ -761,6 +762,57 @@ const createCoverRoutes = (
   }
 };
 
+const createCraterReadabilityAnchors = (scene: Scene): void => {
+  const cyan = createMaterial(scene, "crater-readability-cyan-material", new Color3(0.025, 0.18, 0.21), themeConfig.colors.cyan.scale(0.5));
+  const amber = createMaterial(scene, "crater-readability-amber-material", new Color3(0.32, 0.16, 0.035), themeConfig.colors.orange.scale(0.42));
+  const residue = createMaterial(scene, "crater-readability-residue-material", new Color3(0.035, 0.18, 0.14), themeConfig.colors.rootGreen.scale(0.28).add(themeConfig.colors.cyan.scale(0.12)));
+  const footprint = createMaterial(scene, "crater-readability-footprint-material", new Color3(0.12, 0.13, 0.15), themeConfig.colors.cyan.scale(0.018));
+  footprint.alpha = 0.44;
+  residue.alpha = 0.52;
+
+  for (const poi of poiDefinitions) {
+    const highRisk = poi.id === "core-pit" || poi.id === "warehouse";
+    const material = poi.id === "core-pit" || poi.id === "data-shack" ? cyan : highRisk ? amber : footprint;
+    const footprintRing = MeshBuilder.CreateTorus(
+      `${poi.id}-readability-footprint-ring`,
+      { diameter: poi.radius * 1.55, thickness: 0.055, tessellation: 64 },
+      scene,
+    );
+    footprintRing.position.copyFrom(poi.center.add(new Vector3(0, 0.07, 0)));
+    footprintRing.rotation.x = Math.PI / 2;
+    footprintRing.material = material;
+    footprintRing.checkCollisions = false;
+    footprintRing.metadata = { gameplayTag: "poi-readability-ring", poiId: poi.id };
+
+    const mast = MeshBuilder.CreateBox(`${poi.id}-readability-mast`, { width: 0.38, height: highRisk ? 7.2 : 5.4, depth: 0.38 }, scene);
+    mast.position.copyFrom(poi.center.add(new Vector3(poi.radius * 0.42, highRisk ? 3.6 : 2.7, -poi.radius * 0.34)));
+    mast.material = material;
+    mast.checkCollisions = false;
+    mast.metadata = { gameplayTag: "poi-readability-mast", poiId: poi.id };
+
+    const lamp = new PointLight(`${poi.id}-readability-lamp`, mast.position.add(new Vector3(0, highRisk ? 2.3 : 1.7, 0)), scene);
+    lamp.diffuse = poi.id === "core-pit" || poi.id === "data-shack" ? themeConfig.colors.cyan : highRisk ? themeConfig.colors.orange : themeConfig.colors.rootGreen;
+    lamp.intensity = highRisk ? 0.34 : 0.2;
+    lamp.range = highRisk ? 16 : 11;
+  }
+
+  for (const [index, position, diameter] of [
+    [0, poiCenter("data-shack").add(new Vector3(5, 0, -8)), 9],
+    [1, poiCenter("core-pit").add(new Vector3(13, 0, 9)), 11],
+    [2, poiCenter("abandoned-camp").add(new Vector3(-6, 0, 10)), 8],
+  ] as const) {
+    const field = MeshBuilder.CreateCylinder(
+      `lumen-residue-readability-field-${index}`,
+      { height: 0.03, diameter, tessellation: 48 },
+      scene,
+    );
+    field.position.copyFrom(position.add(new Vector3(0, 0.065, 0)));
+    field.material = residue;
+    field.checkCollisions = false;
+    field.metadata = { gameplayTag: "lumen-residue-visual" };
+  }
+};
+
 const createExtractionZones = (scene: Scene): Map<string, AbstractMesh> => {
   const meshes = new Map<string, AbstractMesh>();
 
@@ -772,6 +824,13 @@ const createExtractionZones = (scene: Scene): Map<string, AbstractMesh> => {
       themeConfig.colors.cyan.scale(0.38),
     );
     material.alpha = 0.68;
+    const beaconMaterial = createMaterial(
+      scene,
+      `${zone.id}-beacon-material`,
+      new Color3(0.05, 0.23, 0.26),
+      themeConfig.colors.cyan.scale(0.62).add(themeConfig.colors.orange.scale(0.1)),
+    );
+    beaconMaterial.alpha = 0.76;
 
     const mesh = MeshBuilder.CreateCylinder(
       zone.id,
@@ -801,6 +860,22 @@ const createExtractionZones = (scene: Scene): Map<string, AbstractMesh> => {
       extractId: zone.id,
     };
     meshes.set(`${zone.id}-beam`, beam);
+
+    const beacon = MeshBuilder.CreateTorus(
+      `${zone.id}-beacon-ring`,
+      { diameter: zone.radius * 2.55, thickness: 0.08, tessellation: 64 },
+      scene,
+    );
+    beacon.position.copyFrom(zone.center.add(new Vector3(0, 0.12, 0)));
+    beacon.rotation.x = Math.PI / 2;
+    beacon.material = beaconMaterial;
+    beacon.checkCollisions = false;
+    beacon.metadata = {
+      gameplayTag: "extraction-beacon-ring",
+      extractId: zone.id,
+    };
+    meshes.set(`${zone.id}-beacon`, beacon);
+
   }
 
   return meshes;

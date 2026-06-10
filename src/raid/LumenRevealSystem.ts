@@ -106,7 +106,6 @@ export class LumenRevealSystem {
   private readonly revealedUntil = new Map<string, number>();
   private readonly revealedSignals = new Map<string, RevealedSignal>();
   private readonly disruptedUntil = new Map<string, number>();
-  private readonly skippedDeadTargetLogIds = new Set<string>();
   private lastActivationMs = -Number.POSITIVE_INFINITY;
   private signalWindowExpiresAt = 0;
   private signalWindowSurveyorAffinity = false;
@@ -234,8 +233,7 @@ export class LumenRevealSystem {
     }
 
     this.lastActivationMs = now;
-    this.skippedDeadTargetLogIds.clear();
-    const { targets, rawCount, groupedCount, deadSkipped } = this.collectTargets(playerPosition, enemies, radius);
+    const { targets, rawCount, groupedCount, deadSkipped, deadSampleIds } = this.collectTargets(playerPosition, enemies, radius);
     const surveyorAffinity = options.surveyorAffinity ?? classId === "surveyor";
     this.clearAllMarkers("replace");
     this.signalWindowExpiresAt = now + durationSeconds * 1000;
@@ -245,6 +243,9 @@ export class LumenRevealSystem {
       `[RevealTool] activated item=essence-flare class=${classId} radius=${radius} duration=${durationSeconds}`,
     );
     console.info(`[RevealTool] targets count=${targets.length} raw=${rawCount} grouped=${groupedCount} deadSkipped=${deadSkipped}`);
+    if (deadSkipped > 0) {
+      console.info(`[RevealSignal] skipped-dead-targets count=${deadSkipped} sample=${deadSampleIds.join(",") || "none"} source=essence-flare`);
+    }
     if (targets.length === 0) {
       console.info(`[RevealTool] no targets radius=${radius}`);
     }
@@ -306,7 +307,6 @@ export class LumenRevealSystem {
       lastDeadSignalCleanups: 0,
       lastResult: "reset",
     };
-    this.skippedDeadTargetLogIds.clear();
   }
 
   public dispose(): void {
@@ -319,19 +319,25 @@ export class LumenRevealSystem {
     playerPosition: Vector3,
     enemies: readonly EnemyDebugState[],
     radius: number,
-  ): { targets: LumenRevealTarget[]; rawCount: number; groupedCount: number; deadSkipped: number } {
+  ): { targets: LumenRevealTarget[]; rawCount: number; groupedCount: number; deadSkipped: number; deadSampleIds: string[] } {
     const groups = new Map<string, MutableRevealTargetGroup>();
     const debugAliveIds = new Set<string>();
     const debugDeadIds = new Set<string>();
+    const deadSampleIds: string[] = [];
     let rawCount = 0;
     let deadSkipped = 0;
+    const noteDeadTarget = (id: string): void => {
+      deadSkipped += 1;
+      if (deadSampleIds.length < 4 && !deadSampleIds.includes(id)) {
+        deadSampleIds.push(id);
+      }
+    };
 
     for (const enemy of enemies) {
       if (!this.isRevealTargetAliveFromDebug(enemy)) {
         if (enemy) {
           debugDeadIds.add(enemy.id);
-          deadSkipped += 1;
-          this.logDeadTargetSkipped(enemy.id, "debug");
+          noteDeadTarget(enemy.id);
         }
         continue;
       }
@@ -355,16 +361,14 @@ export class LumenRevealSystem {
       }
       const id = this.getMeshRevealGroupId(mesh, metadata);
       if (debugDeadIds.has(id)) {
-        deadSkipped += 1;
-        this.logDeadTargetSkipped(id, "mesh");
+        noteDeadTarget(id);
         continue;
       }
       if (debugAliveIds.has(id) && groups.has(id)) {
         continue;
       }
       if (!this.isRevealTargetAliveFromMesh(mesh, metadata)) {
-        deadSkipped += 1;
-        this.logDeadTargetSkipped(id, "mesh");
+        noteDeadTarget(id);
         continue;
       }
       const position = mesh.getAbsolutePosition().clone();
@@ -390,6 +394,7 @@ export class LumenRevealSystem {
       rawCount,
       groupedCount: targets.length,
       deadSkipped,
+      deadSampleIds,
     };
   }
 
@@ -459,23 +464,35 @@ export class LumenRevealSystem {
         { diameter: 1.2, thickness: 0.035, tessellation: 96 },
         this.scene,
       );
+      const echo = MeshBuilder.CreateTorus(
+        "lumen-reveal-pulse-echo",
+        { diameter: 1.2, thickness: 0.018, tessellation: 96 },
+        this.scene,
+      );
       ring.position.copyFrom(origin);
       ring.position.y += 0.08;
       ring.rotation.x = Math.PI * 0.5;
       ring.material = this.pulseMaterial;
       ring.isPickable = false;
+      echo.position.copyFrom(origin);
+      echo.position.y += 0.1;
+      echo.rotation.x = Math.PI * 0.5;
+      echo.material = this.pulseMaterial;
+      echo.isPickable = false;
       const startedAt = performance.now();
       const observer = this.scene.onBeforeRenderObservable.add(() => {
         const elapsed = (performance.now() - startedAt) / 1000;
         const t = Math.min(1, elapsed / pulseLifetimeSeconds);
         const scale = Math.max(0.1, radius * t);
         ring.scaling.set(scale, scale, scale);
-        this.pulseMaterial.alpha = 0.34 * (1 - t);
+        const echoScale = Math.max(0.1, radius * Math.min(1, t * 0.72));
+        echo.scaling.set(echoScale, echoScale, echoScale);
+        this.pulseMaterial.alpha = 0.42 * (1 - t);
         if (t >= 1) {
           this.scene.onBeforeRenderObservable.remove(observer);
           ring.dispose(false, false);
-          this.pulseMaterial.alpha = 0.34;
-          console.info("[RevealTool] pulse visual disposed");
+          echo.dispose(false, false);
+          this.pulseMaterial.alpha = 0.42;
         }
       });
     } catch (error) {
@@ -689,15 +706,6 @@ export class LumenRevealSystem {
       return false;
     }
     return this.getMeshRevealGroupId(mesh, metadata) === id;
-  }
-
-  private logDeadTargetSkipped(id: string, source: "debug" | "mesh"): void {
-    const key = `${source}:${id}`;
-    if (this.skippedDeadTargetLogIds.has(key)) {
-      return;
-    }
-    this.skippedDeadTargetLogIds.add(key);
-    console.info(`[RevealSignal] skipped-dead-target id=${id} source=${source}`);
   }
 
   private toSignalType(type: string): RevealedSignal["type"] {
