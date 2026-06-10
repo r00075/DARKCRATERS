@@ -33,6 +33,7 @@ export const createWorld = (scene: Scene): WorldMap => {
   createPoiPads(scene);
   createMapProps(scene);
   createCraterReadabilityAnchors(scene);
+  createPoiIdentityDressing(scene);
   createTychoScarVisualSlice(scene);
   const extractionMeshes = createExtractionZones(scene);
   const contractVariantMeshes = createContractVariantMarkers(scene);
@@ -813,6 +814,282 @@ const createCraterReadabilityAnchors = (scene: Scene): void => {
   }
 };
 
+type PoiDressingMaterials = Readonly<{
+  darkMetal: StandardMaterial;
+  regolith: StandardMaterial;
+  corporateBlack: StandardMaterial;
+  amber: StandardMaterial;
+  cyan: StandardMaterial;
+  utilityBlue: StandardMaterial;
+  lumen: StandardMaterial;
+  hazard: StandardMaterial;
+  restricted: StandardMaterial;
+  dustyGray: StandardMaterial;
+}>;
+
+type PoiDressingStats = {
+  meshes: number;
+  categories: Set<string>;
+};
+
+const createPoiIdentityDressing = (scene: Scene): void => {
+  const materials: PoiDressingMaterials = {
+    darkMetal: createMaterial(scene, "poi-identity-dark-metal-material", new Color3(0.075, 0.084, 0.094), themeConfig.colors.cyan.scale(0.018)),
+    regolith: createMaterial(scene, "poi-identity-regolith-material", new Color3(0.13, 0.135, 0.145), themeConfig.colors.cyan.scale(0.012)),
+    corporateBlack: createMaterial(scene, "poi-identity-corporate-black-material", new Color3(0.018, 0.024, 0.032), themeConfig.colors.cyan.scale(0.055)),
+    amber: createMaterial(scene, "poi-identity-amber-material", new Color3(0.28, 0.13, 0.035), themeConfig.colors.orange.scale(0.28)),
+    cyan: createMaterial(scene, "poi-identity-cyan-material", new Color3(0.025, 0.16, 0.18), themeConfig.colors.cyan.scale(0.36)),
+    utilityBlue: createMaterial(scene, "poi-identity-utility-blue-material", new Color3(0.035, 0.07, 0.13), themeConfig.colors.cyan.scale(0.16)),
+    lumen: createMaterial(scene, "poi-identity-lumen-mineral-material", new Color3(0.036, 0.16, 0.13), themeConfig.colors.rootGreen.scale(0.26).add(themeConfig.colors.cyan.scale(0.12))),
+    hazard: createMaterial(scene, "poi-identity-hazard-material", new Color3(0.32, 0.1, 0.025), themeConfig.colors.orange.scale(0.24)),
+    restricted: createMaterial(scene, "poi-identity-restricted-material", new Color3(0.13, 0.025, 0.028), themeConfig.colors.purple.scale(0.12).add(themeConfig.colors.orange.scale(0.08))),
+    dustyGray: createMaterial(scene, "poi-identity-dusty-gray-material", new Color3(0.18, 0.19, 0.2), themeConfig.colors.cyan.scale(0.02)),
+  };
+  materials.regolith.alpha = 0.58;
+  materials.lumen.alpha = 0.64;
+  const stats: PoiDressingStats = { meshes: 0, categories: new Set() };
+
+  createMiningRigDressing(scene, materials, stats);
+  createRelayAndDataDressing(scene, materials, stats);
+  createSecurityCheckpointDressing(scene, materials, stats);
+  createWarehouseStorageDressing(scene, materials, stats);
+  createAbandonedCampDressing(scene, materials, stats);
+  createSalvageCacheDressing(scene, materials, stats);
+  createLumenResidueDressing(scene, materials, stats);
+  createExtractionCradleDressing(scene, materials, stats);
+  createRestrictedRecoveryDressing(scene, materials, stats);
+
+  console.info(`[WorldDressing] phase=13.1 poiIdentity categories=${stats.categories.size} meshes=${stats.meshes}`);
+};
+
+const createMiningRigDressing = (scene: Scene, materials: PoiDressingMaterials, stats: PoiDressingStats): void => {
+  const core = poiCenter("core-pit");
+  addDressingTorus(scene, "core-pit-mining-pit-service-ring", core.add(new Vector3(0, 0.11, 0)), 25.5, 0.16, materials.darkMetal, "mining-rig", stats);
+  addDressingBox(scene, "core-pit-drill-gantry-left", core.add(new Vector3(-8.8, 3.0, -8.8)), new Vector3(0.5, 6, 0.5), materials.darkMetal, "mining-rig", stats, 0.25);
+  addDressingBox(scene, "core-pit-drill-gantry-right", core.add(new Vector3(8.8, 3.0, -8.8)), new Vector3(0.5, 6, 0.5), materials.darkMetal, "mining-rig", stats, -0.25);
+  addDressingBox(scene, "core-pit-drill-gantry-crossbar", core.add(new Vector3(0, 6.1, -8.8)), new Vector3(18, 0.42, 0.62), materials.darkMetal, "mining-rig", stats);
+  addDressingBox(scene, "core-pit-drill-spindle", core.add(new Vector3(0, 3.35, -7.2)), new Vector3(1.1, 5.2, 1.1), materials.cyan, "mining-rig", stats, 0.75);
+  addDressingBox(scene, "core-pit-core-cradle-bed", core.add(new Vector3(-5.2, 0.34, 2.4)), new Vector3(5.2, 0.34, 2.5), materials.darkMetal, "cargo-cradle", stats, -0.16);
+  addDressingBox(scene, "core-pit-core-cradle-amber-clamp-a", core.add(new Vector3(-5.2, 1.05, 1.2)), new Vector3(4.6, 0.22, 0.34), materials.amber, "cargo-cradle", stats, -0.16);
+  addDressingBox(scene, "core-pit-core-cradle-amber-clamp-b", core.add(new Vector3(-5.2, 1.05, 3.6)), new Vector3(4.6, 0.22, 0.34), materials.amber, "cargo-cradle", stats, -0.16);
+  addPipeBundle(scene, "core-pit-he3-pipe", core.add(new Vector3(9.5, 0.42, 7.5)), 6, 0.42, 0.28, materials.dustyGray, "mining-rig", stats);
+  addHazardPosts(scene, "core-pit-hazard-post", core, 15.5, materials.hazard, "mining-rig", stats);
+};
+
+const createRelayAndDataDressing = (scene: Scene, materials: PoiDressingMaterials, stats: PoiDressingStats): void => {
+  const signal = poiCenter("data-shack");
+  addDressingBox(scene, "data-shack-relay-mast-tall", signal.add(new Vector3(9.5, 5.1, -7.8)), new Vector3(0.48, 10.2, 0.48), materials.cyan, "relay-signal", stats);
+  addDressingTorus(scene, "data-shack-relay-dish-ring", signal.add(new Vector3(9.5, 8.7, -7.8)), 3.4, 0.08, materials.cyan, "relay-signal", stats, Math.PI / 2);
+  addDressingBox(scene, "data-shack-signal-array-arm-a", signal.add(new Vector3(9.5, 7.9, -7.8)), new Vector3(5.2, 0.18, 0.28), materials.utilityBlue, "relay-signal", stats, 0.2);
+  addDressingBox(scene, "data-shack-signal-array-arm-b", signal.add(new Vector3(9.5, 6.7, -7.8)), new Vector3(4.2, 0.16, 0.24), materials.utilityBlue, "relay-signal", stats, -0.45);
+  addDressingBox(scene, "data-shack-field-terminal-screen", signal.add(new Vector3(-5.6, 1.25, 7.2)), new Vector3(3.2, 1.3, 0.16), materials.cyan, "data-terminal", stats, -0.08);
+  addDressingBox(scene, "data-shack-field-terminal-base", signal.add(new Vector3(-5.6, 0.55, 7.1)), new Vector3(3.6, 1.1, 1.2), materials.corporateBlack, "data-terminal", stats, -0.08);
+  addDressingBox(scene, "data-shack-sealed-manifest-crate", signal.add(new Vector3(4.4, 0.55, 8.4)), new Vector3(2.2, 1.1, 1.6), materials.dustyGray, "data-terminal", stats, 0.18);
+  addDressingCable(scene, "data-shack-floor-cable", [
+    signal.add(new Vector3(-5.8, 0.16, 6.4)),
+    signal.add(new Vector3(-1.2, 0.16, 3.8)),
+    signal.add(new Vector3(5.8, 0.16, -4.8)),
+  ], themeConfig.colors.cyan.scale(0.64), "relay-signal", stats);
+};
+
+const createSecurityCheckpointDressing = (scene: Scene, materials: PoiDressingMaterials, stats: PoiDressingStats): void => {
+  const gate = poiCenter("checkpoint");
+  addDressingBox(scene, "checkpoint-corporate-gate-left-post", gate.add(new Vector3(-12, 2.7, -8)), new Vector3(0.72, 5.4, 0.72), materials.corporateBlack, "security-checkpoint", stats);
+  addDressingBox(scene, "checkpoint-corporate-gate-right-post", gate.add(new Vector3(12, 2.7, -8)), new Vector3(0.72, 5.4, 0.72), materials.corporateBlack, "security-checkpoint", stats);
+  addDressingBox(scene, "checkpoint-corporate-gate-scanbar", gate.add(new Vector3(0, 5.15, -8)), new Vector3(25, 0.38, 0.5), materials.amber, "security-checkpoint", stats);
+  addDressingBox(scene, "checkpoint-hazard-strip-a", gate.add(new Vector3(-7, 0.18, -2)), new Vector3(9, 0.08, 0.62), materials.hazard, "security-checkpoint", stats, 0.34);
+  addDressingBox(scene, "checkpoint-hazard-strip-b", gate.add(new Vector3(7, 0.18, 2)), new Vector3(9, 0.08, 0.62), materials.hazard, "security-checkpoint", stats, 0.34);
+  addDressingBox(scene, "checkpoint-scanner-pole-a", gate.add(new Vector3(-17, 1.65, 7)), new Vector3(0.42, 3.3, 0.42), materials.cyan, "security-checkpoint", stats);
+  addDressingBox(scene, "checkpoint-scanner-pole-b", gate.add(new Vector3(17, 1.65, 7)), new Vector3(0.42, 3.3, 0.42), materials.cyan, "security-checkpoint", stats);
+  addDressingBox(scene, "checkpoint-low-watch-platform", gate.add(new Vector3(0, 2.5, 13.5)), new Vector3(7.5, 0.42, 5.2), materials.darkMetal, "security-checkpoint", stats);
+};
+
+const createWarehouseStorageDressing = (scene: Scene, materials: PoiDressingMaterials, stats: PoiDressingStats): void => {
+  const yard = poiCenter("warehouse");
+  for (const [index, offset, scale, yaw] of [
+    [0, new Vector3(-10, 0.85, -9), new Vector3(8, 1.7, 2.4), 0.1],
+    [1, new Vector3(-2, 1.05, -5), new Vector3(7, 2.1, 2.2), 0.1],
+    [2, new Vector3(8, 0.75, 4), new Vector3(6.2, 1.5, 2.8), -0.18],
+    [3, new Vector3(14, 0.55, -10), new Vector3(3.4, 1.1, 5), -0.18],
+  ] as const) {
+    addDressingBox(scene, `warehouse-container-row-${index}`, yard.add(offset), scale, index % 2 === 0 ? materials.darkMetal : materials.dustyGray, "warehouse-storage", stats, yaw);
+  }
+  addPipeBundle(scene, "warehouse-pipe-bundle-north", yard.add(new Vector3(-14, 0.48, 10)), 7, 0.36, -0.18, materials.regolith, "warehouse-storage", stats);
+  addPipeBundle(scene, "warehouse-pipe-bundle-east", yard.add(new Vector3(15, 0.48, 12)), 5, 0.32, 0.55, materials.regolith, "warehouse-storage", stats);
+  addDressingBox(scene, "warehouse-loader-body", yard.add(new Vector3(2, 0.75, 12)), new Vector3(3.6, 1.5, 2.2), materials.amber, "warehouse-storage", stats, 0.34);
+  addDressingBox(scene, "warehouse-loader-fork", yard.add(new Vector3(4.2, 0.32, 13.1)), new Vector3(3.8, 0.16, 0.26), materials.darkMetal, "warehouse-storage", stats, 0.34);
+};
+
+const createAbandonedCampDressing = (scene: Scene, materials: PoiDressingMaterials, stats: PoiDressingStats): void => {
+  const camp = poiCenter("abandoned-camp");
+  addDressingBox(scene, "camp-pressure-tent-a", camp.add(new Vector3(-8, 0.72, -3)), new Vector3(8.6, 1.45, 4.8), materials.regolith, "abandoned-camp", stats, 0.28);
+  addDressingBox(scene, "camp-pressure-tent-ridge-a", camp.add(new Vector3(-8, 1.62, -3)), new Vector3(8.9, 0.18, 0.42), materials.dustyGray, "abandoned-camp", stats, 0.28);
+  addDressingBox(scene, "camp-collapsed-panel", camp.add(new Vector3(8, 0.55, 6)), new Vector3(7.2, 0.28, 4.8), materials.darkMetal, "abandoned-camp", stats, -0.62);
+  addDressingBox(scene, "camp-failed-beacon-pole", camp.add(new Vector3(13, 1.8, -8)), new Vector3(0.38, 3.6, 0.38), materials.utilityBlue, "abandoned-camp", stats, 0.08);
+  addDressingBox(scene, "camp-failed-beacon-head", camp.add(new Vector3(13, 3.72, -8)), new Vector3(1.1, 0.32, 1.1), materials.restricted, "abandoned-camp", stats, 0.08);
+  addDressingBox(scene, "camp-vac-crate-stack", camp.add(new Vector3(-13, 0.7, 8)), new Vector3(3.4, 1.4, 2.2), materials.dustyGray, "abandoned-camp", stats, -0.2);
+};
+
+const createSalvageCacheDressing = (scene: Scene, materials: PoiDressingMaterials, stats: PoiDressingStats): void => {
+  const salvage = poiCenter("warehouse").add(new Vector3(20, 0, 18));
+  addDressingTorus(scene, "salvage-cache-locator-ring", salvage.add(new Vector3(0, 0.09, 0)), 10.5, 0.06, materials.cyan, "salvage-cache", stats);
+  addDressingBox(scene, "salvage-cache-buried-panel-a", salvage.add(new Vector3(-3.5, 0.24, -1.8)), new Vector3(5.2, 0.22, 3.2), materials.dustyGray, "salvage-cache", stats, -0.38);
+  addDressingBox(scene, "salvage-cache-broken-equipment", salvage.add(new Vector3(3.4, 0.58, 2.4)), new Vector3(3.1, 1.15, 2.2), materials.darkMetal, "salvage-cache", stats, 0.52);
+  addDressingBox(scene, "salvage-cache-black-box-hint", salvage.add(new Vector3(0.4, 0.42, -5.2)), new Vector3(1.6, 0.84, 1.2), materials.corporateBlack, "salvage-cache", stats, 0.12);
+  addHazardPosts(scene, "salvage-cache-caution-post", salvage, 6.2, materials.hazard, "salvage-cache", stats);
+};
+
+const createLumenResidueDressing = (scene: Scene, materials: PoiDressingMaterials, stats: PoiDressingStats): void => {
+  for (const [siteId, origin, radius] of [
+    ["core-resonance", poiCenter("core-pit").add(new Vector3(12, 0, 10)), 9],
+    ["vanta-signal-fragment", poiCenter("data-shack").add(new Vector3(-9, 0, -10)), 7],
+  ] as const) {
+    addDressingTorus(scene, `${siteId}-residue-boundary`, origin.add(new Vector3(0, 0.08, 0)), radius * 2, 0.045, materials.lumen, "lumen-residue", stats);
+    for (let index = 0; index < 5; index += 1) {
+      const angle = index * 1.25;
+      const distance = radius * (0.25 + index * 0.11);
+      const position = origin.add(new Vector3(Math.sin(angle) * distance, 0.28 + index * 0.08, Math.cos(angle) * distance));
+      const shard = addDressingBox(scene, `${siteId}-mineral-shard-${index}`, position, new Vector3(0.42, 0.9 + index * 0.12, 0.34), materials.lumen, "lumen-residue", stats, angle);
+      shard.rotation.z = 0.32 - index * 0.08;
+    }
+    addDressingCable(scene, `${siteId}-residue-streak`, [
+      origin.add(new Vector3(-radius * 0.55, 0.12, radius * 0.15)),
+      origin.add(new Vector3(-radius * 0.1, 0.13, -radius * 0.08)),
+      origin.add(new Vector3(radius * 0.58, 0.12, -radius * 0.22)),
+    ], themeConfig.colors.rootGreen.scale(0.52).add(themeConfig.colors.cyan.scale(0.25)), "lumen-residue", stats);
+  }
+};
+
+const createExtractionCradleDressing = (scene: Scene, materials: PoiDressingMaterials, stats: PoiDressingStats): void => {
+  const landing = mapLayoutConfig.shipLandingSitePosition;
+  addDressingBox(scene, "ship-return-alignment-rail-left", landing.add(new Vector3(-6.5, 0.22, 2)), new Vector3(0.42, 0.32, 15), materials.cyan, "extraction-cradle", stats);
+  addDressingBox(scene, "ship-return-alignment-rail-right", landing.add(new Vector3(6.5, 0.22, 2)), new Vector3(0.42, 0.32, 15), materials.cyan, "extraction-cradle", stats);
+  addDressingBox(scene, "ship-heavy-cargo-docking-cradle", landing.add(new Vector3(0, 0.42, 10.5)), new Vector3(7.2, 0.36, 2.6), materials.darkMetal, "extraction-cradle", stats);
+  addDressingBox(scene, "ship-heavy-cargo-docking-clamp-a", landing.add(new Vector3(-2.8, 0.92, 10.5)), new Vector3(0.36, 1.1, 2.8), materials.amber, "extraction-cradle", stats);
+  addDressingBox(scene, "ship-heavy-cargo-docking-clamp-b", landing.add(new Vector3(2.8, 0.92, 10.5)), new Vector3(0.36, 1.1, 2.8), materials.amber, "extraction-cradle", stats);
+
+  for (const zone of extractionZoneDefinitions) {
+    addDressingTorus(scene, `${zone.id}-industrial-anchor-ring`, zone.center.add(new Vector3(0, 0.08, 0)), zone.radius * 3.25, 0.045, materials.utilityBlue, "extraction-cradle", stats);
+    addHazardPosts(scene, `${zone.id}-extract-anchor-post`, zone.center, zone.radius + 2.4, materials.amber, "extraction-cradle", stats);
+  }
+};
+
+const createRestrictedRecoveryDressing = (scene: Scene, materials: PoiDressingMaterials, stats: PoiDressingStats): void => {
+  for (const [name, origin, yaw] of [
+    ["data-shack-restricted-recovery", poiCenter("data-shack").add(new Vector3(8, 0, 10)), -0.22],
+    ["checkpoint-sealed-corporate", poiCenter("checkpoint").add(new Vector3(-10, 0, 13)), 0.38],
+  ] as const) {
+    addDressingBox(scene, `${name}-black-panel-a`, origin.add(new Vector3(-2.2, 1.05, 0)), new Vector3(0.36, 2.1, 4.2), materials.corporateBlack, "restricted-recovery", stats, yaw);
+    addDressingBox(scene, `${name}-black-panel-b`, origin.add(new Vector3(2.2, 1.05, 0)), new Vector3(0.36, 2.1, 4.2), materials.corporateBlack, "restricted-recovery", stats, yaw);
+    addDressingBox(scene, `${name}-sealed-crate`, origin.add(new Vector3(0, 0.56, -2.8)), new Vector3(3.8, 1.12, 1.8), materials.restricted, "restricted-recovery", stats, yaw);
+    addDressingBox(scene, `${name}-muted-indicator`, origin.add(new Vector3(0, 1.35, 2.4)), new Vector3(2.8, 0.28, 0.22), materials.hazard, "restricted-recovery", stats, yaw);
+  }
+};
+
+const addDressingBox = (
+  scene: Scene,
+  name: string,
+  position: Vector3,
+  scale: Vector3,
+  material: StandardMaterial,
+  category: string,
+  stats: PoiDressingStats,
+  yaw = 0,
+): AbstractMesh => {
+  const mesh = createBox(scene, name, position, scale, material, "poi-dressing");
+  mesh.rotation.y = yaw;
+  mesh.checkCollisions = false;
+  mesh.metadata = { ...mesh.metadata, phase: "13.1", category };
+  stats.meshes += 1;
+  stats.categories.add(category);
+  return mesh;
+};
+
+const addDressingTorus = (
+  scene: Scene,
+  name: string,
+  position: Vector3,
+  diameter: number,
+  thickness: number,
+  material: StandardMaterial,
+  category: string,
+  stats: PoiDressingStats,
+  rotationX = Math.PI / 2,
+): AbstractMesh => {
+  const mesh = MeshBuilder.CreateTorus(name, { diameter, thickness, tessellation: 48 }, scene);
+  mesh.position.copyFrom(position);
+  mesh.rotation.x = rotationX;
+  mesh.material = material;
+  mesh.checkCollisions = false;
+  mesh.metadata = { gameplayTag: "poi-dressing", phase: "13.1", category };
+  stats.meshes += 1;
+  stats.categories.add(category);
+  return mesh;
+};
+
+const addDressingCable = (
+  scene: Scene,
+  name: string,
+  points: Vector3[],
+  color: Color3,
+  category: string,
+  stats: PoiDressingStats,
+): LinesMesh => {
+  const line = createCable(scene, name, points, color);
+  line.metadata = { ...line.metadata, gameplayTag: "poi-dressing-cable", phase: "13.1", category };
+  stats.meshes += 1;
+  stats.categories.add(category);
+  return line;
+};
+
+const addPipeBundle = (
+  scene: Scene,
+  name: string,
+  origin: Vector3,
+  count: number,
+  length: number,
+  yaw: number,
+  material: StandardMaterial,
+  category: string,
+  stats: PoiDressingStats,
+): void => {
+  for (let index = 0; index < count; index += 1) {
+    const pipe = MeshBuilder.CreateCylinder(`${name}-${index}`, { height: length, diameter: 0.34, tessellation: 10 }, scene);
+    pipe.position.copyFrom(origin.add(new Vector3(index * 0.42, index * 0.06, (index % 2) * 0.42)));
+    pipe.rotation.z = Math.PI / 2;
+    pipe.rotation.y = yaw;
+    pipe.material = material;
+    pipe.checkCollisions = false;
+    pipe.metadata = { gameplayTag: "poi-dressing", phase: "13.1", category };
+    stats.meshes += 1;
+    stats.categories.add(category);
+  }
+};
+
+const addHazardPosts = (
+  scene: Scene,
+  name: string,
+  origin: Vector3,
+  radius: number,
+  material: StandardMaterial,
+  category: string,
+  stats: PoiDressingStats,
+): void => {
+  for (let index = 0; index < 4; index += 1) {
+    const angle = Math.PI / 4 + index * (Math.PI / 2);
+    addDressingBox(
+      scene,
+      `${name}-${index}`,
+      origin.add(new Vector3(Math.cos(angle) * radius, 0.72, Math.sin(angle) * radius)),
+      new Vector3(0.44, 1.44, 0.44),
+      material,
+      category,
+      stats,
+      angle,
+    );
+  }
+};
+
 const createExtractionZones = (scene: Scene): Map<string, AbstractMesh> => {
   const meshes = new Map<string, AbstractMesh>();
 
@@ -1016,6 +1293,7 @@ const createContractVariantMarkers = (scene: Scene): AbstractMesh[] => {
     { type: "scavenger", color: themeConfig.colors.rootGreen, tag: "hidden-material-cache" },
     { type: "combat", color: themeConfig.colors.orange, tag: "ambush-barricade" },
     { type: "poi-objective", color: themeConfig.colors.cyan, tag: "recovery-signal-room" },
+    { type: "extraction", color: themeConfig.colors.cyan, tag: "emergency-extract-anchor" },
     { type: "stealth", color: themeConfig.colors.purple, tag: "dark-side-entry" },
     { type: "vendor", color: themeConfig.colors.yellow, tag: "vendor-drop-cache" },
   ];
