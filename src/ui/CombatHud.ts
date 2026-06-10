@@ -1,4 +1,5 @@
 import { PlaceholderWeaponAudio } from "../audio/PlaceholderWeaponAudio";
+import type { CampaignPresentation } from "../campaign/CampaignProgress";
 import type { EnemyDebugState } from "../ai/EnemyAgent";
 import type { ShoulderSide } from "../camera/ThirdPersonCameraRig";
 import type { ActiveContractState } from "../contracts/ContractManager";
@@ -154,6 +155,7 @@ export type RaidHudState = Readonly<{
   lootLostItems: LootStack[];
   resultSummary: RaidResultSummary;
   resultPresentation: RaidResultPresentation | null;
+  campaign: CampaignPresentation;
   armorDurability: number;
   inventorySlots: number;
   inventoryCapacity: number;
@@ -1750,6 +1752,10 @@ export class CombatHud {
           <div class="mission-outcome-summary wide">
             <b>MISSION OUTCOME</b>
             <span>Contract: ${presentation.missionTitle}<br>Family: ${presentation.familyName}<br>Result: ${presentation.resultLabel}</span>
+          </div>
+          <div class="campaign-result-card">
+            <b>CAMPAIGN PROGRESS</b>
+            <span>${this.formatResultLines(raid.campaign.resultLines, 7)}<br>${this.formatResultLines(raid.campaign.meterLines, 3)}<br>${this.formatResultLines(raid.campaign.evidence.summaryLines, 3)}</span>
           </div>
           <div>
             <b>PRIMARY OBJECTIVE</b>

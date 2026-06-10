@@ -12,6 +12,8 @@ import { EnemyDirector } from "../ai/EnemyDirector";
 import type { EnemyType } from "../ai/EnemyTypes";
 import { PlaceholderWeaponAudio } from "../audio/PlaceholderWeaponAudio";
 import { ShipAudioManager } from "../audio/ShipAudioManager";
+import { campaignOperationById } from "../campaign/CampaignDefinitions";
+import { CampaignProgress, type CampaignPresentation } from "../campaign/CampaignProgress";
 import {
   getCurrentMusicState,
   playMenuMusic,
@@ -29,6 +31,7 @@ import { PlayerStatus } from "../combat/PlayerStatus";
 import {
   ContractManager,
   describeContractTarget,
+  type ContractDefinition,
   type ContractRewardGrant,
 } from "../contracts/ContractManager";
 import {
@@ -94,7 +97,8 @@ import {
 } from "../raid/RaidResultSummary";
 import { buildRaidResultPresentation, type RaidResultPresentation } from "../raid/RaidResultPresentation";
 import { RaidTimer, type RaidTimerState } from "../raid/RaidTimer";
-import { buildMissionPresentation, type MissionPresentation } from "../raid/MissionPresentation";
+import { missionFamilyById } from "../raid/MissionDefinitions";
+import { buildMissionPresentation, getMissionFamilyForContract, type MissionPresentation } from "../raid/MissionPresentation";
 import { buildRaidPressureState, type RaidPressureState } from "../raid/RaidPressure";
 import { Reputation } from "../raid/Reputation";
 import {
@@ -251,6 +255,7 @@ export class App {
   private readonly classManager = new ClassManager();
   private readonly skillManager = new SkillManager();
   private readonly contractManager = new ContractManager();
+  private readonly campaignProgress = new CampaignProgress();
   private readonly reputation = new Reputation();
   private readonly shipManager = new ShipManager();
   private readonly shipModuleManager = new ShipModuleManager();
@@ -287,6 +292,7 @@ export class App {
   private lootLostItems: LootStack[] = [];
   private raidResultSummary: RaidResultSummary = emptyRaidResultSummary;
   private raidResultPresentation: RaidResultPresentation | null = null;
+  private campaignPresentation: CampaignPresentation = this.campaignProgress.presentation;
   private prepScrapSpentSinceLastRaid = 0;
   private activeRaidPrepScrapSpent = 0;
   private raidMusicStartedForCurrentRun = false;
@@ -729,6 +735,7 @@ export class App {
           lootLostItems: this.lootLostItems,
           resultSummary: this.raidResultSummary,
           resultPresentation: this.raidResultPresentation,
+          campaign: this.campaignPresentation,
           armorDurability: this.craftingManager.snapshot.armorDurability,
           inventorySlots: this.raidInventory.usedSlots,
           inventoryCapacity: this.raidInventory.capacity,
@@ -4311,6 +4318,8 @@ export class App {
       finalPressure: this.displayedRaidPressureState,
       peakPressure: this.peakRaidPressureState,
     });
+    this.campaignProgress.applyRaidResult(this.raidResultPresentation, this.contractManager.snapshot.active?.definition.id ?? null);
+    this.campaignPresentation = this.campaignProgress.presentation;
     const resultLogKey = `${this.raidResultPresentation.missionId}:${this.raidResultPresentation.result}:${this.raidResultPresentation.poiCompleted}:${this.raidResultPresentation.rewardCachesClaimed}`;
     if (this.lastRaidResultLogKey !== resultLogKey) {
       this.lastRaidResultLogKey = resultLogKey;
@@ -5181,6 +5190,10 @@ export class App {
     const activeContract = this.contractManager.snapshot.active?.definition;
     const activeContractLabel = activeContract ? activeContract.title : "No active contract";
     const mission = this.getMissionPresentation();
+    const campaign = this.campaignPresentation;
+    const contractAlignmentLine = activeContract
+      ? this.getCampaignContractAlignmentLine(activeContract)
+      : `Recommended family: ${campaign.activeOperation.families}`;
     this.menuContent.innerHTML = `
       <div class="hq-screen hq-command-deck">
         <header class="hq-command-topbar">
@@ -5203,11 +5216,13 @@ export class App {
         </header>
         <section class="hq-context-panel">
           <span>Command Feed</span>
-          <strong>${activeContractLabel}</strong>
-          <p>${this.environmentState.label} conditions queued. ${themeConfig.enemyCollectiveName} signatures rising below the regolith.</p>
+          <strong>${campaign.actTitle} // ${campaign.activeOperation.title}</strong>
+          <p>${campaign.commandFeedLines.join(" | ")} | ${campaign.nextActionLines.join(" | ")}. ${this.environmentState.label} conditions queued.</p>
           <div>
             <span>XP</span><strong>${totalXp}</strong>
             <span>Faction Tags</span><strong>${dogTags}</strong>
+            <span>Evidence</span><strong>${campaign.evidence.discoveredCount}/${campaign.evidence.totalCount}</strong>
+            <span>Truth</span><strong>${campaign.meters.find((meter) => meter.id === "truth")?.band ?? "none logged"}</strong>
             <span>Multiplayer</span><strong>${this.renderMultiplayerStatusLine()}</strong>
           </div>
         </section>
@@ -5228,8 +5243,12 @@ export class App {
         <section class="hq-deploy-panel">
           <span>TYCHOSTAR FIELD ORDER</span>
           <strong>${mission.title}</strong>
-          <p>${mission.briefing}</p>
+          <p>${mission.briefing}<br>${contractAlignmentLine} | ${campaign.briefingLines.join(" | ")}</p>
           <div>
+            <span>Campaign</span><strong>Act I - ${campaign.actTitle}</strong>
+            <span>Operation</span><strong>${campaign.activeOperation.title}</strong>
+            <span>Advances</span><strong>${campaign.activeOperation.families}</strong>
+            <span>Alignment</span><strong>${contractAlignmentLine}</strong>
             <span>Family</span><strong>${mission.familyName}</strong>
             <span>Primary</span><strong>${mission.primaryObjective}</strong>
             <span>Step</span><strong>${mission.currentStep}</strong>
@@ -5250,6 +5269,10 @@ export class App {
         <summary>Debug / Development Tools</summary>
         <div class="main-menu-actions debug-actions">
           <button type="button" data-action="debug-grant-resources">Grant Test Resources</button>
+          <button type="button" data-action="campaign-dev-signals">Add Campaign Test Signals</button>
+          <button type="button" data-action="campaign-dev-unlock-act-one">Unlock Act I Campaign</button>
+          <button type="button" data-action="campaign-dev-state">Log Campaign State</button>
+          <button type="button" data-action="campaign-reset-dev">Reset Campaign Progress</button>
           <button type="button" data-action="debug-reset-save">Reset Save / Debug</button>
         </div>
       </details>
@@ -6121,6 +6144,22 @@ export class App {
     };
   }
 
+  private isContractAlignedWithCampaign(contract: ContractDefinition): boolean {
+    const operation = campaignOperationById[this.campaignProgress.snapshot.currentOperationId];
+    return operation.familyIds.includes(getMissionFamilyForContract(contract));
+  }
+
+  private getCampaignContractAlignmentLine(contract: ContractDefinition): string {
+    const campaign = this.campaignPresentation;
+    const family = getMissionFamilyForContract(contract);
+    const operation = campaignOperationById[this.campaignProgress.snapshot.currentOperationId];
+    const familyLabel = campaign.activeOperation.families;
+    if (operation.familyIds.includes(family)) {
+      return `Campaign-aligned contract: this sortie advances ${campaign.activeOperation.title}.`;
+    }
+    return `Free contract: supports ${missionFamilyById[family].name}, not selected operation. Recommended family: ${familyLabel}.`;
+  }
+
   private showIntelMenu(): void {
     this.raidScreen = "stash";
     const objective = this.objectiveState;
@@ -6128,14 +6167,17 @@ export class App {
     const activeExtracts = this.extractionController.activeZoneIds.length || this.baseExtractionZoneIds.length;
     const contractState = this.contractManager.snapshot;
     const activeContract = contractState.active;
+    const campaign = this.campaignPresentation;
     const contractFilters: ContractUiFilter[] = ["available", "active", "ready", "history", "all", "scavenger", "combat", "recovery", "stealth", "vendor", "pvp"];
-    const filteredContracts = contractState.available.filter((contract) => {
-      if (["available", "active", "ready", "history"].includes(this.contractUiFilter)) return this.contractUiFilter === "available";
-      if (this.contractUiFilter === "all") return true;
-      if (this.contractUiFilter === "recovery") return contract.type === "poi-objective" || contract.type === "extraction";
-      if (this.contractUiFilter === "pvp") return contract.target.lootType === "dog-tag";
-      return contract.type === this.contractUiFilter;
-    });
+    const filteredContracts = contractState.available
+      .filter((contract) => {
+        if (["available", "active", "ready", "history"].includes(this.contractUiFilter)) return this.contractUiFilter === "available";
+        if (this.contractUiFilter === "all") return true;
+        if (this.contractUiFilter === "recovery") return contract.type === "poi-objective" || contract.type === "extraction";
+        if (this.contractUiFilter === "pvp") return contract.target.lootType === "dog-tag";
+        return contract.type === this.contractUiFilter;
+      })
+      .sort((left, right) => Number(this.isContractAlignedWithCampaign(right)) - Number(this.isContractAlignedWithCampaign(left)));
     const filterTabs = contractFilters
       .map((filter) => `<button type="button" class="${this.contractUiFilter === filter ? "active" : ""}" data-action="contract-filter-${filter}">${this.capitalize(filter)}</button>`)
       .join("");
@@ -6147,12 +6189,16 @@ export class App {
     const contractCards = filteredContracts.map((contract) => {
       const active = activeContract?.definition.id === contract.id;
       const faction = this.getContractFactionMeta(contract);
+      const aligned = this.isContractAlignedWithCampaign(contract);
+      const contractFamily = missionFamilyById[getMissionFamilyForContract(contract)].name;
       return `
-        <section class="intel-card contract-card ${active ? "active" : ""}" data-contract-type="${contract.type}" style="--faction-accent: ${faction.accent}">
+        <section class="intel-card contract-card ${active ? "active" : ""} ${aligned ? "campaign-aligned" : ""}" data-contract-type="${contract.type}" style="--faction-accent: ${faction.accent}">
           <span>${faction.name}</span>
           <strong>${contract.title}</strong>
           <p>${contract.description}</p>
           <small>${faction.motto}</small>
+          <small>${aligned ? `This sortie advances ${campaign.activeOperation.title}.` : `Current contract supports ${contractFamily}, not selected operation.`}</small>
+          <small>Recommended family: ${campaign.activeOperation.families}</small>
           <small>Zone: ${contract.targetPoi} | Tier: ${contract.recommendedTier ?? "Any"} | Risk: ${contract.risk}</small>
           <small>Objective: ${describeContractTarget(contract)} | ${contract.requiresExtraction ? "Extraction required" : "Field complete"}</small>
           <small>Rewards: ${this.formatContractReward(contract.reward)}</small>
@@ -6178,21 +6224,85 @@ export class App {
           <p>Pick one mission before launching a Crater Run. One active contract is supported for now.</p>
           <small>Contracts refresh after Crater Runs or manual refresh.</small>
         </section>`;
+    const operationCards = campaign.operations.map((operation) => `
+      <section class="intel-card campaign-operation-card ${operation.status}" data-operation-id="${operation.id}">
+        <span>${operation.actLabel} // ${operation.statusLabel.toUpperCase()}${operation.recommended ? " // RECOMMENDED" : ""}${operation.replayable ? " // REPLAY" : ""}</span>
+        <strong>${operation.title}</strong>
+        <p>${operation.subtitle}</p>
+        <small>Family: ${operation.families}</small>
+        <small>Corporate Order: ${operation.corporateObjective}</small>
+        <small>${operation.hiddenTruthVisible ? `Truth Signal: ${operation.hiddenTruthHint}` : "Truth Signal: restricted pending field evidence."}</small>
+        <small>Unlock: ${operation.unlockRequirement}</small>
+        <small>Progress: ${operation.progressRequirement}</small>
+        <small>Recommendation: ${operation.recommendationReason}</small>
+        <small>${operation.reason}</small>
+        <button type="button" data-action="campaign-select-${operation.id}" ${operation.selectable ? "" : "disabled"}>${operation.buttonLabel}</button>
+      </section>
+    `).join("");
+    const meterCards = campaign.meters.map((meter) => `
+      <div class="campaign-meter-row ${meter.id}">
+        <span>${meter.label}</span>
+        <strong>${meter.value}</strong>
+        <small>${meter.band}</small>
+        <em>${meter.lastDelta > 0 ? `Last raid +${meter.lastDelta}: ${meter.deltaReason}` : meter.deltaReason}</em>
+      </div>
+    `).join("");
+    const evidenceRows = campaign.evidence.visibleEvidence.length > 0
+      ? campaign.evidence.visibleEvidence.map((evidence) => `
+          <small><b>${evidence.title}</b> | ${evidence.officialLabel}${campaign.evidence.hiddenImplicationUnlocked ? ` | ${evidence.hiddenImplication}` : ""}</small>
+        `).join("")
+      : "<small>Undiscovered evidence remains sealed by TYCHOSTAR classification.</small>";
 
     this.menuContent.innerHTML = `
       <div class="intel-board-screen inspect-screen">
         <header class="inspect-header">
           <div>
             <span>Lunar Terminal</span>
-            <h2>Faction Contracts</h2>
-            <p>Faction leads, crater hazards, extraction routes, and Lumen activity forecasts.</p>
+            <h2>Campaign Operations</h2>
+            <p>${campaign.corporateFraming}</p>
           </div>
           <div class="inspect-currency">
+            <span>Act</span><strong>${campaign.actTitle}</strong>
             <span>Extracts</span><strong>${activeExtracts}</strong>
             <span>Contract Points</span><strong>${contractState.contractPoints}</strong>
             <span>Rep Tokens</span><strong>${contractState.reputationTokens}</strong>
           </div>
         </header>
+        <section class="intel-card primary campaign-act-card">
+          <span>Current Campaign Act</span>
+          <strong>ACT I - ${campaign.actTitle}</strong>
+          <p>${campaign.corporateFraming}</p>
+          <small>${campaign.hiddenTruthFraming}</small>
+          <small>${campaign.activeOperation.readiness}</small>
+        </section>
+        <section class="intel-card primary campaign-active-card">
+          <span>Active Operation</span>
+          <strong>${campaign.activeOperation.title}</strong>
+          <p>${campaign.activeOperation.corporateObjective}</p>
+          <small>${campaign.activeOperation.hiddenTruthHint}</small>
+          <small>Status: ${campaign.activeOperation.statusLabel} | Recommended: ${campaign.recommendedOperation.title}</small>
+          <small>${activeContract ? this.getCampaignContractAlignmentLine(activeContract.definition) : `No active contract. Recommended family: ${campaign.activeOperation.families}.`}</small>
+        </section>
+        <section class="intel-card campaign-meter-card">
+          <span>Progress Signals</span>
+          <strong>TYCHOSTAR FIELD SIGNALS</strong>
+          <div class="campaign-meter-stack">${meterCards}</div>
+          <p>Recent Raid: ${campaign.recentRaidLine}</p>
+        </section>
+        <section class="intel-card campaign-evidence-card">
+          <span>Field Evidence</span>
+          <strong>${campaign.evidence.discoveredCount} / ${campaign.evidence.totalCount} logged</strong>
+          <p>${campaign.evidence.summaryLines.join(" | ")}</p>
+          ${evidenceRows}
+        </section>
+        <section class="intel-card campaign-next-card">
+          <span>Next Actions</span>
+          <strong>${campaign.recommendedOperation.title}</strong>
+          <p>${campaign.nextActionLines.join(" | ")}</p>
+        </section>
+        <section class="campaign-operation-grid">
+          ${operationCards}
+        </section>
         <nav class="contract-filter-tabs">${filterTabs}</nav>
         <section class="intel-card primary">
           <span>Current Objective Pool</span>
@@ -8032,6 +8142,10 @@ export class App {
       <div class="main-menu-actions">
         <button type="button" data-action="settings-reset">Reset to Defaults</button>
         <button type="button" data-action="debug-grant-resources">Grant Test Resources</button>
+        <button type="button" data-action="campaign-dev-signals">Add Campaign Test Signals</button>
+        <button type="button" data-action="campaign-dev-unlock-act-one">Unlock Act I Campaign</button>
+        <button type="button" data-action="campaign-dev-state">Log Campaign State</button>
+        <button type="button" data-action="campaign-reset-dev">Reset Campaign Progress</button>
         <button type="button" data-action="debug-reset-save">Reset Save / Debug</button>
         <button type="button" data-action="menu">Back</button>
       </div>
@@ -8559,6 +8673,30 @@ export class App {
       this.showShipSystemsMenu();
     } else if (action === "intel") {
       this.hqManager.open("intel-board");
+      this.showIntelMenu();
+    } else if (action?.startsWith("campaign-select-")) {
+      const message = this.campaignProgress.selectOperation(action.replace("campaign-select-", ""));
+      this.campaignPresentation = this.campaignProgress.presentation;
+      this.combatHud.showLootNotification(message);
+      this.showIntelMenu();
+    } else if (action === "campaign-reset-dev") {
+      if (window.confirm("Reset local campaign progress?")) {
+        this.campaignProgress.resetForDebug();
+        this.campaignPresentation = this.campaignProgress.presentation;
+        this.combatHud.showLootNotification("Campaign progress reset");
+      }
+      this.showIntelMenu();
+    } else if (action === "campaign-dev-signals") {
+      this.combatHud.showLootNotification(this.campaignProgress.addDebugSignals());
+      this.campaignPresentation = this.campaignProgress.presentation;
+      this.showIntelMenu();
+    } else if (action === "campaign-dev-unlock-act-one") {
+      this.combatHud.showLootNotification(this.campaignProgress.unlockActOneForDebug());
+      this.campaignPresentation = this.campaignProgress.presentation;
+      this.showIntelMenu();
+    } else if (action === "campaign-dev-state") {
+      console.info(`[Campaign] dev state ${this.campaignProgress.getDebugSummary()}`);
+      this.combatHud.showLootNotification("Campaign state logged");
       this.showIntelMenu();
     } else if (action?.startsWith("contract-activate-")) {
       this.combatHud.showLootNotification(this.contractManager.activate(action.replace("contract-activate-", "")));
@@ -9647,6 +9785,7 @@ export class App {
   private resetPrototypeSaveData(): void {
     const prefixes = [
       "darc-raiders.",
+      "dark-craters-campaign-v1",
       "extraction-shooter.prototype.",
       "babylon-extraction-shooter",
     ];
