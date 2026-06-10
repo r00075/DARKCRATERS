@@ -13,6 +13,7 @@ import type { EnemyType } from "../ai/EnemyTypes";
 import { PlaceholderWeaponAudio } from "../audio/PlaceholderWeaponAudio";
 import { ShipAudioManager } from "../audio/ShipAudioManager";
 import { campaignOperationById } from "../campaign/CampaignDefinitions";
+import type { CampaignEvidenceId } from "../campaign/CampaignEvidence";
 import { CampaignProgress, type CampaignPresentation } from "../campaign/CampaignProgress";
 import {
   getCurrentMusicState,
@@ -160,6 +161,7 @@ type LoopProfile = Readonly<{
 
 type RaidExitReason = "dead" | "downed_abandon" | "abandoned" | "extracted" | "manual_debug" | "timer_expired";
 type RaidWeaponEquipSlot = "primary" | "sidearm";
+type CampaignCodexFilter = "all" | "discovered" | "sealed" | "lumen" | "corporate" | "signal" | "crew" | "restricted";
 type UiOverlayState =
   | "gameplay"
   | "raidBag"
@@ -293,6 +295,9 @@ export class App {
   private raidResultSummary: RaidResultSummary = emptyRaidResultSummary;
   private raidResultPresentation: RaidResultPresentation | null = null;
   private campaignPresentation: CampaignPresentation = this.campaignProgress.presentation;
+  private campaignCodexFilter: CampaignCodexFilter = "all";
+  private selectedCampaignEvidenceId: CampaignEvidenceId | null = null;
+  private campaignCodexLoggedOpen = false;
   private prepScrapSpentSinceLastRaid = 0;
   private activeRaidPrepScrapSpent = 0;
   private raidMusicStartedForCurrentRun = false;
@@ -5271,6 +5276,9 @@ export class App {
           <button type="button" data-action="debug-grant-resources">Grant Test Resources</button>
           <button type="button" data-action="campaign-dev-signals">Add Campaign Test Signals</button>
           <button type="button" data-action="campaign-dev-unlock-act-one">Unlock Act I Campaign</button>
+          <button type="button" data-action="codex-dev-discover-one">Discover Test Evidence</button>
+          <button type="button" data-action="codex-dev-discover-all">Discover All Evidence</button>
+          <button type="button" data-action="codex-dev-reset">Reset Evidence Only</button>
           <button type="button" data-action="campaign-dev-state">Log Campaign State</button>
           <button type="button" data-action="campaign-reset-dev">Reset Campaign Progress</button>
           <button type="button" data-action="debug-reset-save">Reset Save / Debug</button>
@@ -6160,6 +6168,75 @@ export class App {
     return `Free contract: supports ${missionFamilyById[family].name}, not selected operation. Recommended family: ${familyLabel}.`;
   }
 
+  private renderEvidenceCodex(campaign: CampaignPresentation): string {
+    if (!this.campaignCodexLoggedOpen) {
+      this.campaignCodexLoggedOpen = true;
+      console.info("[Codex] opened");
+    }
+
+    const filters: CampaignCodexFilter[] = ["all", "discovered", "sealed", "lumen", "corporate", "signal", "crew", "restricted"];
+    const filteredEntries = campaign.evidence.codexEntries.filter((entry) => {
+      if (this.campaignCodexFilter === "all") return true;
+      if (this.campaignCodexFilter === "discovered") return entry.discovered;
+      if (this.campaignCodexFilter === "sealed") return !entry.discovered;
+      if (this.campaignCodexFilter === "lumen") return entry.tags.includes("lumen") || entry.type.includes("lumen") || entry.type.includes("mineral");
+      if (this.campaignCodexFilter === "corporate") return entry.tags.includes("salvage") || entry.tags.includes("custody") || entry.type.includes("corporate");
+      if (this.campaignCodexFilter === "signal") return entry.tags.includes("signal") || entry.tags.includes("relay");
+      if (this.campaignCodexFilter === "crew") return entry.tags.includes("crew") || entry.tags.includes("memory");
+      return entry.tags.includes("restricted") || entry.type.includes("restricted") || entry.severity === "restricted" || entry.severity === "suppressed";
+    });
+    const selectedEntry =
+      filteredEntries.find((entry) => entry.id === this.selectedCampaignEvidenceId) ??
+      campaign.evidence.codexEntries.find((entry) => entry.id === this.selectedCampaignEvidenceId) ??
+      campaign.evidence.codexEntries.find((entry) => entry.latestDiscovery) ??
+      campaign.evidence.codexEntries.find((entry) => entry.discovered) ??
+      campaign.evidence.codexEntries[0];
+    const filterButtons = filters.map((filter) => `
+      <button type="button" class="${this.campaignCodexFilter === filter ? "active" : ""}" data-action="codex-filter-${filter}">${this.capitalize(filter)}</button>
+    `).join("");
+    const listRows = filteredEntries.map((entry) => `
+      <button type="button" class="codex-entry ${entry.discovered ? "discovered" : "sealed"} ${entry.latestDiscovery ? "latest" : ""} ${selectedEntry?.id === entry.id ? "selected" : ""}" data-action="codex-select-${entry.id}">
+        <span>${entry.latestDiscovery ? "LATEST // " : ""}${entry.discovered ? entry.type : "SEALED"}</span>
+        <strong>${entry.title}</strong>
+        <small>${entry.discovered ? entry.officialClassification : "Classification pending field discovery"}</small>
+        <em>${entry.severity}</em>
+      </button>
+    `).join("");
+    const detail = selectedEntry ? `
+      <section class="intel-card codex-detail-card ${selectedEntry.discovered ? "discovered" : "sealed"}">
+        <span>Evidence Detail</span>
+        <strong>${selectedEntry.title}</strong>
+        <p>${selectedEntry.discovered ? selectedEntry.publicSummary : selectedEntry.sealedSummary}</p>
+        <small>Type: ${selectedEntry.type} | Severity: ${selectedEntry.severity}</small>
+        <small>Official Classification: ${selectedEntry.officialClassification}</small>
+        <small>Unresolved Note: ${selectedEntry.hiddenImplication}</small>
+        <small>Restricted Summary: ${selectedEntry.restrictedSummary}</small>
+        <small>Source Operation: ${selectedEntry.sourceOperations}</small>
+        <small>Source Family: ${selectedEntry.sourceFamilies}</small>
+        <small>Campaign Signal: ${selectedEntry.meterEffects}</small>
+        <small>Related Operation: ${selectedEntry.relatedOperations}</small>
+        <small>Next Action: ${selectedEntry.discovered ? selectedEntry.relatedNextAction : selectedEntry.discoveryHint}</small>
+        <small>Status: ${selectedEntry.discovered ? `Discovered #${selectedEntry.discoveryOrder}` : selectedEntry.unlockConditionText}</small>
+      </section>
+    ` : "";
+
+    return `
+      <section class="intel-card codex-overview-card">
+        <span>Evidence Codex</span>
+        <strong>TYCHOSTAR internal classification terminal</strong>
+        <p>Discovered: ${campaign.evidence.discoveredCount} / ${campaign.evidence.totalCount} | Truth Signal: ${campaign.meters.find((meter) => meter.id === "truth")?.band ?? "none logged"} | Corporate Review: ${campaign.meters.find((meter) => meter.id === "suspicion")?.band ?? "none"}</p>
+        <small>${campaign.evidence.latest ? `Latest: ${campaign.evidence.latest.title}. TYCHOSTAR classification updated.` : "No field evidence logged. Contractor-facing archive remains sealed."}</small>
+        <div class="codex-filter-tabs">${filterButtons}</div>
+      </section>
+      <section class="codex-panel">
+        <div class="codex-list" aria-label="Evidence records">
+          ${listRows || "<span>No records match this filter.</span>"}
+        </div>
+        ${detail}
+      </section>
+    `;
+  }
+
   private showIntelMenu(): void {
     this.raidScreen = "stash";
     const objective = this.objectiveState;
@@ -6224,21 +6301,25 @@ export class App {
           <p>Pick one mission before launching a Crater Run. One active contract is supported for now.</p>
           <small>Contracts refresh after Crater Runs or manual refresh.</small>
         </section>`;
-    const operationCards = campaign.operations.map((operation) => `
-      <section class="intel-card campaign-operation-card ${operation.status}" data-operation-id="${operation.id}">
-        <span>${operation.actLabel} // ${operation.statusLabel.toUpperCase()}${operation.recommended ? " // RECOMMENDED" : ""}${operation.replayable ? " // REPLAY" : ""}</span>
-        <strong>${operation.title}</strong>
-        <p>${operation.subtitle}</p>
-        <small>Family: ${operation.families}</small>
-        <small>Corporate Order: ${operation.corporateObjective}</small>
-        <small>${operation.hiddenTruthVisible ? `Truth Signal: ${operation.hiddenTruthHint}` : "Truth Signal: restricted pending field evidence."}</small>
-        <small>Unlock: ${operation.unlockRequirement}</small>
-        <small>Progress: ${operation.progressRequirement}</small>
-        <small>Recommendation: ${operation.recommendationReason}</small>
-        <small>${operation.reason}</small>
-        <button type="button" data-action="campaign-select-${operation.id}" ${operation.selectable ? "" : "disabled"}>${operation.buttonLabel}</button>
-      </section>
-    `).join("");
+    const operationCards = campaign.operations.map((operation) => {
+      const relatedEvidenceCount = campaign.evidence.codexEntries.filter((entry) => entry.discovered && (entry.sourceOperations.includes(operation.title) || entry.relatedOperations.includes(operation.title))).length;
+      return `
+        <section class="intel-card campaign-operation-card ${operation.status}" data-operation-id="${operation.id}">
+          <span>${operation.actLabel} // ${operation.statusLabel.toUpperCase()}${operation.recommended ? " // RECOMMENDED" : ""}${operation.replayable ? " // REPLAY" : ""}</span>
+          <strong>${operation.title}</strong>
+          <p>${operation.subtitle}</p>
+          <small>Family: ${operation.families}</small>
+          <small>Corporate Order: ${operation.corporateObjective}</small>
+          <small>${operation.hiddenTruthVisible ? `Truth Signal: ${operation.hiddenTruthHint}` : "Truth Signal: restricted pending field evidence."}</small>
+          <small>Unlock: ${operation.unlockRequirement}</small>
+          <small>Progress: ${operation.progressRequirement}</small>
+          <small>Related Evidence: ${relatedEvidenceCount} logged</small>
+          <small>Recommendation: ${operation.recommendationReason}</small>
+          <small>${operation.reason}</small>
+          <button type="button" data-action="campaign-select-${operation.id}" ${operation.selectable ? "" : "disabled"}>${operation.buttonLabel}</button>
+        </section>
+      `;
+    }).join("");
     const meterCards = campaign.meters.map((meter) => `
       <div class="campaign-meter-row ${meter.id}">
         <span>${meter.label}</span>
@@ -6249,9 +6330,10 @@ export class App {
     `).join("");
     const evidenceRows = campaign.evidence.visibleEvidence.length > 0
       ? campaign.evidence.visibleEvidence.map((evidence) => `
-          <small><b>${evidence.title}</b> | ${evidence.officialLabel}${campaign.evidence.hiddenImplicationUnlocked ? ` | ${evidence.hiddenImplication}` : ""}</small>
+          <small><b>${evidence.title}</b> | ${evidence.officialClassification}${campaign.evidence.hiddenImplicationUnlocked ? ` | ${evidence.hiddenImplication}` : ""}</small>
         `).join("")
       : "<small>Undiscovered evidence remains sealed by TYCHOSTAR classification.</small>";
+    const codexMarkup = this.renderEvidenceCodex(campaign);
 
     this.menuContent.innerHTML = `
       <div class="intel-board-screen inspect-screen">
@@ -6300,6 +6382,7 @@ export class App {
           <strong>${campaign.recommendedOperation.title}</strong>
           <p>${campaign.nextActionLines.join(" | ")}</p>
         </section>
+        ${codexMarkup}
         <section class="campaign-operation-grid">
           ${operationCards}
         </section>
@@ -8144,6 +8227,9 @@ export class App {
         <button type="button" data-action="debug-grant-resources">Grant Test Resources</button>
         <button type="button" data-action="campaign-dev-signals">Add Campaign Test Signals</button>
         <button type="button" data-action="campaign-dev-unlock-act-one">Unlock Act I Campaign</button>
+        <button type="button" data-action="codex-dev-discover-one">Discover Test Evidence</button>
+        <button type="button" data-action="codex-dev-discover-all">Discover All Evidence</button>
+        <button type="button" data-action="codex-dev-reset">Reset Evidence Only</button>
         <button type="button" data-action="campaign-dev-state">Log Campaign State</button>
         <button type="button" data-action="campaign-reset-dev">Reset Campaign Progress</button>
         <button type="button" data-action="debug-reset-save">Reset Save / Debug</button>
@@ -8696,7 +8782,30 @@ export class App {
       this.showIntelMenu();
     } else if (action === "campaign-dev-state") {
       console.info(`[Campaign] dev state ${this.campaignProgress.getDebugSummary()}`);
+      console.info(`[Campaign] evidence state ${this.campaignProgress.getEvidenceDebugSummary()}`);
       this.combatHud.showLootNotification("Campaign state logged");
+      this.showIntelMenu();
+    } else if (action === "codex-dev-discover-one") {
+      this.combatHud.showLootNotification(this.campaignProgress.discoverDebugEvidence());
+      this.campaignPresentation = this.campaignProgress.presentation;
+      this.showIntelMenu();
+    } else if (action === "codex-dev-discover-all") {
+      this.combatHud.showLootNotification(this.campaignProgress.discoverAllEvidenceForDebug());
+      this.campaignPresentation = this.campaignProgress.presentation;
+      this.showIntelMenu();
+    } else if (action === "codex-dev-reset") {
+      if (window.confirm("Reset local evidence records only?")) {
+        this.combatHud.showLootNotification(this.campaignProgress.resetEvidenceForDebug());
+        this.campaignPresentation = this.campaignProgress.presentation;
+      }
+      this.showIntelMenu();
+    } else if (action?.startsWith("codex-filter-")) {
+      this.campaignCodexFilter = action.replace("codex-filter-", "") as CampaignCodexFilter;
+      console.info(`[Codex] filter=${this.campaignCodexFilter}`);
+      this.showIntelMenu();
+    } else if (action?.startsWith("codex-select-")) {
+      this.selectedCampaignEvidenceId = action.replace("codex-select-", "") as CampaignEvidenceId;
+      console.info(`[Codex] selected evidence=${this.selectedCampaignEvidenceId}`);
       this.showIntelMenu();
     } else if (action?.startsWith("contract-activate-")) {
       this.combatHud.showLootNotification(this.contractManager.activate(action.replace("contract-activate-", "")));

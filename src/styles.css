@@ -6226,6 +6226,16 @@ body.input-mode-ui #app {
   grid-column: 1 / -1;
 }
 
+.intel-board-screen .inspect-header {
+  grid-column: 1 / -1;
+  align-items: start;
+  gap: 18px;
+}
+
+.intel-board-screen .inspect-header p {
+  max-width: 760px;
+}
+
 .campaign-operation-grid {
   grid-column: 1 / -1;
   display: grid;
@@ -6247,7 +6257,9 @@ body.input-mode-ui #app {
 .intel-card.campaign-active-card,
 .intel-card.campaign-meter-card,
 .intel-card.campaign-evidence-card,
-.intel-card.campaign-next-card {
+.intel-card.campaign-next-card,
+.intel-card.codex-overview-card,
+.intel-card.codex-detail-card {
   border-color: rgba(65, 217, 255, 0.34);
   background:
     linear-gradient(135deg, rgba(65, 217, 255, 0.1), transparent 52%),
@@ -6325,8 +6337,96 @@ body.input-mode-ui #app {
 .campaign-evidence-card small,
 .campaign-next-card p,
 .campaign-active-card small,
+.codex-entry small,
+.codex-detail-card small,
 .contract-card small {
   overflow-wrap: anywhere;
+}
+
+.codex-overview-card {
+  grid-column: 1 / -1;
+}
+
+.codex-filter-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.codex-filter-tabs button {
+  min-height: 32px;
+}
+
+.codex-filter-tabs button.active {
+  border-color: rgba(190, 242, 100, 0.7);
+  color: #ecfccb;
+}
+
+.codex-panel {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(260px, 0.95fr) minmax(300px, 1.35fr);
+  gap: 12px;
+  min-width: 0;
+}
+
+.codex-list {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  max-height: 430px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.codex-entry {
+  width: 100%;
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  text-align: left;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-left: 3px solid rgba(148, 163, 184, 0.48);
+  border-radius: 7px;
+  background: rgba(2, 6, 23, 0.38);
+  color: #e2e8f0;
+}
+
+.codex-entry.discovered {
+  border-left-color: rgba(65, 217, 255, 0.78);
+}
+
+.codex-entry.latest {
+  box-shadow: inset 0 0 0 1px rgba(190, 242, 100, 0.28);
+}
+
+.codex-entry.selected {
+  border-color: rgba(190, 242, 100, 0.58);
+  background: rgba(20, 42, 38, 0.48);
+}
+
+.codex-entry.sealed {
+  opacity: 0.74;
+}
+
+.codex-entry strong {
+  font-size: 15px;
+}
+
+.codex-entry em {
+  color: #94a3b8;
+  font-size: 11px;
+  font-style: normal;
+  text-transform: uppercase;
+}
+
+.codex-detail-card {
+  align-content: start;
+  min-width: 0;
+}
+
+.codex-detail-card.sealed {
+  border-color: rgba(148, 163, 184, 0.24);
 }
 
 .intel-card strong {
@@ -6344,6 +6444,10 @@ body.input-mode-ui #app {
 
 @media (max-width: 920px) {
   .campaign-operation-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .codex-panel {
     grid-template-columns: 1fr;
   }
 

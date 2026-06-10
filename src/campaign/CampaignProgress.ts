@@ -68,8 +68,33 @@ export type CampaignEvidenceView = Readonly<{
   latest: CampaignEvidenceDefinition | null;
   newlyDiscovered: CampaignEvidenceDefinition[];
   visibleEvidence: CampaignEvidenceDefinition[];
+  codexEntries: CampaignEvidenceCodexEntry[];
   hiddenImplicationUnlocked: boolean;
   summaryLines: string[];
+}>;
+
+export type CampaignEvidenceCodexEntry = Readonly<{
+  id: CampaignEvidenceId;
+  title: string;
+  type: string;
+  severity: string;
+  tags: string[];
+  discovered: boolean;
+  latestDiscovery: boolean;
+  discoveryOrder: number | null;
+  sourceOperations: string;
+  sourceFamilies: string;
+  officialClassification: string;
+  publicSummary: string;
+  restrictedSummary: string;
+  hiddenImplication: string;
+  hiddenImplicationVisible: boolean;
+  unlockConditionText: string;
+  discoveryHint: string;
+  meterEffects: string;
+  relatedOperations: string;
+  relatedNextAction: string;
+  sealedSummary: string;
 }>;
 
 export type CampaignOperationView = Readonly<{
@@ -311,6 +336,62 @@ export class CampaignProgress {
     return "Act I operations unlocked for testing";
   }
 
+  public discoverDebugEvidence(): string {
+    const next = campaignEvidenceDefinitions.find((evidence) => !this.state.discoveredEvidenceIds.includes(evidence.id));
+    if (!next) return "All campaign evidence already logged";
+
+    this.state = {
+      ...this.state,
+      discoveredEvidenceIds: [...this.state.discoveredEvidenceIds, next.id],
+      lastDiscoveredEvidenceIds: [next.id],
+      lumenTruth: clampMeter(this.state.lumenTruth + next.meterEffects.truth),
+      corporateCompliance: clampMeter(this.state.corporateCompliance + next.meterEffects.compliance),
+      corporateSuspicion: clampMeter(this.state.corporateSuspicion + next.meterEffects.suspicion),
+    };
+    this.save();
+    console.info(`[Campaign] evidence discovered id=${next.id} source=dev-tool`);
+    return `Evidence logged: ${next.title}`;
+  }
+
+  public discoverAllEvidenceForDebug(): string {
+    this.state = {
+      ...this.state,
+      discoveredEvidenceIds: campaignEvidenceDefinitions.map((evidence) => evidence.id),
+      lastDiscoveredEvidenceIds: campaignEvidenceDefinitions.slice(-3).map((evidence) => evidence.id),
+      lumenTruth: Math.max(this.state.lumenTruth, 6),
+      corporateSuspicion: Math.max(this.state.corporateSuspicion, 3),
+    };
+    this.save();
+    console.info("[Campaign] evidence discovered source=dev-tool count=all");
+    return "All Act I evidence logged";
+  }
+
+  public resetEvidenceForDebug(): string {
+    this.state = {
+      ...this.state,
+      discoveredEvidenceIds: [],
+      lastDiscoveredEvidenceIds: [],
+      lumenEvidenceRecovered: 0,
+      lastDelta: this.state.lastDelta ? {
+        ...this.state.lastDelta,
+        discoveredEvidenceIds: [],
+        lines: this.state.lastDelta.lines.filter((line) => !line.startsWith("Evidence Discovered:")),
+      } : null,
+    };
+    this.save();
+    console.info("[Campaign] evidence reset reason=dev-tool");
+    return "Campaign evidence reset";
+  }
+
+  public getEvidenceDebugSummary(): string {
+    return [
+      `evidence=${this.state.discoveredEvidenceIds.join(",") || "none"}`,
+      `latest=${this.state.lastDiscoveredEvidenceIds.join(",") || "none"}`,
+      `truth=${this.state.lumenTruth}`,
+      `suspicion=${this.state.corporateSuspicion}`,
+    ].join(" | ");
+  }
+
   public getDebugSummary(): string {
     return [
       `act=${this.state.currentActId}`,
@@ -413,7 +494,9 @@ export function buildCampaignPresentation(state: CampaignProgressState, lastDelt
     resultLines: [
       `Act I - ${act.title}`,
       ...(lastDelta?.lines ?? [`Operation: ${activeOperation.title}`]),
-      evidence.newlyDiscovered.length > 0 ? `Evidence: ${evidence.newlyDiscovered.map((item) => item.title).join(", ")}` : `Evidence: ${evidence.discoveredCount}/${evidence.totalCount} logged`,
+      evidence.newlyDiscovered.length > 0 ? `Codex Updated: ${evidence.newlyDiscovered.map((item) => item.title).join(", ")}` : "No new evidence logged.",
+      `Evidence Archive: ${evidence.discoveredCount}/${evidence.totalCount} records`,
+      "Review in Contracts: Evidence Codex",
       `Next Operation: ${recommendedOperation.title}`,
     ],
     nextActionLines,
@@ -487,11 +570,12 @@ function buildEvidenceView(state: CampaignProgressState): CampaignEvidenceView {
   const visibleEvidence = state.discoveredEvidenceIds.map((id) => campaignEvidenceById[id]).filter(Boolean);
   const newlyDiscovered = state.lastDiscoveredEvidenceIds.map((id) => campaignEvidenceById[id]).filter(Boolean);
   const latest = newlyDiscovered[0] ?? visibleEvidence[visibleEvidence.length - 1] ?? null;
-  const hiddenImplicationUnlocked = state.lumenTruth >= 2 || newlyDiscovered.length > 0;
+  const hiddenImplicationUnlocked = state.lumenTruth >= 1 || newlyDiscovered.length > 0;
+  const codexEntries = buildCodexEntries(state);
   const summaryLines = [
     `Discovered: ${visibleEvidence.length} / ${campaignEvidenceDefinitions.length}`,
     latest ? `Latest: ${latest.title}` : "Latest: none logged",
-    latest ? `Official Classification: ${latest.officialLabel}` : "Official Classification: no anomaly filed",
+    latest ? `Official Classification: ${latest.officialClassification}` : "Official Classification: no anomaly filed",
     latest && hiddenImplicationUnlocked ? `Unresolved Note: ${latest.hiddenImplication}` : "Unresolved Note: restricted pending Lumen review",
   ];
 
@@ -501,9 +585,53 @@ function buildEvidenceView(state: CampaignProgressState): CampaignEvidenceView {
     latest,
     newlyDiscovered,
     visibleEvidence: visibleEvidence.slice(-4).reverse(),
+    codexEntries,
     hiddenImplicationUnlocked,
     summaryLines,
   };
+}
+
+function buildCodexEntries(state: CampaignProgressState): CampaignEvidenceCodexEntry[] {
+  const latestIds = new Set(state.lastDiscoveredEvidenceIds);
+  return campaignEvidenceDefinitions
+    .map((evidence) => {
+      const discoveryOrder = state.discoveredEvidenceIds.indexOf(evidence.id);
+      const discovered = discoveryOrder >= 0;
+      const latestDiscovery = latestIds.has(evidence.id);
+      const hiddenImplicationVisible = discovered && (state.lumenTruth >= 1 || latestDiscovery);
+      const sourceOperations = evidence.sourceOperationIds
+        .map((id) => campaignOperations.find((operation) => operation.id === id)?.title ?? id)
+        .join(" / ");
+      const sourceFamilies = evidence.sourceMissionFamilyIds
+        .map((id) => missionFamilyById[id]?.name ?? id)
+        .join(" / ");
+      return {
+        id: evidence.id,
+        title: discovered ? evidence.title : "SEALED RECORD",
+        type: evidence.type,
+        severity: discovered ? evidence.severity : "sealed",
+        tags: evidence.tags,
+        discovered,
+        latestDiscovery,
+        discoveryOrder: discovered ? discoveryOrder + 1 : null,
+        sourceOperations: discovered ? sourceOperations : "Source unknown",
+        sourceFamilies: discovered ? sourceFamilies : "Family restricted",
+        officialClassification: discovered ? evidence.officialClassification : "Classification pending field discovery.",
+        publicSummary: discovered ? evidence.publicSummary : "Contractor-facing summary has been redacted.",
+        restrictedSummary: discovered && state.lumenTruth >= 3 ? evidence.restrictedSummary : "Restricted note pending review.",
+        hiddenImplication: hiddenImplicationVisible ? evidence.hiddenImplication : "Unresolved note restricted pending review.",
+        hiddenImplicationVisible,
+        unlockConditionText: evidence.unlockConditionText,
+        discoveryHint: evidence.discoveryHint,
+        meterEffects: `Compliance +${evidence.meterEffects.compliance} | Truth +${evidence.meterEffects.truth} | Suspicion +${evidence.meterEffects.suspicion}`,
+        relatedOperations: evidence.relatedOperations
+          .map((id) => campaignOperations.find((operation) => operation.id === id)?.title ?? id)
+          .join(" / "),
+        relatedNextAction: evidence.relatedNextAction,
+        sealedSummary: "TYCHOSTAR access restricted.",
+      };
+    })
+    .sort((left, right) => Number(right.discovered) - Number(left.discovered) || (left.discoveryOrder ?? 999) - (right.discoveryOrder ?? 999));
 }
 
 function buildNextActionLines(state: CampaignProgressState, activeOperation: CampaignOperationView, recommendedOperation: CampaignOperationView): string[] {
