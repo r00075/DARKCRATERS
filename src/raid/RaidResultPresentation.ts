@@ -221,6 +221,8 @@ function buildRepairOpportunities(items: readonly RaidResultItem[], summary: Rai
 
 function buildNextActions(input: RaidResultPresentationInput, items: readonly RaidResultItem[]): string[] {
   const actions: string[] = ["Select next contract"];
+  if (input.mission.id.startsWith("evidence-")) actions.push("Review Evidence Codex");
+  if (input.mission.familyName.includes("Lumen Survey")) actions.push("Continue Regolith Trace");
   if (items.some((item) => item.type === "lumen-essence" || item.type === "essence-flare")) actions.push("Fabricate Essence Flare");
   if (input.summary.scrapGained > 0 || items.some((item) => item.type === "weapon-parts")) actions.push("Repair weapon");
   if (input.mission.familyName.includes("Cargo") || input.heavyCargo.shipSecured) actions.push("Inspect Kestrel-9 cargo modules");
@@ -238,6 +240,9 @@ function buildPressureSummary(finalPressure: RaidPressureState | null, peakPress
 }
 
 function getNarrativeLine(familyName: string, result: RaidResultOutcome, pressure: RaidPressureState | null): string {
+  if (familyName.includes("Lumen Survey") && (result === "complete" || result === "partial")) {
+    return "Survey material logged. TYCHOSTAR classifies residue movement as geological interference.";
+  }
   if (result === "complete") return `${familyName} operation closed under TYCHOSTAR recovery protocol.`;
   if (result === "partial") return `${familyName} report filed with unresolved field exposure.`;
   if (pressure?.reasonCategory === "reveal-contact") return "Unregistered signal residue detected in recovered material. Do not distribute.";

@@ -36,6 +36,10 @@ import {
   type ContractRewardGrant,
 } from "../contracts/ContractManager";
 import {
+  isEvidenceContractVariant,
+  type EvidenceContractContext,
+} from "../contracts/EvidenceContractVariants";
+import {
   cosmeticCategories,
   cosmeticCategoryLabels,
   CosmeticManager,
@@ -1846,6 +1850,16 @@ export class App {
       if (this.raidInventory.consume(slot.type, 1)) {
         console.info("[ItemUse] activate item=essence-flare action=reveal-pulse");
         const result = this.activateLumenRevealPulse();
+        const revealAffinity = this.getRevealAffinityState();
+        const surveyCompleted = this.poiObjectiveManager.completeNearestSurveyFromReveal(
+          this.player.state.position,
+          revealAffinity.radius,
+        );
+        if (surveyCompleted) {
+          this.poiObjectiveState = this.poiObjectiveManager.state;
+          console.info("[Survey] complete id=essence-flare");
+          this.combatHud.showLootNotification("Signal trace recorded.");
+        }
         this.logItemUse(slot.type, true, `reveal-targets-${result.targets.length}`);
         this.combatHud.showLootNotification("Essence Flare released.");
         this.combatHud.showLootNotification(result.targets.length > 0
@@ -5199,6 +5213,7 @@ export class App {
     const contractAlignmentLine = activeContract
       ? this.getCampaignContractAlignmentLine(activeContract)
       : `Recommended family: ${campaign.activeOperation.families}`;
+    const evidenceContractLine = this.getEvidenceContractBriefingLine(activeContract);
     this.menuContent.innerHTML = `
       <div class="hq-screen hq-command-deck">
         <header class="hq-command-topbar">
@@ -5248,7 +5263,7 @@ export class App {
         <section class="hq-deploy-panel">
           <span>TYCHOSTAR FIELD ORDER</span>
           <strong>${mission.title}</strong>
-          <p>${mission.briefing}<br>${contractAlignmentLine} | ${campaign.briefingLines.join(" | ")}</p>
+          <p>${mission.briefing}<br>${contractAlignmentLine} | ${evidenceContractLine} | ${campaign.briefingLines.join(" | ")}</p>
           <div>
             <span>Campaign</span><strong>Act I - ${campaign.actTitle}</strong>
             <span>Operation</span><strong>${campaign.activeOperation.title}</strong>
@@ -5265,6 +5280,7 @@ export class App {
             <span>Gear</span><strong>${gearScore} / ${this.selectedRaidDefinition.recommendedGearScore} ${loadoutReady}</strong>
             <span>Ship</span><strong>${this.shipState.statusLabel}</strong>
             <span>Objective</span><strong>${activeContractLabel}</strong>
+            <span>Evidence</span><strong>${evidenceContractLine}</strong>
           </div>
           <button type="button" class="hq-deploy-button" data-action="start">DEPLOY</button>
           <button type="button" class="hq-secondary-deploy" data-action="multiplayer-start">Deploy Multiplayer</button>
@@ -5279,6 +5295,7 @@ export class App {
           <button type="button" data-action="codex-dev-discover-one">Discover Test Evidence</button>
           <button type="button" data-action="codex-dev-discover-all">Discover All Evidence</button>
           <button type="button" data-action="codex-dev-reset">Reset Evidence Only</button>
+          <button type="button" data-action="contract-dev-evidence-refresh">Generate Evidence Contracts</button>
           <button type="button" data-action="campaign-dev-state">Log Campaign State</button>
           <button type="button" data-action="campaign-reset-dev">Reset Campaign Progress</button>
           <button type="button" data-action="debug-reset-save">Reset Save / Debug</button>
@@ -6157,6 +6174,15 @@ export class App {
     return operation.familyIds.includes(getMissionFamilyForContract(contract));
   }
 
+  private getEvidenceContractContext(): EvidenceContractContext {
+    const campaign = this.campaignProgress.snapshot;
+    return {
+      currentOperationId: campaign.currentOperationId,
+      discoveredEvidenceIds: campaign.discoveredEvidenceIds,
+      lumenTruth: campaign.lumenTruth,
+    };
+  }
+
   private getCampaignContractAlignmentLine(contract: ContractDefinition): string {
     const campaign = this.campaignPresentation;
     const family = getMissionFamilyForContract(contract);
@@ -6166,6 +6192,23 @@ export class App {
       return `Campaign-aligned contract: this sortie advances ${campaign.activeOperation.title}.`;
     }
     return `Free contract: supports ${missionFamilyById[family].name}, not selected operation. Recommended family: ${familyLabel}.`;
+  }
+
+  private getEvidenceContractBriefingLine(contract: ContractDefinition | null | undefined): string {
+    if (!contract || !isEvidenceContractVariant(contract)) {
+      return this.campaignPresentation.activeOperation.title === "Regolith Trace"
+        ? "Regolith Trace readiness: Essence Flare or Surveyor assignment recommended."
+        : this.campaignPresentation.activeOperation.title === "Company Silence"
+          ? "Company Silence readiness: evidence custody and restricted reports pending."
+          : "Codex review: no evidence-linked contract active.";
+    }
+
+    const aligned = this.isContractAlignedWithCampaign(contract);
+    return [
+      `Evidence Link: ${contract.evidenceVariant.codexHook}`,
+      `Operation: ${aligned ? `supports ${this.campaignPresentation.activeOperation.title}` : "free contract outside selected operation"}`,
+      `Loadout: ${contract.evidenceVariant.recommendedLoadoutHint}`,
+    ].join(" | ");
   }
 
   private renderEvidenceCodex(campaign: CampaignPresentation): string {
@@ -6268,12 +6311,18 @@ export class App {
       const faction = this.getContractFactionMeta(contract);
       const aligned = this.isContractAlignedWithCampaign(contract);
       const contractFamily = missionFamilyById[getMissionFamilyForContract(contract)].name;
+      const evidenceVariant = isEvidenceContractVariant(contract) ? contract.evidenceVariant : null;
       return `
-        <section class="intel-card contract-card ${active ? "active" : ""} ${aligned ? "campaign-aligned" : ""}" data-contract-type="${contract.type}" style="--faction-accent: ${faction.accent}">
+        <section class="intel-card contract-card ${active ? "active" : ""} ${aligned ? "campaign-aligned" : ""} ${evidenceVariant ? "evidence-variant" : ""}" data-contract-type="${contract.type}" style="--faction-accent: ${faction.accent}">
           <span>${faction.name}</span>
           <strong>${contract.title}</strong>
           <p>${contract.description}</p>
           <small>${faction.motto}</small>
+          ${evidenceVariant ? `<small>Evidence Link: ${evidenceVariant.codexHook}</small>` : ""}
+          ${evidenceVariant ? `<small>Operation Alignment: ${evidenceVariant.operationAffinity.map((id) => campaignOperationById[id].title).join(" / ")}</small>` : ""}
+          ${evidenceVariant ? `<small>Campaign Hint: ${evidenceVariant.campaignMeterHint}</small>` : ""}
+          ${evidenceVariant ? `<small>Field Note: ${campaign.evidence.hiddenImplicationUnlocked ? evidenceVariant.hiddenCopy : evidenceVariant.corporateCopy}</small>` : ""}
+          ${evidenceVariant ? `<small>Loadout: ${evidenceVariant.recommendedLoadoutHint}</small>` : ""}
           <small>${aligned ? `This sortie advances ${campaign.activeOperation.title}.` : `Current contract supports ${contractFamily}, not selected operation.`}</small>
           <small>Recommended family: ${campaign.activeOperation.families}</small>
           <small>Zone: ${contract.targetPoi} | Tier: ${contract.recommendedTier ?? "Any"} | Risk: ${contract.risk}</small>
@@ -8763,6 +8812,7 @@ export class App {
     } else if (action?.startsWith("campaign-select-")) {
       const message = this.campaignProgress.selectOperation(action.replace("campaign-select-", ""));
       this.campaignPresentation = this.campaignProgress.presentation;
+      this.contractManager.refreshContracts(this.getEvidenceContractContext());
       this.combatHud.showLootNotification(message);
       this.showIntelMenu();
     } else if (action === "campaign-reset-dev") {
@@ -8783,6 +8833,7 @@ export class App {
     } else if (action === "campaign-dev-state") {
       console.info(`[Campaign] dev state ${this.campaignProgress.getDebugSummary()}`);
       console.info(`[Campaign] evidence state ${this.campaignProgress.getEvidenceDebugSummary()}`);
+      console.info(`[Contracts] evidence context ${JSON.stringify(this.getEvidenceContractContext())}`);
       this.combatHud.showLootNotification("Campaign state logged");
       this.showIntelMenu();
     } else if (action === "codex-dev-discover-one") {
@@ -8798,6 +8849,10 @@ export class App {
         this.combatHud.showLootNotification(this.campaignProgress.resetEvidenceForDebug());
         this.campaignPresentation = this.campaignProgress.presentation;
       }
+      this.showIntelMenu();
+    } else if (action === "contract-dev-evidence-refresh") {
+      this.contractManager.refreshContracts(this.getEvidenceContractContext());
+      this.combatHud.showLootNotification("Evidence contract leads generated");
       this.showIntelMenu();
     } else if (action?.startsWith("codex-filter-")) {
       this.campaignCodexFilter = action.replace("codex-filter-", "") as CampaignCodexFilter;
@@ -8819,7 +8874,7 @@ export class App {
       }
       this.showIntelMenu();
     } else if (action === "contract-refresh") {
-      this.contractManager.refreshContracts();
+      this.contractManager.refreshContracts(this.getEvidenceContractContext());
       this.combatHud.showLootNotification("Contracts refreshed");
       this.showIntelMenu();
     } else if (action === "contract-submit") {

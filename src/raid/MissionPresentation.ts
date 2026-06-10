@@ -1,4 +1,5 @@
 import type { ActiveContractState, ContractDefinition } from "../contracts/ContractManager";
+import { isEvidenceContractVariant } from "../contracts/EvidenceContractVariants";
 import type { HeavyCargoViewState } from "./HeavyCargoManager";
 import type { ObjectiveState } from "./ObjectiveDirector";
 import type { POIObjectiveState, POIObjectiveType, POIObjectiveView } from "./POIObjectiveManager";
@@ -55,11 +56,16 @@ const poiTypeFamily: Record<POIObjectiveType, MissionFamilyId> = {
   "hack-signal-box": "signal-restore",
   "clear-enemy-patrol": "defense-holdout",
   "retrieve-core-fragment": "lumen-survey",
+  "survey-residue-field": "lumen-survey",
 };
 
 export function getMissionFamilyForContract(contract: ContractDefinition | null): MissionFamilyId {
   if (!contract) {
     return "heavy-cargo-retrieval";
+  }
+
+  if (isEvidenceContractVariant(contract)) {
+    return contract.evidenceVariant.familyId;
   }
 
   if (contract.type === "extraction") return "extraction-crisis";
@@ -198,6 +204,15 @@ function getCurrentStep(input: MissionPresentationInput, nearestPoi: POIObjectiv
   }
 
   if (nearestPoi?.contractLinked) {
+    if (nearestPoi.type === "survey-residue-field") {
+      const progress = Math.round(nearestPoi.progress * 100);
+      if (nearestPoi.distance <= 18) {
+        return progress > 0
+          ? `Hold scan in residue field - ${progress}% recorded`
+          : "Enter residue field - deploy Essence Flare or hold scan";
+      }
+      return `Track residue field at ${nearestPoi.poiName}`;
+    }
     return `Contract POI: ${nearestPoi.title} - ${describePoiContractStep(nearestPoi)}`;
   }
 

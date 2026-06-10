@@ -6296,6 +6296,15 @@ body.input-mode-ui #app {
   box-shadow: inset 0 0 0 1px rgba(65, 217, 255, 0.14);
 }
 
+.contract-card.evidence-variant {
+  border-color: rgba(190, 242, 100, 0.38);
+  box-shadow: inset 0 0 0 1px rgba(190, 242, 100, 0.12);
+}
+
+.contract-card.evidence-variant > span {
+  color: #d9f99d;
+}
+
 .campaign-meter-stack {
   display: grid;
   gap: 7px;

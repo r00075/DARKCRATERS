@@ -20,7 +20,8 @@ export type POIObjectiveType =
   | "restore-power"
   | "hack-signal-box"
   | "clear-enemy-patrol"
-  | "retrieve-core-fragment";
+  | "retrieve-core-fragment"
+  | "survey-residue-field";
 
 export type POIObjectiveState = Readonly<{
   active: boolean;
@@ -135,6 +136,11 @@ const objectiveTypeCopy: Record<POIObjectiveType, { title: string; description: 
     description: "Grab the unstable fragment and unlock the high-value chest.",
     duration: 1.6,
   },
+  "survey-residue-field": {
+    title: "Record Signal Trace",
+    description: "Enter the residue field and hold scan until the signal trace is recorded.",
+    duration: 4.2,
+  },
 };
 
 export class POIObjectiveManager {
@@ -246,6 +252,23 @@ export class POIObjectiveManager {
   public completeNearestForDebug(playerPosition: Vector3): boolean {
     const objective = [...this.objectives]
       .filter((item) => !item.completed)
+      .sort((a, b) =>
+        this.horizontalDistance(playerPosition, a.definition.position) -
+        this.horizontalDistance(playerPosition, b.definition.position),
+      )[0];
+
+    if (!objective) {
+      return false;
+    }
+
+    this.completeObjective(objective);
+    return true;
+  }
+
+  public completeNearestSurveyFromReveal(playerPosition: Vector3, radius: number): boolean {
+    const objective = [...this.objectives]
+      .filter((item) => !item.completed && item.definition.type === "survey-residue-field")
+      .filter((item) => this.horizontalDistance(playerPosition, item.definition.position) <= radius)
       .sort((a, b) =>
         this.horizontalDistance(playerPosition, a.definition.position) -
         this.horizontalDistance(playerPosition, b.definition.position),
@@ -423,11 +446,11 @@ export class POIObjectiveManager {
   }
 
   private createObjectiveProp(definition: POIObjectiveDefinition): AbstractMesh {
-    const prop = definition.type === "retrieve-core-fragment"
+    const prop = definition.type === "retrieve-core-fragment" || definition.type === "survey-residue-field"
       ? MeshBuilder.CreateSphere(`${definition.id}-prop`, { diameter: 0.62, segments: 16 }, this.scene)
       : MeshBuilder.CreateBox(`${definition.id}-prop`, { width: 0.86, height: 0.94, depth: 0.46 }, this.scene);
 
-    prop.position.copyFrom(definition.position.add(new Vector3(0, definition.type === "retrieve-core-fragment" ? 0.72 : 0.48, 0)));
+    prop.position.copyFrom(definition.position.add(new Vector3(0, definition.type === "retrieve-core-fragment" || definition.type === "survey-residue-field" ? 0.72 : 0.48, 0)));
     prop.material = this.propMaterial;
     prop.checkCollisions = definition.type !== "retrieve-core-fragment";
     prop.metadata = { gameplayTag: "poi-objective-prop", objectiveType: definition.type };
@@ -507,6 +530,7 @@ export class POIObjectiveManager {
       "restore-power",
       "clear-enemy-patrol",
       "hack-signal-box",
+      "survey-residue-field",
     ];
     return types[(index + (deterministic ? 0 : Math.floor(Math.random() * types.length))) % types.length];
   }
@@ -563,6 +587,11 @@ export class POIObjectiveManager {
       table.push({ type: "weapon-rifle", quantity: 1, chance: 0.06 });
       table.push({ type: "attachment-suppressor", quantity: 1, chance: 0.16 });
       table.push({ type: "dog-tag", quantity: 1, chance: 0.2 });
+    }
+
+    if (type === "survey-residue-field") {
+      table.push({ type: "scanner-battery", quantity: 1, chance: 0.32 });
+      table.push({ type: "lumen-essence", quantity: 1, chance: 0.18 });
     }
 
     if (threatRating >= 5 || type === "retrieve-core-fragment") {

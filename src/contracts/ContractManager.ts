@@ -3,6 +3,12 @@ import type { POIObjectiveEvent, POIObjectiveType } from "../raid/POIObjectiveMa
 import type { LootStack, LootType } from "../raid/RaidInventory";
 import type { VendorId } from "../vendors/VendorManager";
 import { poiDefinitions } from "../world/MapLayout";
+import {
+  evidenceContractVariants,
+  getAvailableEvidenceContractVariants,
+  isEvidenceContractVariant,
+  type EvidenceContractContext,
+} from "./EvidenceContractVariants";
 
 export type ContractType =
   | "poi-objective"
@@ -717,7 +723,9 @@ const enemyLabels: Record<EnemyType, string> = {
 };
 
 const isContractId = (id: unknown): id is string =>
-  typeof id === "string" && contractPool.some((contract) => contract.id === id);
+  typeof id === "string" && allContractDefinitions.some((contract) => contract.id === id);
+
+const allContractDefinitions = [...contractPool, ...evidenceContractVariants] as readonly ContractDefinition[];
 
 export class ContractManager {
   private state: ContractState = this.load();
@@ -779,22 +787,39 @@ export class ContractManager {
     return `${title} abandoned`;
   }
 
-  public refreshContracts(): void {
+  public refreshContracts(context?: EvidenceContractContext): void {
     const seed = Date.now() + this.state.refreshCount * 17;
+    const evidenceVariants = context ? getAvailableEvidenceContractVariants(context) : [];
+    const operationVariants = context
+      ? evidenceVariants
+        .filter((contract) => contract.evidenceVariant.operationAffinity.includes(context.currentOperationId))
+        .sort((a, b) => this.scoreContract(a, seed) - this.scoreContract(b, seed))
+      : [];
     const darkContracts = contractPool
       .filter((contract) => contract.id.startsWith("dark-"))
       .sort((a, b) => this.scoreContract(a, seed) - this.scoreContract(b, seed));
     const legacyContracts = contractPool
       .filter((contract) => !contract.id.startsWith("dark-"))
       .sort((a, b) => this.scoreContract(a, seed) - this.scoreContract(b, seed));
-    const candidates = [...darkContracts, ...legacyContracts];
-    const available = candidates.slice(0, 3);
+    const evidenceFill = evidenceVariants
+      .filter((contract) => !operationVariants.some((candidate) => candidate.id === contract.id))
+      .sort((a, b) => this.scoreContract(a, seed + 31) - this.scoreContract(b, seed + 31));
+    const genericCandidates = [...darkContracts, ...legacyContracts];
+    const candidates = [...operationVariants, ...evidenceFill, ...genericCandidates]
+      .filter((contract, index, list) => list.findIndex((candidate) => candidate.id === contract.id) === index);
+    const evidenceBudget = operationVariants.length > 0 ? 2 : evidenceFill.length > 0 ? 1 : 0;
+    const evidencePicks = candidates.filter(isEvidenceContractVariant).slice(0, evidenceBudget);
+    const genericPicks = genericCandidates.filter((contract) => !evidencePicks.some((candidate) => candidate.id === contract.id)).slice(0, 3 - evidencePicks.length);
+    const available = [...evidencePicks, ...genericPicks].slice(0, 3);
 
     this.state = {
       ...this.state,
       available: available.length >= 3 ? available : [...available, ...contractPool].slice(0, 3),
       refreshCount: this.state.refreshCount + 1,
     };
+    if (context) {
+      console.info(`[Contracts] evidence variants generated count=${evidencePicks.length} operation=${context.currentOperationId}`);
+    }
     this.save();
   }
 
@@ -1114,10 +1139,10 @@ export class ContractManager {
         reputationTokens: number;
       }>;
       const available = Array.isArray(parsed.availableIds)
-        ? parsed.availableIds.filter(isContractId).map((id) => contractPool.find((contract) => contract.id === id)!)
+        ? parsed.availableIds.filter(isContractId).map((id) => allContractDefinitions.find((contract) => contract.id === id)!)
         : [];
       const activeDefinition = isContractId(parsed.activeId)
-        ? contractPool.find((contract) => contract.id === parsed.activeId) ?? null
+        ? allContractDefinitions.find((contract) => contract.id === parsed.activeId) ?? null
         : null;
       const status: ContractStatus = parsed.activeStatus === "ready-to-claim" ||
         parsed.activeStatus === "completed" ||

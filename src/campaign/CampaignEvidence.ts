@@ -299,6 +299,7 @@ export function discoverEvidenceFromRaid(result: RaidResultPresentation): Campai
   const hasItem = (type: string) => result.recoveredItems.some((item) => item.type === type && item.quantity > 0);
   const family = result.familyName.toLowerCase();
   const title = result.missionTitle.toLowerCase();
+  const missionId = result.missionId.toLowerCase();
   const primaryComplete = result.result === "complete" || result.result === "partial";
 
   if (hasItem("black-box-survey-crate") || hasItem("encrypted-data")) {
@@ -323,6 +324,29 @@ export function discoverEvidenceFromRaid(result: RaidResultPresentation): Campai
   if (family.includes("evidence") && primaryComplete) {
     discoveries.push({ id: "restricted-recovery-order", source: "evidence-operation", reason: "Evidence operation completed" });
     discoveries.push({ id: "crew-memory-report", source: "evidence-operation", reason: "Crew report entered custody" });
+  }
+  if (primaryComplete) {
+    if (missionId.includes("evidence-core-harmonic-audit")) {
+      discoveries.push({ id: "he3-core-resonance", source: "evidence-contract", reason: "Core harmonic audit completed" });
+    }
+    if (missionId.includes("evidence-sealed-manifest-verification")) {
+      discoveries.push({ id: "sealed-cache-manifest", source: "evidence-contract", reason: "Sealed manifest verified" });
+    }
+    if (missionId.includes("evidence-residue-survey-sweep")) {
+      discoveries.push({ id: "lumen-residue-sample", source: "survey-contract", reason: "Residue survey trace recorded" });
+    }
+    if (missionId.includes("evidence-mineral-behavior-trial")) {
+      discoveries.push({ id: "mineral-behavior-anomaly", source: "survey-contract", reason: "Mineral behavior trial completed" });
+    }
+    if (missionId.includes("evidence-relay-cadence-discrepancy")) {
+      discoveries.push({ id: "mare-vanta-signal-fragment", source: "signal-contract", reason: "Relay cadence discrepancy archived" });
+    }
+    if (missionId.includes("evidence-black-box-contradiction")) {
+      discoveries.push({ id: "black-box-discrepancy", source: "evidence-contract", reason: "Black box contradiction recovered" });
+    }
+    if (missionId.includes("evidence-quiet-order-contact")) {
+      discoveries.push({ id: "crew-memory-report", source: "quiet-order-contact", reason: "Quiet Order field memory logged" });
+    }
   }
 
   return [...new Map(discoveries.map((discovery) => [discovery.id, discovery])).values()];
