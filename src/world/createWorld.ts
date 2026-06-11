@@ -1,13 +1,19 @@
 import {
   AbstractMesh,
+  AssetContainer,
+  Camera,
   Color3,
+  Light,
   LinesMesh,
   MeshBuilder,
   PointLight,
   Scene,
+  SceneLoader,
   StandardMaterial,
+  TransformNode,
   Vector3,
 } from "@babylonjs/core";
+import "@babylonjs/loaders/glTF";
 import {
   extractionZoneDefinitions,
   getPoiNameAtPosition,
@@ -25,6 +31,158 @@ export type WorldMap = Readonly<{
 
 const halfMapSize = mapLayoutConfig.size / 2;
 
+type MapStructureAssetKey =
+  | "mine-access-portal"
+  | "nebula-freight-crate"
+  | "tychostar-gateway"
+  | "looped-industrial-pipe";
+
+type MapStructureAssetDefinition = Readonly<{
+  key: MapStructureAssetKey;
+  label: string;
+  path: string;
+  categories: readonly string[];
+  defaultScale: number;
+  defaultYaw: number;
+  role: string;
+  fallbackCategory: string;
+  safetyRadius: number;
+  yOffset: number;
+  proxy: "portal" | "crate" | "gateway" | "pipe";
+  materialRole: "portal" | "crate" | "gateway" | "pipe";
+}>;
+
+type MapStructurePlacement = Readonly<{
+  assetKey: MapStructureAssetKey;
+  name: string;
+  position: Vector3;
+  yaw?: number;
+  scale?: number;
+  category: string;
+  pitch?: number;
+  roll?: number;
+  yOffset?: number;
+}>;
+
+type MapStructureTemplate = Readonly<{
+  asset: MapStructureAssetDefinition;
+  container: AssetContainer;
+  importedLightsRemoved: number;
+  importedCamerasRemoved: number;
+  importedAnimationGroupsDisposed: number;
+}>;
+
+type MapStructureSummary = {
+  loaded: number;
+  placed: number;
+  failed: number;
+  lightsRemoved: number;
+  camerasRemoved: number;
+  animationGroupsStopped: number;
+  animationGroupsDisposed: number;
+  materialsReplaced: number;
+  pbrMaterialsReplaced: number;
+  alphaMaterialsReplaced: number;
+};
+
+type MapStructurePlacementResult = {
+  loaded: boolean;
+  placed: boolean;
+  lightsRemoved: number;
+  camerasRemoved: number;
+  animationGroupsStopped: number;
+  animationGroupsDisposed: number;
+  materialsReplaced: number;
+  pbrMaterialsReplaced: number;
+  alphaMaterialsReplaced: number;
+};
+
+type MapStructureMaterialStats = {
+  materialsReplaced: number;
+  pbrMaterialsReplaced: number;
+  alphaMaterialsReplaced: number;
+};
+
+type MapStructureMaterials = Readonly<{
+  dark: StandardMaterial;
+  corporate: StandardMaterial;
+  crate: StandardMaterial;
+  pipe: StandardMaterial;
+  gatewayAccent: StandardMaterial;
+  portalAccent: StandardMaterial;
+  proxy: StandardMaterial;
+  proxyAccent: StandardMaterial;
+}>;
+
+const mapStructureAssets: Record<MapStructureAssetKey, MapStructureAssetDefinition> = {
+  "mine-access-portal": {
+    key: "mine-access-portal",
+    label: "Mine Access Portal",
+    path: "/models/maps/tychostar/structures/mine-access-portal.glb",
+    categories: ["mining-rig", "cargo-cradle", "restricted-recovery"],
+    defaultScale: 1.45,
+    defaultYaw: Math.PI,
+    role: "mining access entrance",
+    fallbackCategory: "mining-rig",
+    safetyRadius: 6.5,
+    yOffset: 0.18,
+    proxy: "portal",
+    materialRole: "portal",
+  },
+  "nebula-freight-crate": {
+    key: "nebula-freight-crate",
+    label: "Nebula Freight Crate",
+    path: "/models/maps/tychostar/props/freight-crate.glb",
+    categories: ["warehouse-storage", "salvage-cache", "extraction-cradle", "abandoned-camp"],
+    defaultScale: 1.05,
+    defaultYaw: 0,
+    role: "cargo and salvage dressing",
+    fallbackCategory: "warehouse-storage",
+    safetyRadius: 2.4,
+    yOffset: 0.12,
+    proxy: "crate",
+    materialRole: "crate",
+  },
+  "tychostar-gateway": {
+    key: "tychostar-gateway",
+    label: "Tychostar Gateway",
+    path: "/models/maps/tychostar/structures/tychostar-gateway.glb",
+    categories: ["security-checkpoint", "restricted-recovery", "extraction-cradle"],
+    defaultScale: 1.22,
+    defaultYaw: 0,
+    role: "corporate threshold",
+    fallbackCategory: "security-checkpoint",
+    safetyRadius: 5.8,
+    yOffset: 0.16,
+    proxy: "gateway",
+    materialRole: "gateway",
+  },
+  "looped-industrial-pipe": {
+    key: "looped-industrial-pipe",
+    label: "Looped Industrial Pipe",
+    path: "/models/maps/tychostar/props/industrial-pipe-loop.glb",
+    categories: ["mining-rig", "warehouse-storage", "relay-signal", "salvage-cache"],
+    defaultScale: 1.08,
+    defaultYaw: 0,
+    role: "industrial utility conduit",
+    fallbackCategory: "mining-rig",
+    safetyRadius: 3.2,
+    yOffset: 0.14,
+    proxy: "pipe",
+    materialRole: "pipe",
+  },
+};
+
+const mapStructureLoadWarnings = new Set<MapStructureAssetKey>();
+const mapStructureTemplateLoads = new Map<MapStructureAssetKey, Promise<MapStructureTemplate>>();
+// Phase 13.1E: direct GLB structure rendering is disabled by default because the
+// current crater scene can exceed Babylon shader/uniform-buffer limits. Keep the
+// registry and loader for a later optimized GLB pipeline, but use proxy silhouettes
+// until export-clean/unlit assets or a tighter scene light budget are available.
+const ENABLE_STRUCTURE_GLBS = false;
+const MAP_STRUCTURE_DEBUG_PROXIES = false;
+const MAP_STRUCTURE_LIGHT_WARNING_THRESHOLD = 12;
+
 export const createWorld = (scene: Scene): WorldMap => {
   createGround(scene);
   createGroundGrid(scene);
@@ -34,6 +192,7 @@ export const createWorld = (scene: Scene): WorldMap => {
   createMapProps(scene);
   createCraterReadabilityAnchors(scene);
   createPoiIdentityDressing(scene);
+  placeMapStructureGlbs(scene);
   createTychoScarVisualSlice(scene);
   const extractionMeshes = createExtractionZones(scene);
   const contractVariantMeshes = createContractVariantMarkers(scene);
@@ -791,10 +950,16 @@ const createCraterReadabilityAnchors = (scene: Scene): void => {
     mast.checkCollisions = false;
     mast.metadata = { gameplayTag: "poi-readability-mast", poiId: poi.id };
 
-    const lamp = new PointLight(`${poi.id}-readability-lamp`, mast.position.add(new Vector3(0, highRisk ? 2.3 : 1.7, 0)), scene);
-    lamp.diffuse = poi.id === "core-pit" || poi.id === "data-shack" ? themeConfig.colors.cyan : highRisk ? themeConfig.colors.orange : themeConfig.colors.rootGreen;
-    lamp.intensity = highRisk ? 0.34 : 0.2;
-    lamp.range = highRisk ? 16 : 11;
+    const lampMarker = MeshBuilder.CreateSphere(
+      `${poi.id}-readability-lamp-marker`,
+      { diameter: highRisk ? 0.86 : 0.62, segments: 12 },
+      scene,
+    );
+    lampMarker.position.copyFrom(mast.position.add(new Vector3(0, highRisk ? 2.3 : 1.7, 0)));
+    lampMarker.material = material;
+    lampMarker.checkCollisions = false;
+    lampMarker.isPickable = false;
+    lampMarker.metadata = { gameplayTag: "poi-readability-lamp-marker", poiId: poi.id };
   }
 
   for (const [index, position, diameter] of [
@@ -984,6 +1149,440 @@ const createRestrictedRecoveryDressing = (scene: Scene, materials: PoiDressingMa
     addDressingBox(scene, `${name}-sealed-crate`, origin.add(new Vector3(0, 0.56, -2.8)), new Vector3(3.8, 1.12, 1.8), materials.restricted, "restricted-recovery", stats, yaw);
     addDressingBox(scene, `${name}-muted-indicator`, origin.add(new Vector3(0, 1.35, 2.4)), new Vector3(2.8, 0.28, 0.22), materials.hazard, "restricted-recovery", stats, yaw);
   }
+};
+
+const placeMapStructureGlbs = (scene: Scene): void => {
+  mapStructureTemplateLoads.clear();
+  const core = poiCenter("core-pit");
+  const warehouse = poiCenter("warehouse");
+  const checkpoint = poiCenter("checkpoint");
+  const dataShack = poiCenter("data-shack");
+
+  const placements: MapStructurePlacement[] = [
+    {
+      assetKey: "mine-access-portal",
+      name: "core-pit-access-portal",
+      position: core.add(new Vector3(-18, 0, -18)),
+      yaw: Math.PI * 0.22,
+      scale: 1.55,
+      category: "mining-rig",
+    },
+    {
+      assetKey: "nebula-freight-crate",
+      name: "warehouse-nebula-crate",
+      position: warehouse.add(new Vector3(-18, 0, 16)),
+      yaw: -0.18,
+      scale: 1.2,
+      category: "warehouse-storage",
+    },
+    {
+      assetKey: "tychostar-gateway",
+      name: "checkpoint-tychostar-gateway",
+      position: checkpoint.add(new Vector3(0, 0, -21)),
+      yaw: 0,
+      scale: 1.35,
+      category: "security-checkpoint",
+    },
+    {
+      assetKey: "looped-industrial-pipe",
+      name: "data-shack-utility-pipe-loop",
+      position: dataShack.add(new Vector3(-18, 0, -14)),
+      yaw: Math.PI * 0.18,
+      scale: 1.05,
+      category: "relay-signal",
+    },
+  ];
+
+  void placeMapStructures(scene, placements);
+};
+
+const placeMapStructures = async (scene: Scene, placements: readonly MapStructurePlacement[]): Promise<void> => {
+  const lightsBefore = scene.lights.length;
+  const materials = createMapStructureMaterials(scene);
+
+  if (!ENABLE_STRUCTURE_GLBS) {
+    for (const placement of placements) {
+      createMapStructureProxy(scene, placement, mapStructureAssets[placement.assetKey], false, materials);
+    }
+    console.info(
+      `[MapStructureProxy] phase=13.1E mode=proxy-only placements=${placements.length} glbEnabled=false lightsBefore=${lightsBefore} lightsAfter=${scene.lights.length}`,
+    );
+    return;
+  }
+
+  const summary: MapStructureSummary = {
+    loaded: 0,
+    placed: 0,
+    failed: 0,
+    lightsRemoved: 0,
+    camerasRemoved: 0,
+    animationGroupsStopped: 0,
+    animationGroupsDisposed: 0,
+    materialsReplaced: 0,
+    pbrMaterialsReplaced: 0,
+    alphaMaterialsReplaced: 0,
+  };
+  const loadedAssets = new Set<MapStructureAssetKey>();
+
+  for (const placement of placements) {
+    const result = await placeMapStructure(scene, placement, materials);
+    if (result.loaded) {
+      loadedAssets.add(placement.assetKey);
+    }
+    if (result.placed) {
+      summary.placed += 1;
+    } else {
+      summary.failed += 1;
+    }
+    summary.lightsRemoved += result.lightsRemoved;
+    summary.camerasRemoved += result.camerasRemoved;
+    summary.animationGroupsStopped += result.animationGroupsStopped;
+    summary.animationGroupsDisposed += result.animationGroupsDisposed;
+    summary.materialsReplaced += result.materialsReplaced;
+    summary.pbrMaterialsReplaced += result.pbrMaterialsReplaced;
+    summary.alphaMaterialsReplaced += result.alphaMaterialsReplaced;
+  }
+
+  summary.loaded = loadedAssets.size;
+  const lightsAfter = scene.lights.length;
+  console.info(
+    `[MapStructureGLB] phase=13.1D loaded=${summary.loaded} placed=${summary.placed} failed=${summary.failed} lightsBefore=${lightsBefore} lightsAfter=${lightsAfter} lightsDisposed=${summary.lightsRemoved} camerasDisposed=${summary.camerasRemoved} animationGroupsStopped=${summary.animationGroupsStopped} animationGroupsDisposed=${summary.animationGroupsDisposed} materialsReplaced=${summary.materialsReplaced} pbrMaterialsReplaced=${summary.pbrMaterialsReplaced} alphaMaterialsReplaced=${summary.alphaMaterialsReplaced} glbsEnabled=${ENABLE_STRUCTURE_GLBS}`,
+  );
+  if (lightsAfter > MAP_STRUCTURE_LIGHT_WARNING_THRESHOLD) {
+    console.warn(`[MapStructureGLB] phase=13.1D scene-light-budget high=${lightsAfter} threshold=${MAP_STRUCTURE_LIGHT_WARNING_THRESHOLD}`);
+  }
+};
+
+const placeMapStructure = async (
+  scene: Scene,
+  placement: MapStructurePlacement,
+  materials: MapStructureMaterials,
+): Promise<MapStructurePlacementResult> => {
+  const asset = mapStructureAssets[placement.assetKey];
+  const root = new TransformNode(`map-structure-${placement.name}`, scene);
+  root.position.copyFrom(placement.position.add(new Vector3(0, placement.yOffset ?? asset.yOffset, 0)));
+  root.rotation.set(placement.pitch ?? 0, (placement.yaw ?? asset.defaultYaw), placement.roll ?? 0);
+  const scale = placement.scale ?? asset.defaultScale;
+  root.scaling.set(scale, scale, scale);
+  root.metadata = {
+    gameplayTag: "map-structure-glb",
+    phase: "13.1D",
+    assetKey: asset.key,
+    label: asset.label,
+    category: placement.category,
+    role: asset.role,
+    safetyRadius: asset.safetyRadius,
+    fallbackCategory: asset.fallbackCategory,
+  };
+
+  if (!ENABLE_STRUCTURE_GLBS) {
+    root.dispose();
+    createMapStructureProxy(scene, placement, asset, false, materials);
+    return createEmptyMapStructurePlacementResult(false, false);
+  }
+
+  try {
+    const template = await loadMapStructureTemplate(scene, asset);
+    const entries = template.container.instantiateModelsToScene(
+      (sourceName) => `map-structure-${placement.name}-${sourceName}`,
+      false,
+      { doNotInstantiate: true },
+    );
+    for (const node of entries.rootNodes) {
+      node.parent = root;
+    }
+    sanitizeMapStructureNode(root, asset, placement.category);
+    const materialStats = replaceMapStructureMaterials(root, asset, materials);
+    if (MAP_STRUCTURE_DEBUG_PROXIES) {
+      createMapStructureProxy(scene, placement, asset, true, materials);
+    }
+    return {
+      loaded: true,
+      placed: true,
+      lightsRemoved: template.importedLightsRemoved,
+      camerasRemoved: template.importedCamerasRemoved,
+      animationGroupsStopped: template.importedAnimationGroupsDisposed,
+      animationGroupsDisposed: template.importedAnimationGroupsDisposed,
+      ...materialStats,
+    };
+  } catch (error) {
+    root.dispose();
+    if (!mapStructureLoadWarnings.has(asset.key)) {
+      mapStructureLoadWarnings.add(asset.key);
+      console.warn(`[MapStructureGLB] asset=${asset.key} path=${asset.path} failed-to-load fallback=${asset.fallbackCategory}`, error);
+    }
+    createMapStructureProxy(scene, placement, asset, false, materials);
+    return createEmptyMapStructurePlacementResult(false, false);
+  }
+};
+
+const loadMapStructureTemplate = (scene: Scene, asset: MapStructureAssetDefinition): Promise<MapStructureTemplate> => {
+  const existing = mapStructureTemplateLoads.get(asset.key);
+  if (existing) {
+    return existing;
+  }
+
+  const load = (async (): Promise<MapStructureTemplate> => {
+    const container = await SceneLoader.LoadAssetContainerAsync("", asset.path, scene);
+    const importedLightsRemoved = disposeMapStructureAssets(container.lights);
+    const importedCamerasRemoved = disposeMapStructureAssets(container.cameras);
+    let importedAnimationGroupsDisposed = 0;
+
+    for (const group of container.animationGroups) {
+      group.stop();
+      group.dispose();
+      importedAnimationGroupsDisposed += 1;
+    }
+
+    for (const mesh of container.meshes) {
+      sanitizeMapStructureMesh(mesh, asset, asset.fallbackCategory);
+    }
+    for (const node of container.transformNodes) {
+      node.metadata = {
+        ...(node.metadata ?? {}),
+        gameplayTag: "map-structure-glb-template",
+        phase: "13.1D",
+        assetKey: asset.key,
+      };
+    }
+
+    return { asset, container, importedLightsRemoved, importedCamerasRemoved, importedAnimationGroupsDisposed };
+  })();
+
+  mapStructureTemplateLoads.set(asset.key, load);
+  return load;
+};
+
+const createEmptyMapStructurePlacementResult = (
+  loaded: boolean,
+  placed: boolean,
+): MapStructurePlacementResult => ({
+  loaded,
+  placed,
+  lightsRemoved: 0,
+  camerasRemoved: 0,
+  animationGroupsStopped: 0,
+  animationGroupsDisposed: 0,
+  materialsReplaced: 0,
+  pbrMaterialsReplaced: 0,
+  alphaMaterialsReplaced: 0,
+});
+
+const createMapStructureMaterials = (scene: Scene): MapStructureMaterials => ({
+  dark: createUnlitStructureMaterial(scene, "map-structure-unlit-dark", new Color3(0.08, 0.092, 0.105), themeConfig.colors.cyan.scale(0.055)),
+  corporate: createUnlitStructureMaterial(scene, "map-structure-unlit-corporate", new Color3(0.035, 0.042, 0.052), themeConfig.colors.cyan.scale(0.075)),
+  crate: createUnlitStructureMaterial(scene, "map-structure-unlit-freight-crate", new Color3(0.23, 0.16, 0.095), themeConfig.colors.orange.scale(0.12)),
+  pipe: createUnlitStructureMaterial(scene, "map-structure-unlit-pipe", new Color3(0.12, 0.13, 0.14), themeConfig.colors.cyan.scale(0.07)),
+  gatewayAccent: createUnlitStructureMaterial(scene, "map-structure-unlit-gateway-accent", new Color3(0.08, 0.12, 0.14), themeConfig.colors.cyan.scale(0.2)),
+  portalAccent: createUnlitStructureMaterial(scene, "map-structure-unlit-portal-accent", new Color3(0.075, 0.12, 0.105), themeConfig.colors.rootGreen.scale(0.16).add(themeConfig.colors.cyan.scale(0.08))),
+  proxy: createUnlitStructureMaterial(scene, "map-structure-unlit-proxy", new Color3(0.13, 0.12, 0.105), themeConfig.colors.orange.scale(0.16)),
+  proxyAccent: createUnlitStructureMaterial(scene, "map-structure-unlit-proxy-accent", new Color3(0.05, 0.13, 0.15), themeConfig.colors.cyan.scale(0.22)),
+});
+
+const createUnlitStructureMaterial = (
+  scene: Scene,
+  name: string,
+  diffuseColor: Color3,
+  emissiveColor: Color3,
+): StandardMaterial => {
+  const material = new StandardMaterial(name, scene);
+  material.diffuseColor = diffuseColor;
+  material.emissiveColor = emissiveColor;
+  material.specularColor = Color3.Black();
+  material.disableLighting = true;
+  material.maxSimultaneousLights = 0;
+  material.alpha = 1;
+  material.backFaceCulling = false;
+  material.metadata = { gameplayTag: "map-structure-unlit-material", phase: "13.1D" };
+  material.freeze();
+  return material;
+};
+
+const disposeMapStructureAssets = (assets: readonly Light[] | readonly Camera[]): number => {
+  let removed = 0;
+  for (const asset of assets) {
+    asset.dispose();
+    removed += 1;
+  }
+  return removed;
+};
+
+const sanitizeMapStructureNode = (
+  root: TransformNode,
+  asset: MapStructureAssetDefinition,
+  category: string,
+): void => {
+  for (const node of root.getChildTransformNodes(false)) {
+    node.metadata = {
+      ...(node.metadata ?? {}),
+      gameplayTag: "map-structure-glb",
+      phase: "13.1D",
+      assetKey: asset.key,
+      label: asset.label,
+      category,
+    };
+  }
+  for (const mesh of root.getChildMeshes(false)) {
+    sanitizeMapStructureMesh(mesh, asset, category);
+  }
+};
+
+const sanitizeMapStructureMesh = (
+  mesh: AbstractMesh,
+  asset: MapStructureAssetDefinition,
+  category: string,
+): void => {
+  mesh.setEnabled(true);
+  mesh.isPickable = false;
+  mesh.checkCollisions = false;
+  mesh.receiveShadows = false;
+  if (mesh.physicsImpostor) {
+    mesh.physicsImpostor.dispose();
+    mesh.physicsImpostor = null;
+  }
+  mesh.metadata = {
+    ...(mesh.metadata ?? {}),
+    gameplayTag: "map-structure-glb",
+    phase: "13.1D",
+    assetKey: asset.key,
+    label: asset.label,
+    category,
+    collision: false,
+    collisions: false,
+    isCollisionMesh: false,
+  };
+};
+
+const replaceMapStructureMaterials = (
+  root: TransformNode,
+  asset: MapStructureAssetDefinition,
+  materials: MapStructureMaterials,
+): MapStructureMaterialStats => {
+  const stats: MapStructureMaterialStats = {
+    materialsReplaced: 0,
+    pbrMaterialsReplaced: 0,
+    alphaMaterialsReplaced: 0,
+  };
+  const replacement = getMapStructureMaterial(asset, materials);
+
+  for (const mesh of root.getChildMeshes(false)) {
+    const material = mesh.material;
+    if (material) {
+      const className = material.getClassName();
+      if (className.toLowerCase().includes("pbr")) {
+        stats.pbrMaterialsReplaced += 1;
+      }
+      if (typeof material.alpha === "number" && material.alpha < 1) {
+        stats.alphaMaterialsReplaced += 1;
+      }
+    }
+    mesh.material = replacement;
+    stats.materialsReplaced += 1;
+  }
+  return stats;
+};
+
+const getMapStructureMaterial = (
+  asset: MapStructureAssetDefinition,
+  materials: MapStructureMaterials,
+): StandardMaterial => {
+  if (asset.materialRole === "crate") {
+    return materials.crate;
+  }
+  if (asset.materialRole === "pipe") {
+    return materials.pipe;
+  }
+  if (asset.materialRole === "gateway") {
+    return materials.gatewayAccent;
+  }
+  if (asset.materialRole === "portal") {
+    return materials.portalAccent;
+  }
+  return materials.dark;
+};
+
+const createMapStructureProxy = (
+  scene: Scene,
+  placement: MapStructurePlacement,
+  asset: MapStructureAssetDefinition,
+  debugOnly: boolean,
+  materials: MapStructureMaterials,
+): void => {
+  const suffix = debugOnly ? "debug-proxy" : "fallback-proxy";
+  const baseName = `map-structure-${placement.name}-${suffix}`;
+  const yOffset = placement.yOffset ?? asset.yOffset;
+  const origin = placement.position.add(new Vector3(0, yOffset + 0.05, 0));
+  const yaw = placement.yaw ?? asset.defaultYaw;
+  const scale = placement.scale ?? asset.defaultScale;
+  const material = debugOnly ? materials.proxyAccent : materials.proxy;
+
+  const ring = MeshBuilder.CreateTorus(
+    `${baseName}-locator-ring`,
+    { diameter: asset.safetyRadius * 2, thickness: 0.065, tessellation: 48 },
+    scene,
+  );
+  ring.position.copyFrom(origin);
+  ring.rotation.x = Math.PI / 2;
+  ring.material = material;
+  ring.checkCollisions = false;
+  ring.isPickable = false;
+  ring.metadata = { gameplayTag: "map-structure-glb-proxy", phase: "13.1D", assetKey: asset.key, debugOnly };
+
+  const proxyMeshes: AbstractMesh[] = [ring];
+  if (!debugOnly) {
+    if (asset.proxy === "portal" || asset.proxy === "gateway") {
+      proxyMeshes.push(
+        addProxyBox(scene, `${baseName}-left-post`, origin.add(new Vector3(-2.1 * scale, 2.1 * scale, 0)), new Vector3(0.38 * scale, 4.2 * scale, 0.38 * scale), material, yaw),
+        addProxyBox(scene, `${baseName}-right-post`, origin.add(new Vector3(2.1 * scale, 2.1 * scale, 0)), new Vector3(0.38 * scale, 4.2 * scale, 0.38 * scale), material, yaw),
+        addProxyBox(scene, `${baseName}-lintel`, origin.add(new Vector3(0, 4.2 * scale, 0)), new Vector3(4.8 * scale, 0.38 * scale, 0.5 * scale), material, yaw),
+      );
+    } else if (asset.proxy === "crate") {
+      proxyMeshes.push(
+        addProxyBox(scene, `${baseName}-crate-a`, origin.add(new Vector3(-0.85 * scale, 0.65 * scale, 0)), new Vector3(1.6 * scale, 1.3 * scale, 1.35 * scale), material, yaw),
+        addProxyBox(scene, `${baseName}-crate-b`, origin.add(new Vector3(0.9 * scale, 0.48 * scale, 0.25 * scale)), new Vector3(1.35 * scale, 0.95 * scale, 1.2 * scale), material, yaw + 0.16),
+      );
+    } else {
+      const loop = MeshBuilder.CreateTorus(
+        `${baseName}-pipe-loop`,
+        { diameter: 3.6 * scale, thickness: 0.18 * scale, tessellation: 40 },
+        scene,
+      );
+      loop.position.copyFrom(origin.add(new Vector3(0, 1.8 * scale, 0)));
+      loop.rotation.set(Math.PI / 2, yaw, 0);
+      loop.material = material;
+      proxyMeshes.push(loop);
+    }
+  }
+
+  for (const mesh of proxyMeshes) {
+    mesh.checkCollisions = false;
+    mesh.isPickable = false;
+    mesh.metadata = {
+      ...(mesh.metadata ?? {}),
+      gameplayTag: "map-structure-glb-proxy",
+      phase: "13.1D",
+      assetKey: asset.key,
+      debugOnly,
+      collision: false,
+    };
+  }
+};
+
+const addProxyBox = (
+  scene: Scene,
+  name: string,
+  position: Vector3,
+  scale: Vector3,
+  material: StandardMaterial,
+  yaw: number,
+): AbstractMesh => {
+  const mesh = MeshBuilder.CreateBox(name, { width: scale.x, height: scale.y, depth: scale.z }, scene);
+  mesh.position.copyFrom(position);
+  mesh.rotation.y = yaw;
+  mesh.material = material;
+  mesh.checkCollisions = false;
+  mesh.isPickable = false;
+  return mesh;
 };
 
 const addDressingBox = (
