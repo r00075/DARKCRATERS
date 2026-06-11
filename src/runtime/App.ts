@@ -1603,9 +1603,7 @@ export class App {
     this.inventoryManager.clearWarning();
     this.raidBagOpen = false;
     console.info(`[Interaction] heavy cargo route action=${action} target=${heliumDrillCoreHeavyCargoId} blockedInventoryPanel=true`);
-    console.info(`[Interaction] heavyCargoConsumesInput action=${action} suppressInventory=true`);
     console.info(`[EvaPack] forced closed reason=heavy-cargo action=${action}`);
-    console.info(`[HeavyCargoUI] no inventory overlay action=${action}`);
   }
 
   private isInventorySuppressedForHeavyCargo(source: string): boolean {
@@ -2470,6 +2468,7 @@ export class App {
     this.objectivePressureSpawned = true;
     const type: EnemyType = nearest.threatRating >= 4 ? "guard" : nearest.threatRating >= 3 ? "charger" : "grunt";
     this.enemyDirector.spawnEventEnemy(`objective-pressure-${nearest.id}`, type, spawn, nearest.threatRating >= 4);
+    this.combatHud.showLootNotification(`Objective perimeter contact - ${nearest.poiName}`);
     console.info(`[EncounterPacing] objective-zone reinforcement poi=${nearest.poiId} type=${type}`);
   }
 
@@ -2498,6 +2497,7 @@ export class App {
 
     this.extractionPressureSpawned = true;
     this.enemyDirector.spawnEventEnemy("extraction-route-pressure", "grunt", spawn, false);
+    this.combatHud.showLootNotification("Return-route contact ping - keep extraction lane clear");
     console.info("[EncounterPacing] extraction pressure active=true spawn=return-route");
   }
 
@@ -2516,12 +2516,28 @@ export class App {
       const candidate = anchor.add(new Vector3(Math.sin(angle) * radius, 0, Math.cos(angle) * radius));
       const playerDistance = this.horizontalDistance(candidate, this.player.state.position);
 
-      if (playerDistance >= 28 && playerDistance <= 150) {
+      if (playerDistance >= 30 && playerDistance <= 150 && this.isPressureSpawnSafe(candidate)) {
         return candidate;
       }
     }
 
     return null;
+  }
+
+  private isPressureSpawnSafe(candidate: Vector3): boolean {
+    const protectedAnchors = [
+      mapLayoutConfig.playerSpawnPosition,
+      mapLayoutConfig.shipLandingSitePosition,
+      this.objectiveState.targetPosition,
+      this.heavyCargoState.position,
+      ...extractionZoneDefinitions.map((zone) => zone.center),
+    ];
+
+    if (Math.abs(candidate.x) > mapLayoutConfig.playableRadius || Math.abs(candidate.z) > mapLayoutConfig.playableRadius) {
+      return false;
+    }
+
+    return protectedAnchors.every((anchor) => this.horizontalDistance(candidate, anchor) >= 12);
   }
 
   private getTacticalNavTargetById(id: string, playerPosition: Vector3 = this.player.state.position): TacticalNavTarget | null {
@@ -3968,8 +3984,13 @@ export class App {
     this.noiseSystem.emit("loot", this.heavyCargoState.position, this.environmentState.gameplay, 1.6);
     if (!this.heavyCargoPressureSpawned && !this.multiplayerMode) {
       this.heavyCargoPressureSpawned = true;
-      this.enemyDirector.spawnEventEnemy("heavy-core-pressure-rusher", "grunt", this.heavyCargoState.position.add(new Vector3(14, 0, 8)), false);
-      this.enemyDirector.spawnEventEnemy("heavy-core-pressure-spitter", "spitter", this.heavyCargoState.position.add(new Vector3(-16, 0, 10)), false);
+      const rusherSpawn = this.findFairPressureSpawn(this.heavyCargoState.position, 30, 42) ??
+        this.heavyCargoState.position.add(new Vector3(30, 0, 18));
+      const spitterSpawn = this.findFairPressureSpawn(this.heavyCargoState.position, 36, 52) ??
+        this.heavyCargoState.position.add(new Vector3(-34, 0, 22));
+      this.enemyDirector.spawnEventEnemy("heavy-core-pressure-rusher", "grunt", rusherSpawn, false);
+      this.enemyDirector.spawnEventEnemy("heavy-core-pressure-spitter", "spitter", spitterSpawn, false);
+      this.combatHud.showLootNotification("Cargo signature contact lane active - keep moving");
     }
   }
 

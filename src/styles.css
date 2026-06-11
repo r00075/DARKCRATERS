@@ -672,10 +672,13 @@ body.input-mode-ui #app {
 
 .objective-panel .mission-contact-feed {
   margin-top: 4px;
+  display: block;
+  max-width: 100%;
   color: rgba(165, 243, 252, 0.8);
   font-size: 9px;
   font-weight: 900;
   letter-spacing: 0.04em;
+  line-height: 1.35;
   overflow-wrap: anywhere;
   text-transform: uppercase;
 }
@@ -7312,6 +7315,20 @@ body.input-mode-ui #app {
   bottom: 28px;
   font-size: 22px;
   font-weight: 700;
+}
+
+.ammo.low {
+  color: #fde68a;
+  text-shadow: 0 0 14px rgba(245, 158, 11, 0.46);
+}
+
+.ammo.empty {
+  color: #fecaca;
+  text-shadow: 0 0 16px rgba(239, 68, 68, 0.5);
+}
+
+.ammo.reload {
+  color: #bae6fd;
 }
 
 .weapon-status {

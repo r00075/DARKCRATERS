@@ -98,6 +98,7 @@ export class WeaponController {
   private readonly audio = new PlaceholderWeaponAudio();
   private readonly tracerMaterial: StandardMaterial;
   private readonly impactMaterial: StandardMaterial;
+  private readonly impactDustMaterial: StandardMaterial;
   private readonly weaponMaterial: StandardMaterial;
   private readonly transientEffects: TimedEffect[] = [];
   private readonly weaponDetailMeshes: AbstractMesh[] = [];
@@ -162,6 +163,12 @@ export class WeaponController {
     this.impactMaterial = new StandardMaterial("bullet-impact-material", scene);
     this.impactMaterial.diffuseColor = new Color3(1, 0.86, 0.48);
     this.impactMaterial.emissiveColor = new Color3(0.85, 0.42, 0.08);
+    this.impactMaterial.disableLighting = true;
+
+    this.impactDustMaterial = new StandardMaterial("bullet-impact-dust-material", scene);
+    this.impactDustMaterial.diffuseColor = new Color3(0.32, 0.28, 0.22);
+    this.impactDustMaterial.emissiveColor = new Color3(0.08, 0.055, 0.035);
+    this.impactDustMaterial.disableLighting = true;
 
     this.weaponMesh = MeshBuilder.CreateBox("placeholder-weapon", { size: 1 }, scene);
     this.weaponMesh.parent = owner.weaponSocket;
@@ -361,6 +368,7 @@ export class WeaponController {
 
     this.weaponMesh.dispose(false, true);
     this.muzzleLight.dispose();
+    this.impactDustMaterial.dispose();
   }
 
   private tryFire(adsHeld: boolean): void {
@@ -418,8 +426,8 @@ export class WeaponController {
       return;
     }
 
-    this.spawnImpact(hit.pickedPoint);
     const metadata = getDamageableMetadata(hit.pickedMesh);
+    this.spawnImpact(hit.pickedPoint, Boolean(metadata));
 
     if (!metadata) {
       return;
@@ -487,8 +495,8 @@ export class WeaponController {
       return;
     }
 
-    this.spawnImpact(hit.pickedPoint);
     const metadata = getDamageableMetadata(hit.pickedMesh);
+    this.spawnImpact(hit.pickedPoint, Boolean(metadata));
 
     if (!metadata) {
       return;
@@ -638,26 +646,27 @@ export class WeaponController {
     this.transientEffects.push({ mesh: tracer, ttl: 0.045 });
   }
 
-  private spawnImpact(position: Vector3): void {
+  private spawnImpact(position: Vector3, hostileHit = false): void {
     const impact = MeshBuilder.CreateSphere(
       "bullet-impact",
-      { diameter: 0.16, segments: 8 },
+      { diameter: hostileHit ? 0.18 : 0.12, segments: 8 },
       this.scene,
     );
     impact.position.copyFrom(position);
-    impact.material = this.impactMaterial;
-    this.transientEffects.push({ mesh: impact, ttl: 0.16 });
+    impact.material = hostileHit ? this.impactMaterial : this.impactDustMaterial;
+    this.transientEffects.push({ mesh: impact, ttl: hostileHit ? 0.18 : 0.14 });
 
-    for (let i = 0; i < 3; i += 1) {
+    const chipCount = hostileHit ? 3 : 2;
+    for (let i = 0; i < chipCount; i += 1) {
       const chip = MeshBuilder.CreateBox(
         "bullet-impact-chip",
-        { size: 0.055 + Math.random() * 0.045 },
+        { size: hostileHit ? 0.055 + Math.random() * 0.045 : 0.04 + Math.random() * 0.035 },
         this.scene,
       );
-      chip.position.copyFrom(position.add(new Vector3((Math.random() - 0.5) * 0.22, Math.random() * 0.18, (Math.random() - 0.5) * 0.22)));
+      chip.position.copyFrom(position.add(new Vector3((Math.random() - 0.5) * 0.24, Math.random() * 0.16, (Math.random() - 0.5) * 0.24)));
       chip.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
-      chip.material = this.impactMaterial;
-      this.transientEffects.push({ mesh: chip, ttl: 0.22 });
+      chip.material = hostileHit ? this.impactMaterial : this.impactDustMaterial;
+      this.transientEffects.push({ mesh: chip, ttl: hostileHit ? 0.22 : 0.18 });
     }
   }
 

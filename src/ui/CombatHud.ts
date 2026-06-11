@@ -407,6 +407,9 @@ export class CombatHud {
 
     this.ammo.textContent = `${weapon.ammoInMagazine} / ${weapon.reserveAmmo}`;
     this.ammo.classList.toggle("hidden", landingActive || !showRaidHud);
+    this.ammo.classList.toggle("low", weapon.ammoInMagazine > 0 && weapon.ammoInMagazine <= Math.max(3, Math.ceil((weapon.ammoInMagazine + weapon.reserveAmmo) * 0.06)));
+    this.ammo.classList.toggle("empty", weapon.ammoInMagazine === 0 && !weapon.reloading);
+    this.ammo.classList.toggle("reload", weapon.reloading);
     this.health.textContent = playerHealth.alive
       ? `Health ${Math.ceil(playerHealth.current)} / ${playerHealth.max}`
       : "Downed - regrouping";
@@ -1608,7 +1611,7 @@ export class CombatHud {
       <em>${mission.status.toUpperCase()} | ${routeLine}</em>
       <span class="mission-pressure ${pressure.phase}">
         ${pressure.pressureLabel} // Threat ${pressure.threatLevel}<br>
-        ${pressure.reason}<br>
+        ${this.formatCombatPressureLine(pressure)}<br>
         ${pressure.familyHint}
       </span>
       ${pressure.contactFeed.length > 0 ? `<span class="mission-contact-feed">${pressure.contactFeed.join(" // ")}</span>` : ""}
@@ -1647,6 +1650,30 @@ export class CombatHud {
     }
 
     return `<span class="heavy-cargo-hud">LOCATE MINING RIG<br>E: RELEASE HELIUM-3 DRILL CORE<br>EXTRACTION LOCKED UNTIL SECURED</span>`;
+  }
+
+  private formatCombatPressureLine(pressure: RaidPressureState): string {
+    if (pressure.reasonCategory === "heavy-cargo-exposed") {
+      return "Cargo signature exposed - patrol response from contact lanes.";
+    }
+
+    if (pressure.reasonCategory === "extraction-route-active") {
+      return "Return-route contact - keep the extraction lane clear.";
+    }
+
+    if (pressure.reasonCategory === "objective-contested") {
+      return "Objective guards active on the POI perimeter.";
+    }
+
+    if (pressure.reasonCategory === "objective-approach") {
+      return "Objective perimeter drawing patrol attention.";
+    }
+
+    if (pressure.reasonCategory === "reveal-contact") {
+      return "Revealed signatures near the active route.";
+    }
+
+    return pressure.reason;
   }
 
   private formatPoiObjectives(state: POIObjectiveState): string {
@@ -1998,11 +2025,19 @@ export class CombatHud {
     }
 
     if (weapon.reloading) {
-      return "Reloading";
+      return "Reloading - keep cover";
     }
 
     if (weapon.dryFireFeedback) {
-      return "Empty";
+      return "Empty - reload or swap";
+    }
+
+    if (weapon.ammoInMagazine === 0) {
+      return "Empty magazine";
+    }
+
+    if (weapon.ammoInMagazine <= Math.max(3, Math.ceil((weapon.ammoInMagazine + weapon.reserveAmmo) * 0.06))) {
+      return `${weapon.equippedName} - low ammo`;
     }
 
     return weapon.ready ? weapon.equippedName : "";

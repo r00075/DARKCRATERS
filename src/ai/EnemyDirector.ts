@@ -1,4 +1,4 @@
-import { AbstractMesh, Scene, Vector3 } from "@babylonjs/core";
+import { AbstractMesh, Color3, MeshBuilder, Scene, StandardMaterial, Vector3 } from "@babylonjs/core";
 import type { PlayerHealth } from "../combat/PlayerHealth";
 import type { EnvironmentGameplayModifiers } from "../environment/EnvironmentManager";
 import type { InputSnapshot } from "../input/InputController";
@@ -22,9 +22,11 @@ export type EnemyDirectorOptions = Readonly<{
 export class EnemyDirector {
   private readonly enemies: EnemyAgent[];
   private readonly encounterDirector = new EncounterDirector();
+  private readonly contactPingMaterial: StandardMaterial;
   private readonly difficultyLevel: number;
   private readonly healthMultiplier: number;
   private readonly pendingEncounterMessages: string[] = [];
+  private readonly transientEffects: Array<{ mesh: AbstractMesh; ttl: number }> = [];
   private hitboxDebugVisible = false;
   private losDebugVisible = false;
 
@@ -34,6 +36,11 @@ export class EnemyDirector {
     private readonly playerHealth: PlayerHealth,
     private readonly options: EnemyDirectorOptions,
   ) {
+    this.contactPingMaterial = new StandardMaterial("encounter-contact-ping-material", scene);
+    this.contactPingMaterial.diffuseColor = new Color3(0.08, 0.16, 0.18);
+    this.contactPingMaterial.emissiveColor = new Color3(0.18, 0.62, 0.74);
+    this.contactPingMaterial.specularColor = Color3.Black();
+    this.contactPingMaterial.disableLighting = true;
     this.difficultyLevel = Math.max(1, options.difficultyLevel);
     this.healthMultiplier = 1 + Math.min(0.45, (this.difficultyLevel - 1) * 0.055);
     this.enemies = options.disabled
@@ -87,6 +94,8 @@ export class EnemyDirector {
       return;
     }
 
+    this.updateTransientEffects(dt);
+
     this.applyNoiseEvents(noiseEvents);
     const reinforcementSpawns = this.encounterDirector.update(
       dt,
@@ -101,7 +110,8 @@ export class EnemyDirector {
       enemy.setHitboxDebugVisible(this.hitboxDebugVisible);
       enemy.setLosDebugVisible(this.losDebugVisible);
       this.enemies.push(enemy);
-      this.pendingEncounterMessages.push("Enemy reinforcements incoming");
+      this.createContactPing(spawn.spawn, spawn.encounterType === "reinforcement-wave" ? 7.5 : 9);
+      this.pendingEncounterMessages.push(this.formatEncounterMessage(spawn));
     }
 
     for (const enemy of this.enemies) {
@@ -123,6 +133,10 @@ export class EnemyDirector {
     for (const enemy of this.enemies) {
       enemy.dispose();
     }
+    for (const effect of this.transientEffects) {
+      effect.mesh.dispose();
+    }
+    this.contactPingMaterial.dispose();
   }
 
   public spawnEventEnemy(
@@ -141,11 +155,8 @@ export class EnemyDirector {
       return;
     }
 
-    const patrolPoints = [
-      spawn.clone(),
-      spawn.add(new Vector3(6, 0, 4)),
-      spawn.add(new Vector3(-5, 0, -5)),
-    ];
+    const safeSpawn = this.resolveEventSpawnPosition(spawn);
+    const patrolPoints = this.createEventPatrolPoints(safeSpawn);
 
     const enemy = this.createEnemy({
       id,
@@ -153,7 +164,7 @@ export class EnemyDirector {
       encounterType: type === "elite" ? "elite-guard" : "reinforcement-wave",
       type,
       role: type === "charger" || type === "grunt" ? "rusher" : type === "guard" || type === "spitter" ? "support" : type === "elite" ? "flanker" : "rifleman",
-      spawn,
+      spawn: safeSpawn,
       patrolPoints,
       minDifficultyLevel: 1,
       highValueLoot,
@@ -161,7 +172,8 @@ export class EnemyDirector {
     enemy.setHitboxDebugVisible(this.hitboxDebugVisible);
     enemy.setLosDebugVisible(this.losDebugVisible);
     this.enemies.push(enemy);
-    this.pendingEncounterMessages.push(type === "elite" ? "Elite guard deployed" : "Enemy patrol reinforced");
+    this.createContactPing(safeSpawn, type === "elite" ? 10 : 7);
+    this.pendingEncounterMessages.push(type === "elite" ? "Elite guard deployed at contact lane" : "Enemy patrol reinforced from contact lane");
   }
 
   public consumeEncounterMessages(): string[] {
@@ -200,6 +212,79 @@ export class EnemyDirector {
         this.rollLoot(definition.type, definition.highValueLoot ?? false, this.options.onLootDropped);
       },
     }, this.playerBody, this.playerHealth);
+  }
+
+  private resolveEventSpawnPosition(spawn: Vector3): Vector3 {
+    const playerPosition = this.playerBody.position;
+    const away = spawn.subtract(playerPosition);
+    away.y = 0;
+    const distance = away.length();
+
+    if (distance >= 30) {
+      return spawn.clone();
+    }
+
+    const direction = distance > 0.01 ? away.normalize() : new Vector3(1, 0, 0);
+    return playerPosition.add(direction.scale(32));
+  }
+
+  private createEventPatrolPoints(spawn: Vector3): Vector3[] {
+    const toPlayer = this.playerBody.position.subtract(spawn);
+    toPlayer.y = 0;
+    const direction = toPlayer.lengthSquared() > 0.01 ? toPlayer.normalize() : new Vector3(1, 0, 0);
+    const side = new Vector3(direction.z, 0, -direction.x);
+
+    return [
+      spawn.clone(),
+      spawn.add(direction.scale(7)).addInPlace(side.scale(5)),
+      spawn.add(direction.scale(12)).addInPlace(side.scale(-5)),
+    ];
+  }
+
+  private formatEncounterMessage(spawn: EnemySpawnDefinition): string {
+    if (spawn.encounterType === "objective-defense" || spawn.encounterType === "loot-guard") {
+      return "Objective guard contact on POI perimeter";
+    }
+
+    if (spawn.encounterType === "elite-guard") {
+      return "Elite contact moving through perimeter";
+    }
+
+    if (spawn.encounterType === "reinforcement-wave") {
+      return "Return-route contact lane active";
+    }
+
+    return "Local patrol contact lane active";
+  }
+
+  private createContactPing(position: Vector3, diameter: number): void {
+    const ring = MeshBuilder.CreateTorus(
+      "encounter-contact-ping",
+      { diameter, thickness: 0.06, tessellation: 36 },
+      this.scene,
+    );
+    ring.position.copyFrom(position.add(new Vector3(0, 0.08, 0)));
+    ring.rotation.x = Math.PI / 2;
+    ring.material = this.contactPingMaterial;
+    ring.checkCollisions = false;
+    ring.isPickable = false;
+    ring.metadata = { gameplayTag: "encounter-contact-ping", phase: "13.2" };
+    this.transientEffects.push({ mesh: ring, ttl: 2.2 });
+  }
+
+  private updateTransientEffects(dt: number): void {
+    for (let index = this.transientEffects.length - 1; index >= 0; index -= 1) {
+      const effect = this.transientEffects[index];
+      const ttl = effect.ttl - dt;
+
+      if (ttl > 0) {
+        this.transientEffects[index] = { ...effect, ttl };
+        continue;
+      }
+
+      effect.mesh.dispose();
+      this.transientEffects.splice(index, 1);
+    }
   }
 
   private rollLoot(

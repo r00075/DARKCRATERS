@@ -97,6 +97,8 @@ export class EnemyAgent implements Damageable {
   private readonly torsoHitbox: AbstractMesh;
   private readonly legsHitbox: AbstractMesh;
   private readonly weapon: AbstractMesh;
+  private readonly threatMarker: AbstractMesh;
+  private readonly roleMarker: AbstractMesh;
   private readonly muzzleFlash: AbstractMesh;
   private readonly healthBarRoot: AbstractMesh;
   private readonly healthBarFill: AbstractMesh;
@@ -173,7 +175,7 @@ export class EnemyAgent implements Damageable {
     this.shotsUntilReload = roleDefinition.reloadAfterShots;
     this.liveMaterial = new StandardMaterial(`${config.id}-material`, scene);
     this.liveMaterial.diffuseColor = config.materialColor ?? typeDefinition.materialColor;
-    this.liveMaterial.emissiveColor = this.liveMaterial.diffuseColor.scale(this.enemyType === "elite" ? 0.28 : 0.13);
+    this.liveMaterial.emissiveColor = this.liveMaterial.diffuseColor.scale(this.enemyType === "elite" ? 0.42 : 0.22);
     this.liveMaterial.specularColor = new Color3(0.22, 0.18, 0.24);
 
     this.hitMaterial = new StandardMaterial(`${config.id}-hit-material`, scene);
@@ -181,7 +183,8 @@ export class EnemyAgent implements Damageable {
     this.hitMaterial.emissiveColor = new Color3(0.48, 0.18, 0.035);
 
     this.deadMaterial = new StandardMaterial(`${config.id}-dead-material`, scene);
-    this.deadMaterial.diffuseColor = new Color3(0.18, 0.18, 0.18);
+    this.deadMaterial.diffuseColor = new Color3(0.105, 0.11, 0.12);
+    this.deadMaterial.emissiveColor = new Color3(0.012, 0.014, 0.016);
 
     this.hitboxMaterial = new StandardMaterial(`${config.id}-hitbox-material`, scene);
     this.hitboxMaterial.diffuseColor = new Color3(0.15, 0.95, 1);
@@ -190,6 +193,12 @@ export class EnemyAgent implements Damageable {
 
     const weaponMaterial = new StandardMaterial(`${config.id}-weapon-material`, scene);
     weaponMaterial.diffuseColor = new Color3(0.08, 0.08, 0.09);
+
+    const markerMaterial = new StandardMaterial(`${config.id}-threat-marker-material`, scene);
+    markerMaterial.diffuseColor = this.readabilityColorForType(this.enemyType).scale(0.34);
+    markerMaterial.emissiveColor = this.readabilityColorForType(this.enemyType).scale(this.enemyType === "elite" ? 0.62 : 0.42);
+    markerMaterial.specularColor = Color3.Black();
+    markerMaterial.disableLighting = true;
 
     const flashMaterial = new StandardMaterial(`${config.id}-muzzle-flash-material`, scene);
     flashMaterial.diffuseColor = new Color3(1, 0.65, 0.18);
@@ -280,6 +289,29 @@ export class EnemyAgent implements Damageable {
     this.weapon.position.set(0.36, 0.56, 0.42);
     this.weapon.material = weaponMaterial;
     this.weapon.isPickable = false;
+
+    this.threatMarker = MeshBuilder.CreateTorus(
+      `${config.id}-threat-marker`,
+      { diameter: 0.92, thickness: 0.035, tessellation: 20 },
+      scene,
+    );
+    this.threatMarker.parent = this.body;
+    this.threatMarker.position.y = 1.32 * typeDefinition.visualScale.y;
+    this.threatMarker.rotation.x = Math.PI / 2;
+    this.threatMarker.material = markerMaterial;
+    this.threatMarker.isPickable = false;
+    this.threatMarker.metadata = { gameplayTag: "enemy-readability-marker", phase: "13.2" };
+
+    this.roleMarker = MeshBuilder.CreateBox(
+      `${config.id}-role-marker`,
+      { width: this.enemyRole === "support" ? 0.5 : 0.34, height: 0.08, depth: 0.08 },
+      scene,
+    );
+    this.roleMarker.parent = this.body;
+    this.roleMarker.position.set(0, 0.78 * typeDefinition.visualScale.y, 0.47 * typeDefinition.visualScale.z);
+    this.roleMarker.material = markerMaterial;
+    this.roleMarker.isPickable = false;
+    this.roleMarker.metadata = { gameplayTag: "enemy-readability-marker", phase: "13.2", role: this.enemyRole };
 
     this.muzzleFlash = MeshBuilder.CreateSphere(
       `${config.id}-muzzle-flash`,
@@ -475,11 +507,11 @@ export class EnemyAgent implements Damageable {
     this.healthBarTimer = 2.6;
     this.lastKnownPlayerPosition = event.point.clone();
     this.updateHealthBar();
+    this.spawnHitBurst(event.point, event.hitZone === "head");
 
     if (appliedDamage >= 38 || event.hitZone === "head") {
       this.staggerTimer = 0.22;
       this.velocity.scaleInPlace(0.35);
-      this.spawnHitBurst(event.point, event.hitZone === "head");
     }
 
     const killed = this.health === 0;
@@ -975,6 +1007,9 @@ export class EnemyAgent implements Damageable {
     const material = this.hitFlashTimer > 0 ? this.hitMaterial : this.liveMaterial;
     this.body.material = material;
     this.head.material = material;
+    const markerPulse = this.state === "attack" || this.state === "chase" || this.hitFlashTimer > 0;
+    this.threatMarker.scaling.setAll(markerPulse ? 1.1 : 1);
+    this.roleMarker.scaling.x = markerPulse ? 1.25 : 1;
   }
 
   private die(): void {
@@ -984,6 +1019,8 @@ export class EnemyAgent implements Damageable {
     this.headHitbox.setEnabled(false);
     this.torsoHitbox.setEnabled(false);
     this.legsHitbox.setEnabled(false);
+    this.threatMarker.setEnabled(false);
+    this.roleMarker.setEnabled(false);
     this.body.material = this.deadMaterial;
     this.head.material = this.deadMaterial;
     this.body.rotation.z = Math.PI / 2;
@@ -1047,8 +1084,17 @@ export class EnemyAgent implements Damageable {
     const material = new StandardMaterial(`${this.config.id}-hit-burst-material`, this.scene);
     material.diffuseColor = headshot ? new Color3(1, 0.82, 0.16) : new Color3(1, 0.45, 0.18);
     material.emissiveColor = material.diffuseColor.scale(0.55);
+    material.disableLighting = true;
     burst.material = material;
     this.transientEffects.push({ mesh: burst, ttl: 0.16 });
+  }
+
+  private readabilityColorForType(type: EnemyType): Color3 {
+    if (type === "spitter") return new Color3(0.34, 0.96, 0.58);
+    if (type === "guard") return new Color3(0.48, 0.82, 1);
+    if (type === "elite") return new Color3(0.74, 0.42, 1);
+    if (type === "charger") return new Color3(1, 0.48, 0.2);
+    return new Color3(0.42, 0.88, 0.72);
   }
 
   private spawnDeathEffect(): void {

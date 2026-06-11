@@ -1,6 +1,6 @@
 import { Vector3 } from "@babylonjs/core";
 import type { NoiseEvent } from "../stealth/NoiseSystem";
-import { poiDefinitions } from "../world/MapLayout";
+import { extractionZoneDefinitions, mapLayoutConfig, poiDefinitions } from "../world/MapLayout";
 import type { MotorState } from "../world/PlayerMotor";
 import { yawToBasis } from "../math/angles";
 import type { EnemyRole, EnemyType } from "./EnemyTypes";
@@ -44,6 +44,7 @@ const encounterConfig = {
   minSpawnDistanceFromPlayer: 28,
   forwardViewSafetyDistance: 42,
   forwardViewMinDot: 0.32,
+  protectedAnchorRadius: 12,
 } as const;
 
 const poiThreats: Record<string, { rating: number; label: string }> = {
@@ -61,8 +62,8 @@ const spawnDefinitions: EnemySpawnDefinition[] = [
     encounterType: "light-patrol",
     type: "grunt",
     role: "rifleman",
-    spawn: new Vector3(88, 0, 42),
-    patrolPoints: [new Vector3(88, 0, 42), new Vector3(102, 0, 28), new Vector3(78, 0, 26)],
+    spawn: new Vector3(76, 0, 54),
+    patrolPoints: [new Vector3(76, 0, 54), new Vector3(98, 0, 48), new Vector3(84, 0, 20)],
     minDifficultyLevel: 1,
   },
   {
@@ -71,8 +72,8 @@ const spawnDefinitions: EnemySpawnDefinition[] = [
     encounterType: "light-patrol",
     type: "grunt",
     role: "flanker",
-    spawn: new Vector3(58, 0, -92),
-    patrolPoints: [new Vector3(58, 0, -92), new Vector3(76, 0, -100), new Vector3(48, 0, -82)],
+    spawn: new Vector3(44, 0, -84),
+    patrolPoints: [new Vector3(44, 0, -84), new Vector3(70, 0, -114), new Vector3(82, 0, -92)],
     minDifficultyLevel: 1,
   },
   {
@@ -81,8 +82,8 @@ const spawnDefinitions: EnemySpawnDefinition[] = [
     encounterType: "loot-guard",
     type: "grunt",
     role: "rifleman",
-    spawn: new Vector3(-76, 0, 86),
-    patrolPoints: [new Vector3(-76, 0, 86), new Vector3(-62, 0, 78), new Vector3(-88, 0, 72)],
+    spawn: new Vector3(-102, 0, 86),
+    patrolPoints: [new Vector3(-102, 0, 86), new Vector3(-80, 0, 106), new Vector3(-58, 0, 74)],
     minDifficultyLevel: 1,
     highValueLoot: true,
   },
@@ -92,8 +93,8 @@ const spawnDefinitions: EnemySpawnDefinition[] = [
     encounterType: "ambush",
     type: "charger",
     role: "rusher",
-    spawn: new Vector3(76, 0, -88),
-    patrolPoints: [new Vector3(76, 0, -88), new Vector3(64, 0, -110), new Vector3(48, 0, -96)],
+    spawn: new Vector3(88, 0, -78),
+    patrolPoints: [new Vector3(88, 0, -78), new Vector3(70, 0, -114), new Vector3(42, 0, -88)],
     minDifficultyLevel: 2,
     optional: true,
   },
@@ -103,8 +104,8 @@ const spawnDefinitions: EnemySpawnDefinition[] = [
     encounterType: "ambush",
     type: "charger",
     role: "rusher",
-    spawn: new Vector3(-64, 0, 72),
-    patrolPoints: [new Vector3(-64, 0, 72), new Vector3(-86, 0, 74), new Vector3(-74, 0, 94)],
+    spawn: new Vector3(-54, 0, 98),
+    patrolPoints: [new Vector3(-54, 0, 98), new Vector3(-86, 0, 104), new Vector3(-104, 0, 76)],
     minDifficultyLevel: 3,
     optional: true,
   },
@@ -114,8 +115,8 @@ const spawnDefinitions: EnemySpawnDefinition[] = [
     encounterType: "loot-guard",
     type: "guard",
     role: "support",
-    spawn: new Vector3(-86, 0, -26),
-    patrolPoints: [new Vector3(-86, 0, -26), new Vector3(-100, 0, -30), new Vector3(-78, 0, -12)],
+    spawn: new Vector3(-112, 0, -34),
+    patrolPoints: [new Vector3(-112, 0, -34), new Vector3(-86, 0, -42), new Vector3(-68, 0, -10)],
     minDifficultyLevel: 1,
     highValueLoot: true,
   },
@@ -125,8 +126,8 @@ const spawnDefinitions: EnemySpawnDefinition[] = [
     encounterType: "objective-defense",
     type: "guard",
     role: "rifleman",
-    spawn: new Vector3(-78, 0, -12),
-    patrolPoints: [new Vector3(-78, 0, -12), new Vector3(-92, 0, -8), new Vector3(-84, 0, -36)],
+    spawn: new Vector3(-70, 0, -44),
+    patrolPoints: [new Vector3(-70, 0, -44), new Vector3(-110, 0, -28), new Vector3(-74, 0, 8)],
     minDifficultyLevel: 4,
     optional: true,
     highValueLoot: true,
@@ -137,8 +138,8 @@ const spawnDefinitions: EnemySpawnDefinition[] = [
     encounterType: "objective-defense",
     type: "guard",
     role: "support",
-    spawn: new Vector3(14, 0, 12),
-    patrolPoints: [new Vector3(14, 0, 12), new Vector3(-10, 0, 12), new Vector3(4, 0, -12)],
+    spawn: new Vector3(24, 0, -24),
+    patrolPoints: [new Vector3(24, 0, -24), new Vector3(-20, 0, -18), new Vector3(30, 0, 16)],
     minDifficultyLevel: 2,
     highValueLoot: true,
   },
@@ -148,8 +149,8 @@ const spawnDefinitions: EnemySpawnDefinition[] = [
     encounterType: "elite-guard",
     type: "elite",
     role: "flanker",
-    spawn: new Vector3(-8, 0, -8),
-    patrolPoints: [new Vector3(-8, 0, -8), new Vector3(12, 0, -10), new Vector3(2, 0, 14)],
+    spawn: new Vector3(-24, 0, 20),
+    patrolPoints: [new Vector3(-24, 0, 20), new Vector3(28, 0, 18), new Vector3(18, 0, -28)],
     minDifficultyLevel: 5,
     optional: true,
     highValueLoot: true,
@@ -160,8 +161,8 @@ const spawnDefinitions: EnemySpawnDefinition[] = [
     encounterType: "elite-guard",
     type: "elite",
     role: "flanker",
-    spawn: new Vector3(-94, 0, -18),
-    patrolPoints: [new Vector3(-94, 0, -18), new Vector3(-108, 0, -32), new Vector3(-76, 0, -30)],
+    spawn: new Vector3(-118, 0, -10),
+    patrolPoints: [new Vector3(-118, 0, -10), new Vector3(-94, 0, -46), new Vector3(-64, 0, -4)],
     minDifficultyLevel: 6,
     optional: true,
     highValueLoot: true,
@@ -340,11 +341,7 @@ export class EncounterDirector {
       type,
       role,
       spawn,
-      patrolPoints: [
-        spawn.clone(),
-        poi.center.add(new Vector3(5, 0, 4)),
-        poi.center.add(new Vector3(-5, 0, -4)),
-      ],
+      patrolPoints: this.createPerimeterPatrolPoints(spawn, poi.center),
       minDifficultyLevel: 1,
       highValueLoot: threat >= 4,
     };
@@ -353,7 +350,7 @@ export class EncounterDirector {
   private findSafeSpawnNearPoi(center: Vector3, playerState: MotorState): Vector3 | null {
     for (let attempt = 0; attempt < 8; attempt += 1) {
       const angle = Math.random() * Math.PI * 2;
-      const radius = 10 + Math.random() * 11;
+      const radius = 22 + Math.random() * 18;
       const candidate = center.add(new Vector3(Math.sin(angle) * radius, 0, Math.cos(angle) * radius));
 
       if (this.isSpawnFair(candidate, playerState)) {
@@ -373,6 +370,14 @@ export class EncounterDirector {
       return false;
     }
 
+    if (this.isNearProtectedAnchor(candidate)) {
+      return false;
+    }
+
+    if (Math.abs(candidate.x) > mapLayoutConfig.playableRadius || Math.abs(candidate.z) > mapLayoutConfig.playableRadius) {
+      return false;
+    }
+
     if (distance > encounterConfig.forwardViewSafetyDistance) {
       return true;
     }
@@ -387,6 +392,28 @@ export class EncounterDirector {
       const poiDistance = Vector3.DistanceSquared(poi.center, position);
       return poiDistance < bestDistance ? poi : best;
     }, poiDefinitions[0]);
+  }
+
+  private createPerimeterPatrolPoints(spawn: Vector3, center: Vector3): Vector3[] {
+    const away = spawn.subtract(center);
+    away.y = 0;
+    const direction = away.lengthSquared() > 0.01 ? away.normalize() : new Vector3(1, 0, 0);
+    const side = new Vector3(direction.z, 0, -direction.x);
+    return [
+      spawn.clone(),
+      center.add(direction.scale(18)).addInPlace(side.scale(8)),
+      center.add(direction.scale(16)).addInPlace(side.scale(-8)),
+    ];
+  }
+
+  private isNearProtectedAnchor(candidate: Vector3): boolean {
+    const anchors = [
+      mapLayoutConfig.playerSpawnPosition,
+      mapLayoutConfig.shipLandingSitePosition,
+      ...extractionZoneDefinitions.map((zone) => zone.center),
+    ];
+
+    return anchors.some((anchor) => Vector3.Distance(candidate, anchor) <= encounterConfig.protectedAnchorRadius);
   }
 
   private spawnScore(spawn: EnemySpawnDefinition, difficultyLevel: number): number {
