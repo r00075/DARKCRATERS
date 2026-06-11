@@ -343,6 +343,10 @@ export class App {
   private lastHeavyCargoRouteActionLogAt = 0;
   private lastHeavyCargoUiCompleteLogKey = "";
   private lastHeavyCargoUiCompleteLogAt = 0;
+  private lastHeavyCargoInventorySuppressionLogKey = "";
+  private lastHeavyCargoInventorySuppressionLogAt = 0;
+  private lastHeavyCargoInputGuardKey = "";
+  private lastHeavyCargoInputGuardAt = 0;
   private pendingHeavyCargoRequest: "none" | "release" | "pickup" | "drop" | "secure" = "none";
   private activeHeavyCoreNavMarkerCount = 0;
   private lastHeavyCargoRoomId: string | null = null;
@@ -1061,7 +1065,7 @@ export class App {
     const pendingHeavyCargoAction = this.getPendingHeavyCargoInputAction();
     if (pendingHeavyCargoAction) {
       this.suppressInventoryOverlayForHeavyCargo(pendingHeavyCargoAction);
-      console.info(`[Interaction] inventory panel suppressed reason=heavy-cargo action=${pendingHeavyCargoAction}`);
+      this.logHeavyCargoInventorySuppressed(pendingHeavyCargoAction, "inventory-navigation");
       return;
     }
 
@@ -1611,13 +1615,25 @@ export class App {
     this.inventoryManager.clearWarning();
     this.raidBagOpen = false;
     const now = performance.now();
-    const key = `${action}:${this.heavyCargoState.status}:${this.pendingHeavyCargoRequest}`;
+    const key = `${action}:${this.heavyCargoState.status}:${this.heavyCargoState.carriedByLocalPlayer}:${this.heavyCargoState.shipSecured}`;
     if (this.lastHeavyCargoRouteActionLogKey !== key || now - this.lastHeavyCargoRouteActionLogAt > 650) {
       this.lastHeavyCargoRouteActionLogKey = key;
       this.lastHeavyCargoRouteActionLogAt = now;
       console.info(`[Interaction] heavy cargo route action=${action} target=${heliumDrillCoreHeavyCargoId} blockedInventoryPanel=true`);
       console.info(`[EvaPack] forced closed reason=heavy-cargo action=${action}`);
     }
+  }
+
+  private logHeavyCargoInventorySuppressed(action: "release" | "pickup" | "drop" | "secure", source: string): void {
+    const now = performance.now();
+    const key = `${source}:${action}:${this.heavyCargoState.status}:${this.heavyCargoState.carriedByLocalPlayer}:${this.heavyCargoState.shipSecured}`;
+    if (this.lastHeavyCargoInventorySuppressionLogKey === key && now - this.lastHeavyCargoInventorySuppressionLogAt < 1200) {
+      return;
+    }
+
+    this.lastHeavyCargoInventorySuppressionLogKey = key;
+    this.lastHeavyCargoInventorySuppressionLogAt = now;
+    console.info(`[Interaction] inventory panel suppressed reason=heavy-cargo action=${action} source=${source}`);
   }
 
   private isInventorySuppressedForHeavyCargo(source: string): boolean {
@@ -1657,12 +1673,32 @@ export class App {
     console.info(`[EncounterPacing] heavy-cargo pressure action=${action}`);
   }
 
+  private shouldHandleHeavyCargoActionInput(action: "release" | "pickup" | "drop" | "secure"): boolean {
+    if (this.pendingHeavyCargoRequest !== "none") {
+      return false;
+    }
+
+    const now = performance.now();
+    const key = `${action}:${this.heavyCargoState.status}:${this.heavyCargoState.carriedByLocalPlayer}:${this.heavyCargoState.shipSecured}`;
+    if (this.lastHeavyCargoInputGuardKey === key && now - this.lastHeavyCargoInputGuardAt < 300) {
+      return false;
+    }
+
+    this.lastHeavyCargoInputGuardKey = key;
+    this.lastHeavyCargoInputGuardAt = now;
+    return true;
+  }
+
   private resetHeavyCargoLogState(): void {
     this.lastHeavyCargoSuppressionLogAt = 0;
     this.lastHeavyCargoRouteActionLogKey = "";
     this.lastHeavyCargoRouteActionLogAt = 0;
     this.lastHeavyCargoUiCompleteLogKey = "";
     this.lastHeavyCargoUiCompleteLogAt = 0;
+    this.lastHeavyCargoInventorySuppressionLogKey = "";
+    this.lastHeavyCargoInventorySuppressionLogAt = 0;
+    this.lastHeavyCargoInputGuardKey = "";
+    this.lastHeavyCargoInputGuardAt = 0;
     this.lastHeavyCargoPressureEventKey = "";
     this.lastHeavyCargoPressureEventAt = 0;
   }
@@ -3983,6 +4019,9 @@ export class App {
 
   private handleHeavyCargoInteractions(): boolean {
     if (this.heavyCargoState.carriedByLocalPlayer && this.gameplayInput.uiDropPressed) {
+      if (!this.shouldHandleHeavyCargoActionInput("drop")) {
+        return true;
+      }
       this.suppressInventoryOverlayForHeavyCargo("drop");
       const dropPosition = this.getHeavyCargoDropPosition();
       if (this.multiplayerMode) {
@@ -4012,6 +4051,9 @@ export class App {
     }
 
     if (this.heavyCargoState.carriedByLocalPlayer && this.heavyCargoState.distanceToShipCargo <= 4) {
+      if (!this.shouldHandleHeavyCargoActionInput("secure")) {
+        return true;
+      }
       this.suppressInventoryOverlayForHeavyCargo("secure");
       if (this.multiplayerMode) {
         if (!this.canSendHeavyCargoAction()) {
@@ -4032,6 +4074,9 @@ export class App {
       (this.heavyCargoState.status === "available" || this.heavyCargoState.status === "dropped") &&
       this.heavyCargoManager.canPickup(this.player.state.position)
     ) {
+      if (!this.shouldHandleHeavyCargoActionInput("pickup")) {
+        return true;
+      }
       this.suppressInventoryOverlayForHeavyCargo("pickup");
       if (this.multiplayerMode) {
         if (!this.canSendHeavyCargoAction()) {
@@ -4049,6 +4094,9 @@ export class App {
     }
 
     if (this.heavyCargoState.status === "locked" && this.heavyCargoManager.canRelease(this.player.state.position)) {
+      if (!this.shouldHandleHeavyCargoActionInput("release")) {
+        return true;
+      }
       this.suppressInventoryOverlayForHeavyCargo("release");
       if (this.multiplayerMode) {
         if (!this.canSendHeavyCargoAction()) {
