@@ -216,7 +216,7 @@ export class CampaignProgress {
     const evidenceDefinitions = evidenceDiscoveries.map((discovery) => campaignEvidenceById[discovery.id]);
     const lumenEvidence = evidenceDiscoveries.filter((discovery) => {
       const type = campaignEvidenceById[discovery.id].type;
-      return type === "lumen-residue" || type === "mineral-anomaly" || type === "field-memory";
+      return type === "lumen-residue" || type === "mineral-anomaly" || type === "field-memory" || type === "memory-matter" || type === "resonance";
     }).length;
 
     const reasons: string[] = [];
@@ -471,7 +471,7 @@ export function buildCampaignPresentation(state: CampaignProgressState, lastDelt
     operations,
     meters,
     evidence,
-    meterLines: meters.map((meter) => `${meter.label}: ${meter.value} - ${meter.band}${meter.lastDelta > 0 ? ` (+${meter.lastDelta})` : ""}`),
+    meterLines: meters.map((meter) => `${meter.label}: ${meter.value} - ${meter.band}${meter.lastDelta > 0 ? ` (+${meter.lastDelta})` : ""} | ${meterMeaning(meter.id)}`),
     recentRaidLine: safeState.lastRaidResultSummary ?? "No campaign raid logged yet.",
     commandFeedLines: [
       `ACT I // ${act.title.toUpperCase()}`,
@@ -494,6 +494,7 @@ export function buildCampaignPresentation(state: CampaignProgressState, lastDelt
     resultLines: [
       `Act I - ${act.title}`,
       ...(lastDelta?.lines ?? [`Operation: ${activeOperation.title}`]),
+      ...buildEvidenceChainResultLines(evidence.newlyDiscovered),
       evidence.newlyDiscovered.length > 0 ? `Codex Updated: ${evidence.newlyDiscovered.map((item) => item.title).join(", ")}` : "No new evidence logged.",
       `Evidence Archive: ${evidence.discoveredCount}/${evidence.totalCount} records`,
       "Review in Contracts: Evidence Codex",
@@ -576,6 +577,7 @@ function buildEvidenceView(state: CampaignProgressState): CampaignEvidenceView {
     `Discovered: ${visibleEvidence.length} / ${campaignEvidenceDefinitions.length}`,
     latest ? `Latest: ${latest.title}` : "Latest: none logged",
     latest ? `Official Classification: ${latest.officialClassification}` : "Official Classification: no anomaly filed",
+    latest ? `Field Conflict: ${latest.hiddenImplication}` : "Field Conflict: none logged",
     latest && hiddenImplicationUnlocked ? `Unresolved Note: ${latest.hiddenImplication}` : "Unresolved Note: restricted pending Lumen review",
   ];
 
@@ -635,8 +637,18 @@ function buildCodexEntries(state: CampaignProgressState): CampaignEvidenceCodexE
 }
 
 function buildNextActionLines(state: CampaignProgressState, activeOperation: CampaignOperationView, recommendedOperation: CampaignOperationView): string[] {
+  const discovered = new Set(state.discoveredEvidenceIds);
   const lines = [`Next: ${recommendedOperation.title} - ${recommendedOperation.corporateObjective}`];
   lines.push(`Recommended family: ${activeOperation.families}`);
+  if (discovered.has("memory-matter-trace") || discovered.has("structured-residue-pattern")) {
+    lines.push("Codex: review Memory Matter trace before clearing more structures.");
+  } else if (discovered.has("resonance-pattern-fragment") || discovered.has("impact-fracture-signal")) {
+    lines.push("Investigation: compare resonance fragment with relay data.");
+  } else if (discovered.has("apollo-residue-anomaly") || discovered.has("historical-signal-match")) {
+    lines.push("Archive: search data-shack records for pre-mining signal matches.");
+  } else if (discovered.has("lcross-targeting-discrepancy") || discovered.has("blc1-warning-fragment")) {
+    lines.push("Restricted: recover sealed impact and warning correlations.");
+  }
   if (activeOperation.id === "regolith-trace" || recommendedOperation.id === "regolith-trace") {
     lines.push("Prepare: fabricate Essence Flare before Regolith Trace.");
   }
@@ -650,6 +662,29 @@ function buildNextActionLines(state: CampaignProgressState, activeOperation: Cam
     lines.push("Compliance: keep optional recoveries clean; review pending.");
   }
   return lines.slice(0, 4);
+}
+
+function buildEvidenceChainResultLines(newlyDiscovered: CampaignEvidenceDefinition[]): string[] {
+  const lines: string[] = [];
+  if (newlyDiscovered.some((evidence) => evidence.type === "memory-matter")) {
+    lines.push("Evidence Chain: structured residue added to Memory Matter review.");
+  }
+  if (newlyDiscovered.some((evidence) => evidence.type === "resonance")) {
+    lines.push("Evidence Chain: resonance fragment conflicts with seismic artifact classification.");
+  }
+  if (newlyDiscovered.some((evidence) => evidence.tags.includes("apollo") || evidence.tags.includes("wow"))) {
+    lines.push("Evidence Chain: archived signal match sealed under company authority.");
+  }
+  if (newlyDiscovered.some((evidence) => evidence.tags.includes("lcross") || evidence.tags.includes("awsiti") || evidence.tags.includes("blc1"))) {
+    lines.push("Evidence Chain: classified history correlation requires Company Silence review.");
+  }
+  return lines.slice(0, 2);
+}
+
+function meterMeaning(id: CampaignMeterView["id"]): string {
+  if (id === "compliance") return "corporate orders followed";
+  if (id === "truth") return "hidden history documented";
+  return "company monitoring pressure";
 }
 
 function buildDeltaLines(

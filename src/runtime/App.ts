@@ -165,7 +165,7 @@ type LoopProfile = Readonly<{
 
 type RaidExitReason = "dead" | "downed_abandon" | "abandoned" | "extracted" | "manual_debug" | "timer_expired";
 type RaidWeaponEquipSlot = "primary" | "sidearm";
-type CampaignCodexFilter = "all" | "discovered" | "sealed" | "lumen" | "corporate" | "signal" | "crew" | "restricted";
+type CampaignCodexFilter = "all" | "discovered" | "sealed" | "memory" | "resonance" | "history" | "lumen" | "corporate" | "signal" | "crew" | "restricted";
 type MenuScrollPosition = Readonly<{
   key: string;
   top: number;
@@ -339,6 +339,10 @@ export class App {
   private heavyCargoInventorySuppressionSeconds = 0;
   private heavyCargoInventorySuppressionAction: "release" | "pickup" | "drop" | "secure" | null = null;
   private lastHeavyCargoSuppressionLogAt = 0;
+  private lastHeavyCargoRouteActionLogKey = "";
+  private lastHeavyCargoRouteActionLogAt = 0;
+  private lastHeavyCargoUiCompleteLogKey = "";
+  private lastHeavyCargoUiCompleteLogAt = 0;
   private pendingHeavyCargoRequest: "none" | "release" | "pickup" | "drop" | "secure" = "none";
   private activeHeavyCoreNavMarkerCount = 0;
   private lastHeavyCargoRoomId: string | null = null;
@@ -438,6 +442,9 @@ export class App {
   private rewardCachesClaimedThisRaid = new Set<string>();
   private travelEventCooldown = 32;
   private lastTravelEvent = "none";
+  private resonanceEventCooldown = 22;
+  private lastResonanceEventKey = "";
+  private lastResonanceEventAt = 0;
   private boundaryWarningCooldown = 0;
   private inspectedWeaponId: WeaponId | null = null;
   private lastInvalidInspectWeaponId: string | null = null;
@@ -695,6 +702,7 @@ export class App {
         this.currentPoiName = this.worldMap.getCurrentPoiName(this.player.state.position);
         this.updatePoiArrivalState();
         this.updateTravelEvents(dt);
+        this.updateLunarResonanceEvents(dt);
         this.updateBoundaryFeedback(dt);
         this.handleRaidInteractions(dt);
         const noiseEvents = this.noiseSystem.consumeEvents();
@@ -1602,8 +1610,14 @@ export class App {
     this.inventoryManager.setActiveContainer(null);
     this.inventoryManager.clearWarning();
     this.raidBagOpen = false;
-    console.info(`[Interaction] heavy cargo route action=${action} target=${heliumDrillCoreHeavyCargoId} blockedInventoryPanel=true`);
-    console.info(`[EvaPack] forced closed reason=heavy-cargo action=${action}`);
+    const now = performance.now();
+    const key = `${action}:${this.heavyCargoState.status}:${this.pendingHeavyCargoRequest}`;
+    if (this.lastHeavyCargoRouteActionLogKey !== key || now - this.lastHeavyCargoRouteActionLogAt > 650) {
+      this.lastHeavyCargoRouteActionLogKey = key;
+      this.lastHeavyCargoRouteActionLogAt = now;
+      console.info(`[Interaction] heavy cargo route action=${action} target=${heliumDrillCoreHeavyCargoId} blockedInventoryPanel=true`);
+      console.info(`[EvaPack] forced closed reason=heavy-cargo action=${action}`);
+    }
   }
 
   private isInventorySuppressedForHeavyCargo(source: string): boolean {
@@ -1620,6 +1634,14 @@ export class App {
   }
 
   private logHeavyCargoUiActionComplete(action: "release" | "pickup" | "drop" | "secure"): void {
+    const now = performance.now();
+    const key = `${action}:${this.heavyCargoState.status}:${this.heavyCargoState.carriedByLocalPlayer}:${this.heavyCargoState.shipSecured}`;
+    if (this.lastHeavyCargoUiCompleteLogKey === key && now - this.lastHeavyCargoUiCompleteLogAt < 800) {
+      return;
+    }
+
+    this.lastHeavyCargoUiCompleteLogKey = key;
+    this.lastHeavyCargoUiCompleteLogAt = now;
     console.info(`[HeavyCargoUI] completed action=${action} evaPackOpen=${this.raidBagOpen}`);
   }
 
@@ -1633,6 +1655,16 @@ export class App {
     this.lastHeavyCargoPressureEventKey = key;
     this.lastHeavyCargoPressureEventAt = now;
     console.info(`[EncounterPacing] heavy-cargo pressure action=${action}`);
+  }
+
+  private resetHeavyCargoLogState(): void {
+    this.lastHeavyCargoSuppressionLogAt = 0;
+    this.lastHeavyCargoRouteActionLogKey = "";
+    this.lastHeavyCargoRouteActionLogAt = 0;
+    this.lastHeavyCargoUiCompleteLogKey = "";
+    this.lastHeavyCargoUiCompleteLogAt = 0;
+    this.lastHeavyCargoPressureEventKey = "";
+    this.lastHeavyCargoPressureEventAt = 0;
   }
 
   private handleRaidHudAction(action: string | undefined): void {
@@ -1847,7 +1879,7 @@ export class App {
         this.playerStatus.administerAntiToxin();
         this.logItemUse(slot.type, true, "toxins-cleared");
         this.logFieldUtility(slot.type, "cleanse", 20);
-        this.combatHud.showLootNotification("Anti-Toxin administered. Infection cleared.");
+        this.combatHud.showLootNotification("Anti-Toxin administered. Signal mismatch suppressed.");
       }
       return;
     }
@@ -1870,13 +1902,10 @@ export class App {
         if (surveyCompleted) {
           this.poiObjectiveState = this.poiObjectiveManager.state;
           console.info("[Survey] complete id=essence-flare");
-          this.combatHud.showLootNotification("Signal trace recorded.");
+          this.combatHud.showLootNotification("Field response archived.");
         }
         this.logItemUse(slot.type, true, `reveal-targets-${result.targets.length}`);
-        this.combatHud.showLootNotification("Essence Flare released.");
-        this.combatHud.showLootNotification(result.targets.length > 0
-          ? `Lumen signatures revealed: ${result.targets.length}`
-          : "No Lumen signatures detected.");
+        this.combatHud.showLootNotification(this.getEssenceFlareFeedback(result, surveyCompleted, revealAffinity.surveyor));
       }
       return;
     }
@@ -1984,6 +2013,30 @@ export class App {
       durationSeconds: revealAffinity.durationSeconds,
       surveyorAffinity: revealAffinity.surveyor,
     });
+  }
+
+  private getEssenceFlareFeedback(result: LumenRevealResult, surveyCompleted: boolean, surveyorAffinity: boolean): string {
+    if (!result.activated) {
+      return "Reveal pulse cycling. Try again.";
+    }
+
+    if (surveyCompleted) {
+      return surveyorAffinity
+        ? "Surveyor scan: resonance pattern returned through the regolith."
+        : "Resonance returns through the regolith.";
+    }
+
+    if (result.targets.length > 0) {
+      const observerTrace = result.targets.some((target) => target.type === "grunt" || target.type.toLowerCase().includes("tick"));
+      if (observerTrace) {
+        return `Surface Form traces revealed: ${result.targets.length}. Pattern suggests observation.`;
+      }
+      return `Lumen signatures revealed: ${result.targets.length}. Response is patterned, not random.`;
+    }
+
+    return surveyorAffinity
+      ? "Surveyor scan: no Surface Forms, but trace echoes continue below the fracture."
+      : "The field does not answer in sound. It answers in pattern.";
   }
 
   private isSurveyorClass(classId: string | null | undefined = this.classManager.snapshot.selectedClassId): boolean {
@@ -2892,7 +2945,7 @@ export class App {
   private getRevealSignalContextHint(signal: RevealedSignal): string | null {
     const objectiveDistance = this.horizontalDistance(signal.position, this.objectiveState.targetPosition);
     if (!this.objectiveState.completed && objectiveDistance <= 36) {
-      return "Signal near primary objective zone";
+      return "Surface signature near primary objective zone";
     }
 
     const poiObjective = this.poiObjectiveState.objectives
@@ -2903,7 +2956,7 @@ export class App {
       }))
       .sort((a, b) => a.distance - b.distance)[0] ?? null;
     if (poiObjective && poiObjective.distance <= 36) {
-      return `Lumen activity near ${poiObjective.objective.poiName}`;
+      return `Surface Form trace near ${poiObjective.objective.poiName}`;
     }
 
     const poi = poiDefinitions
@@ -2913,7 +2966,7 @@ export class App {
       }))
       .sort((a, b) => a.distance - b.distance)[0] ?? null;
     if (poi && poi.distance <= 48) {
-      return `Lumen activity near ${poi.definition.name}`;
+      return `Lumen response near ${poi.definition.name}`;
     }
 
     return null;
@@ -3775,13 +3828,80 @@ export class App {
 
     const inPoi = this.getCurrentPoiDefinition() !== null;
     const options = inPoi
-      ? ["Scanner static across the ridge", "Lumen pulse detected nearby", "Dust interference passing"]
-      : ["Distant Lumen screech", "Dust gust crossing route", "Emergency supply ping weak", "Extraction beacon interference"];
+      ? ["Scanner static crosses the ridge", "Regolith pattern shift recorded", "Dust interference passing"]
+      : ["Low-frequency tremor under suit threshold", "Dust gust crossing route", "Emergency supply ping weak", "Extraction beacon interference"];
     const farSide = this.distanceTo(new Vector3(118, 0, 82)) < 40;
-    const message = farSide ? "Alien growth pulse ripples through comms" : options[Math.floor(Math.random() * options.length)];
+    const message = farSide ? "Surface growth resonance ripples through comms" : options[Math.floor(Math.random() * options.length)];
     this.lastTravelEvent = message;
     this.travelEventCooldown = 34 + Math.random() * 28;
     this.combatHud.showLootNotification(message);
+  }
+
+  private updateLunarResonanceEvents(dt: number): void {
+    if (this.tacticalMapOpen || this.raidOutcome !== "active" || this.shipLandingState.active) {
+      return;
+    }
+
+    this.resonanceEventCooldown = Math.max(0, this.resonanceEventCooldown - dt);
+    const now = performance.now();
+    if (this.resonanceEventCooldown > 0 || now - this.lastResonanceEventAt < 18000) {
+      return;
+    }
+
+    const nearestSurvey = this.poiObjectiveState.objectives
+      .filter((objective) => !objective.completed && objective.type === "survey-residue-field")
+      .map((objective) => ({
+        objective,
+        distance: this.horizontalDistance(this.player.state.position, objective.markerPosition),
+      }))
+      .sort((a, b) => a.distance - b.distance)[0] ?? null;
+    const pressure = this.getRaidPressureState();
+    const candidates: Array<{ key: string; message: string; priority: number }> = [];
+
+    if (nearestSurvey && nearestSurvey.distance <= 24) {
+      candidates.push({
+        key: `survey:${nearestSurvey.objective.id}`,
+        message: nearestSurvey.distance <= 10
+          ? "Signal returns through terrain, not air."
+          : "Regolith pattern shift recorded near survey field.",
+        priority: 4,
+      });
+    }
+
+    if (this.heavyCargoState.status === "available" || this.heavyCargoState.status === "carried") {
+      candidates.push({
+        key: `cargo:${this.heavyCargoState.status}`,
+        message: "He-3 core resonance repeats below the cargo frame.",
+        priority: 3,
+      });
+    }
+
+    if (pressure.reasonCategory === "reveal-contact") {
+      candidates.push({
+        key: "reveal-contact",
+        message: "Unresolved: response pattern repeated after flare pulse.",
+        priority: 3,
+      });
+    }
+
+    if (this.currentPoiName) {
+      candidates.push({
+        key: `poi:${this.currentPoiName}`,
+        message: "TYCHOSTAR classification: seismic artifact.",
+        priority: 1,
+      });
+    }
+
+    const selected = candidates.sort((a, b) => b.priority - a.priority)[0];
+    if (!selected || selected.key === this.lastResonanceEventKey) {
+      this.resonanceEventCooldown = 14;
+      return;
+    }
+
+    this.lastResonanceEventKey = selected.key;
+    this.lastResonanceEventAt = now;
+    this.resonanceEventCooldown = 38 + Math.random() * 24;
+    this.combatHud.showLootNotification(selected.message);
   }
 
   private updateBoundaryFeedback(dt: number): void {
@@ -4716,6 +4836,7 @@ export class App {
       this.multiplayerMode = false;
       this.heavyCargoManager.reset();
       this.heavyCargoState = this.heavyCargoManager.update(this.player.state, this.landedShip.cargoAccessPosition);
+      this.resetHeavyCargoLogState();
       this.pendingHeavyCargoRequest = "none";
       this.lastHeavyCargoRoomId = null;
     }
@@ -4865,6 +4986,9 @@ export class App {
     this.rewardCachesClaimedThisRaid = new Set<string>();
     this.travelEventCooldown = 34;
     this.lastTravelEvent = "none";
+    this.resonanceEventCooldown = 22;
+    this.lastResonanceEventKey = "";
+    this.lastResonanceEventAt = 0;
     this.boundaryWarningCooldown = 0;
     this.environmentState = this.environmentManager.randomizeForRaid(this.selectedRaidDefinition.tier);
     this.lootDirector.setRareLootChanceMultiplier(this.environmentState.gameplay.rareLootChanceMultiplier);
@@ -4927,6 +5051,7 @@ export class App {
     }
     this.heavyCargoState = this.heavyCargoManager.update(this.player.state, this.landedShip.cargoAccessPosition);
     this.heavyCargoPressureSpawned = false;
+    this.resetHeavyCargoLogState();
     this.pendingHeavyCargoRequest = "none";
     this.activeHeavyCoreNavMarkerCount = 0;
     this.lastHeavyCargoRoomId = this.multiplayerMode ? this.multiplayerClient.snapshot.roomId : null;
@@ -6255,11 +6380,14 @@ export class App {
       console.info("[Codex] opened");
     }
 
-    const filters: CampaignCodexFilter[] = ["all", "discovered", "sealed", "lumen", "corporate", "signal", "crew", "restricted"];
+    const filters: CampaignCodexFilter[] = ["all", "discovered", "sealed", "memory", "resonance", "history", "lumen", "corporate", "signal", "crew", "restricted"];
     const filteredEntries = campaign.evidence.codexEntries.filter((entry) => {
       if (this.campaignCodexFilter === "all") return true;
       if (this.campaignCodexFilter === "discovered") return entry.discovered;
       if (this.campaignCodexFilter === "sealed") return !entry.discovered;
+      if (this.campaignCodexFilter === "memory") return entry.tags.includes("memory") || entry.tags.includes("archive") || entry.type.includes("memory");
+      if (this.campaignCodexFilter === "resonance") return entry.tags.includes("resonance") || entry.tags.includes("fracture") || entry.type.includes("resonance");
+      if (this.campaignCodexFilter === "history") return entry.tags.includes("classified") || entry.tags.includes("apollo") || entry.tags.includes("wow") || entry.tags.includes("lcross") || entry.tags.includes("awsiti") || entry.tags.includes("blc1");
       if (this.campaignCodexFilter === "lumen") return entry.tags.includes("lumen") || entry.type.includes("lumen") || entry.type.includes("mineral");
       if (this.campaignCodexFilter === "corporate") return entry.tags.includes("salvage") || entry.tags.includes("custody") || entry.type.includes("corporate");
       if (this.campaignCodexFilter === "signal") return entry.tags.includes("signal") || entry.tags.includes("relay");
@@ -6290,6 +6418,7 @@ export class App {
         <p>${selectedEntry.discovered ? selectedEntry.publicSummary : selectedEntry.sealedSummary}</p>
         <small>Type: ${selectedEntry.type} | Severity: ${selectedEntry.severity}</small>
         <small>Official Classification: ${selectedEntry.officialClassification}</small>
+        <small>Field Conflict: ${selectedEntry.hiddenImplication}</small>
         <small>Unresolved Note: ${selectedEntry.hiddenImplication}</small>
         <small>Restricted Summary: ${selectedEntry.restrictedSummary}</small>
         <small>Source Operation: ${selectedEntry.sourceOperations}</small>
@@ -9732,7 +9861,7 @@ export class App {
     if (event.attackerId === localId) {
       this.enemiesEliminatedThisRaid += 1;
       this.contractManager.record({ type: "enemy-killed", enemyType: event.type });
-      this.combatHud.showKillFeed(`Lumen target neutralized`, true);
+      this.combatHud.showKillFeed("Surface Form neutralized", true);
     }
   };
 
@@ -9747,11 +9876,11 @@ export class App {
 
     if (event.enemyType === "elite") {
       this.playerStatus.tryApplyLunarInfection(0.35);
-      this.combatHud.showLootNotification("Crater Horror presence destabilizing cognition");
+      this.combatHud.showLootNotification("Surface Form proximity destabilizing cognition");
     }
 
     if (event.enemyType === "grunt" && this.playerStatus.tryApplyLunarInfection(0.2)) {
-      this.combatHud.showLootNotification("Lunar Infection detected. Mental stability compromised.");
+      this.combatHud.showLootNotification("Lunar signal mismatch detected. Mental stability compromised.");
     }
   };
 
@@ -10239,7 +10368,7 @@ export class App {
 
         if (enemyType === "elite") {
           this.playerStatus.tryApplyLunarInfection(0.35);
-          this.combatHud.showLootNotification("Crater Horror presence destabilizing cognition");
+          this.combatHud.showLootNotification("Surface Form proximity destabilizing cognition");
         }
 
         if (enemyType !== "grunt") {
@@ -10247,7 +10376,7 @@ export class App {
         }
 
         if (this.playerStatus.tryApplyLunarInfection(0.2)) {
-          this.combatHud.showLootNotification("Lunar Infection detected. Mental stability compromised.");
+          this.combatHud.showLootNotification("Lunar signal mismatch detected. Mental stability compromised.");
         }
       },
       onLootDropped: (event) => {

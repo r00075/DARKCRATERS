@@ -987,7 +987,7 @@ export class CombatHud {
     const label = status.mentalState === "breakdown"
       ? "Breakdown"
       : status.mentalState.charAt(0).toUpperCase() + status.mentalState.slice(1);
-    const infection = status.lunarInfection ? `<em>Lunar Infection</em>` : "";
+    const infection = status.lunarInfection ? `<em>Lunar Signal Mismatch</em>` : "";
 
     return `
       <strong>Mind ${value}%</strong>
@@ -1418,16 +1418,17 @@ export class CombatHud {
       : "Reveal window closing";
     if (signal.count <= 0) {
       return `
-        <strong>NO LUMEN SIGNATURES DETECTED</strong>
+        <strong>NO SURFACE FORMS DETECTED</strong>
         <span>${windowText}</span>
+        <em>The field may still be answering below the regolith.</em>
         ${signal.surveyorAffinity ? `<em class="surveyor-affinity">Surveyor scan extension active</em>` : ""}
       `;
     }
 
     return `
-      <strong>SIGNAL REVEALED</strong>
+      <strong>SURFACE SIGNATURE REVEALED</strong>
       <span>Lumen signatures: ${signal.count}</span>
-      <span>Nearest ${signal.nearestLabel ?? "Lumen signature"}: ${signal.nearestDistance !== null ? `${Math.round(signal.nearestDistance)}m` : "unknown"}</span>
+      <span>Nearest ${signal.nearestLabel ?? "Surface Form signature"}: ${signal.nearestDistance !== null ? `${Math.round(signal.nearestDistance)}m` : "unknown"}</span>
       <span>${windowText}</span>
       ${signal.contextHint ? `<em>${signal.contextHint}</em>` : ""}
       ${signal.surveyorAffinity ? `<em class="surveyor-affinity">Surveyor scan extension active</em>` : ""}
@@ -1662,15 +1663,15 @@ export class CombatHud {
     }
 
     if (pressure.reasonCategory === "objective-contested") {
-      return "Objective guards active on the POI perimeter.";
+      return "Containment forms active on the POI perimeter.";
     }
 
     if (pressure.reasonCategory === "objective-approach") {
-      return "Objective perimeter drawing patrol attention.";
+      return "Objective perimeter drawing bio-signature attention.";
     }
 
     if (pressure.reasonCategory === "reveal-contact") {
-      return "Revealed signatures near the active route.";
+      return "Revealed Surface Form signatures near the active route.";
     }
 
     return pressure.reason;

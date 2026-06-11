@@ -101,7 +101,7 @@ export function buildRaidResultPresentation(input: RaidResultPresentationInput):
     craftingOpportunities: buildCraftingOpportunities(recoveredItems),
     repairOpportunities: buildRepairOpportunities(recoveredItems, input.summary),
     nextRecommendedActions: buildNextActions(input, recoveredItems),
-    pressureSummary: buildPressureSummary(input.finalPressure, input.peakPressure),
+    pressureSummary: [...buildPressureSummary(input.finalPressure, input.peakPressure), ...buildInvestigationNotes(input, recoveredItems)].slice(0, 5),
     narrativeLine: getNarrativeLine(input.mission.familyName, result, pressure),
     corporateAssessment: getCorporateAssessment(input.mission.familyName, result, notableFinds),
   };
@@ -203,7 +203,7 @@ function groupResultItems(items: readonly LootStack[]): RaidResultItem[] {
 function buildCraftingOpportunities(items: readonly RaidResultItem[]): string[] {
   const has = (type: LootType) => items.some((item) => item.type === type && item.quantity > 0);
   const opportunities: string[] = [];
-  if (has("lumen-essence")) opportunities.push("Fabricate Essence Flare from recovered Lumen Essence.");
+  if (has("lumen-essence")) opportunities.push("Fabricate Essence Flare from recovered resonance residue.");
   if (has("scanner-battery")) opportunities.push("Archive Scanner Battery as scanner utility material.");
   if (has("scrap")) opportunities.push("Spend Regolith Scrap on fabrication or field repairs.");
   if (has("weapon-parts") || has("rare-core")) opportunities.push("Review weapon upgrade options at Arsenal.");
@@ -223,6 +223,8 @@ function buildNextActions(input: RaidResultPresentationInput, items: readonly Ra
   const actions: string[] = ["Select next contract"];
   if (input.mission.id.startsWith("evidence-")) actions.push("Review Evidence Codex");
   if (input.mission.familyName.includes("Lumen Survey")) actions.push("Continue Regolith Trace");
+  if (input.mission.familyName.includes("Lumen Survey")) actions.push("Review Memory Matter chain");
+  if (input.mission.familyName.includes("Signal")) actions.push("Compare resonance with relay data");
   if (items.some((item) => item.type === "lumen-essence" || item.type === "essence-flare")) actions.push("Fabricate Essence Flare");
   if (input.summary.scrapGained > 0 || items.some((item) => item.type === "weapon-parts")) actions.push("Repair weapon");
   if (input.mission.familyName.includes("Cargo") || input.heavyCargo.shipSecured) actions.push("Inspect Kestrel-9 cargo modules");
@@ -239,19 +241,37 @@ function buildPressureSummary(finalPressure: RaidPressureState | null, peakPress
   return lines.length > 0 ? lines : ["Field pressure telemetry unavailable."];
 }
 
+function buildInvestigationNotes(input: RaidResultPresentationInput, items: readonly RaidResultItem[]): string[] {
+  const notes: string[] = [];
+  const has = (type: LootType) => items.some((item) => item.type === type && item.quantity > 0);
+  if (input.mission.familyName.includes("Lumen Survey")) {
+    notes.push("Investigation: structured residue added to Memory Matter chain.");
+  }
+  if (input.mission.familyName.includes("Signal") || input.finalPressure?.reasonCategory === "reveal-contact" || input.peakPressure?.reasonCategory === "reveal-contact") {
+    notes.push("Investigation: resonance fragment conflicts with seismic artifact classification.");
+  }
+  if (has("black-box-survey-crate") || has("encrypted-data")) {
+    notes.push("Investigation: archived pre-mining correlation requires Codex review.");
+  }
+  if (has("helium-drill-core") || input.heavyCargo.shipSecured) {
+    notes.push("Investigation: He-3 cargo disturbed a resonance layer during transfer.");
+  }
+  return notes.slice(0, 2);
+}
+
 function getNarrativeLine(familyName: string, result: RaidResultOutcome, pressure: RaidPressureState | null): string {
   if (familyName.includes("Lumen Survey") && (result === "complete" || result === "partial")) {
-    return "Survey material logged. TYCHOSTAR classifies residue movement as geological interference.";
+    return "Survey material logged. Residue pattern suggests structured biological storage; TYCHOSTAR labels it geological interference.";
   }
   if (result === "complete") return `${familyName} operation closed under TYCHOSTAR recovery protocol.`;
   if (result === "partial") return `${familyName} report filed with unresolved field exposure.`;
   if (pressure?.reasonCategory === "reveal-contact") return "Unregistered signal residue detected in recovered material. Do not distribute.";
-  return "Corporate record marks Lumen signatures as geological interference.";
+  return "Corporate record marks Lumen signatures as geological interference. The field response does not read as random.";
 }
 
 function getCorporateAssessment(familyName: string, result: RaidResultOutcome, notableFinds: readonly RaidResultItem[]): string {
   if (notableFinds.some((item) => item.type === "lumen-essence" || item.type === "lumen-relic-mass")) {
-    return "TYCHOSTAR Assessment: Lumen-adjacent material secured. Crew discretion noted.";
+    return "TYCHOSTAR Assessment: Lumen-adjacent substrate secured. Cultural inference prohibited.";
   }
 
   if (result === "failed" || result === "abandoned") {
