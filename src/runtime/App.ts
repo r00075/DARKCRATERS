@@ -6422,6 +6422,108 @@ export class App {
     ].join(" | ");
   }
 
+  private campaignCodexEntryMatchesFilter(entry: CampaignPresentation["evidence"]["codexEntries"][number], filter: CampaignCodexFilter): boolean {
+    if (filter === "all") return true;
+    if (filter === "discovered") return entry.discovered;
+    if (filter === "sealed") return !entry.discovered;
+    if (filter === "memory") return entry.tags.includes("memory") || entry.tags.includes("archive") || entry.type.includes("memory");
+    if (filter === "resonance") return entry.tags.includes("resonance") || entry.tags.includes("fracture") || entry.type.includes("resonance");
+    if (filter === "history") return entry.tags.includes("classified") || entry.tags.includes("apollo") || entry.tags.includes("wow") || entry.tags.includes("lcross") || entry.tags.includes("awsiti") || entry.tags.includes("blc1");
+    if (filter === "lumen") return entry.tags.includes("lumen") || entry.type.includes("lumen") || entry.type.includes("mineral");
+    if (filter === "corporate") return entry.tags.includes("salvage") || entry.tags.includes("custody") || entry.type.includes("corporate");
+    if (filter === "signal") return entry.tags.includes("signal") || entry.tags.includes("relay");
+    if (filter === "crew") return entry.tags.includes("crew") || entry.tags.includes("memory");
+    return entry.tags.includes("restricted") || entry.type.includes("restricted") || entry.severity === "restricted" || entry.severity === "suppressed";
+  }
+
+  private formatCodexFilterLabel(filter: CampaignCodexFilter): string {
+    if (filter === "memory") return "Memory";
+    if (filter === "resonance") return "Resonance";
+    if (filter === "history") return "History";
+    if (filter === "lumen") return "Surface";
+    if (filter === "corporate") return "Corporate";
+    if (filter === "restricted") return "Restricted";
+    return this.capitalize(filter);
+  }
+
+  private formatCodexEntryChainLabel(entry: CampaignPresentation["evidence"]["codexEntries"][number]): string {
+    if (this.campaignCodexEntryMatchesFilter(entry, "memory")) return "Memory Matter";
+    if (this.campaignCodexEntryMatchesFilter(entry, "resonance")) return "Resonance";
+    if (this.campaignCodexEntryMatchesFilter(entry, "history")) return "Classified History";
+    if (this.campaignCodexEntryMatchesFilter(entry, "lumen")) return "Surface Forms";
+    if (this.campaignCodexEntryMatchesFilter(entry, "signal")) return "Signal Mismatch";
+    if (this.campaignCodexEntryMatchesFilter(entry, "corporate")) return "Corporate Record";
+    return this.capitalize(entry.type);
+  }
+
+  private getEvidenceChainRows(campaign: CampaignPresentation): string {
+    const chainDefs: Array<{ label: string; filter: CampaignCodexFilter; note: string }> = [
+      { label: "Memory Matter", filter: "memory", note: "archive traces" },
+      { label: "Resonance", filter: "resonance", note: "signal infrastructure" },
+      { label: "Classified History", filter: "history", note: "Apollo / Wow / LCROSS / BLC1" },
+      { label: "Surface Forms", filter: "lumen", note: "Lumen field observations" },
+      { label: "Corporate Record", filter: "corporate", note: "TYCHOSTAR custody trail" },
+      { label: "Signal Mismatch", filter: "signal", note: "failed communication" },
+    ];
+
+    return chainDefs.map((chain) => {
+      const entries = campaign.evidence.codexEntries.filter((entry) => this.campaignCodexEntryMatchesFilter(entry, chain.filter));
+      const logged = entries.filter((entry) => entry.discovered).length;
+      const total = entries.length;
+      const state = total <= 0 ? "unresolved" : logged > 0 ? "logged" : "sealed";
+      return `
+        <div class="campaign-chain-row ${state}">
+          <span>${chain.label}</span>
+          <strong>${logged}/${total}</strong>
+          <small>${state === "logged" ? "logged" : state === "sealed" ? "sealed" : "unresolved"} | ${chain.note}</small>
+        </div>
+      `;
+    }).join("");
+  }
+
+  private renderCampaignNextActions(lines: readonly string[]): string {
+    const uniqueLines = Array.from(new Set(lines)).slice(0, 5);
+    return uniqueLines.map((line) => `<li>${line}</li>`).join("");
+  }
+
+  private renderCodexDetailRows(selectedEntry: CampaignPresentation["evidence"]["codexEntries"][number]): string {
+    const status = selectedEntry.discovered
+      ? `DISCOVERED #${selectedEntry.discoveryOrder ?? "?"}`
+      : "LOCKED - MORE EVIDENCE REQUIRED";
+    const fieldConflict = selectedEntry.discovered && selectedEntry.hiddenImplicationVisible
+      ? selectedEntry.hiddenImplication
+      : selectedEntry.discovered
+        ? "REDACTED FIELD CONFLICT"
+        : "REDACTED FIELD CONFLICT";
+    const hiddenImplication = selectedEntry.discovered && selectedEntry.hiddenImplicationVisible
+      ? selectedEntry.hiddenImplication
+      : "LOCKED - MORE EVIDENCE REQUIRED";
+    const rows: Array<[string, string, string]> = [
+      ["Chain / Category", `${selectedEntry.type} | ${selectedEntry.severity}`, "meta"],
+      ["Status", status, selectedEntry.discovered ? "status logged" : "status sealed"],
+      ["Official Classification", selectedEntry.officialClassification, "official"],
+      ["Field Observation", selectedEntry.discovered ? selectedEntry.publicSummary : selectedEntry.sealedSummary, "field"],
+      ["Field Conflict", fieldConflict, "conflict"],
+      ["Hidden Implication", hiddenImplication, "hidden"],
+      ["Unresolved Note", selectedEntry.discovered && selectedEntry.hiddenImplicationVisible ? selectedEntry.hiddenImplication : "Unresolved note restricted pending review.", "hidden"],
+      ["Restricted Note", selectedEntry.restrictedSummary, "restricted"],
+      ["Source Operation", selectedEntry.sourceOperations, "source"],
+      ["Source Family", selectedEntry.sourceFamilies, "source"],
+      ["Campaign Signal", selectedEntry.meterEffects, "signal"],
+      ["Related Operation", selectedEntry.relatedOperations || "No related operation logged", "source"],
+      ["Next Action", selectedEntry.discovered ? selectedEntry.relatedNextAction : selectedEntry.discoveryHint, "next"],
+    ];
+
+    return rows
+      .filter(([, value]) => value.trim().length > 0)
+      .map(([label, value, className]) => `
+        <div class="codex-detail-row ${className}">
+          <span>${label}</span>
+          <strong>${value}</strong>
+        </div>
+      `).join("");
+  }
+
   private renderEvidenceCodex(campaign: CampaignPresentation): string {
     if (!this.campaignCodexLoggedOpen) {
       this.campaignCodexLoggedOpen = true;
@@ -6429,61 +6531,51 @@ export class App {
     }
 
     const filters: CampaignCodexFilter[] = ["all", "discovered", "sealed", "memory", "resonance", "history", "lumen", "corporate", "signal", "crew", "restricted"];
-    const filteredEntries = campaign.evidence.codexEntries.filter((entry) => {
-      if (this.campaignCodexFilter === "all") return true;
-      if (this.campaignCodexFilter === "discovered") return entry.discovered;
-      if (this.campaignCodexFilter === "sealed") return !entry.discovered;
-      if (this.campaignCodexFilter === "memory") return entry.tags.includes("memory") || entry.tags.includes("archive") || entry.type.includes("memory");
-      if (this.campaignCodexFilter === "resonance") return entry.tags.includes("resonance") || entry.tags.includes("fracture") || entry.type.includes("resonance");
-      if (this.campaignCodexFilter === "history") return entry.tags.includes("classified") || entry.tags.includes("apollo") || entry.tags.includes("wow") || entry.tags.includes("lcross") || entry.tags.includes("awsiti") || entry.tags.includes("blc1");
-      if (this.campaignCodexFilter === "lumen") return entry.tags.includes("lumen") || entry.type.includes("lumen") || entry.type.includes("mineral");
-      if (this.campaignCodexFilter === "corporate") return entry.tags.includes("salvage") || entry.tags.includes("custody") || entry.type.includes("corporate");
-      if (this.campaignCodexFilter === "signal") return entry.tags.includes("signal") || entry.tags.includes("relay");
-      if (this.campaignCodexFilter === "crew") return entry.tags.includes("crew") || entry.tags.includes("memory");
-      return entry.tags.includes("restricted") || entry.type.includes("restricted") || entry.severity === "restricted" || entry.severity === "suppressed";
-    });
+    const filteredEntries = campaign.evidence.codexEntries.filter((entry) => this.campaignCodexEntryMatchesFilter(entry, this.campaignCodexFilter));
     const selectedEntry =
       filteredEntries.find((entry) => entry.id === this.selectedCampaignEvidenceId) ??
       campaign.evidence.codexEntries.find((entry) => entry.id === this.selectedCampaignEvidenceId) ??
       campaign.evidence.codexEntries.find((entry) => entry.latestDiscovery) ??
       campaign.evidence.codexEntries.find((entry) => entry.discovered) ??
       campaign.evidence.codexEntries[0];
-    const filterButtons = filters.map((filter) => `
-      <button type="button" class="${this.campaignCodexFilter === filter ? "active" : ""}" data-action="codex-filter-${filter}">${this.capitalize(filter)}</button>
-    `).join("");
+    const filterButtons = filters.map((filter) => {
+      const matching = campaign.evidence.codexEntries.filter((entry) => this.campaignCodexEntryMatchesFilter(entry, filter));
+      const logged = matching.filter((entry) => entry.discovered).length;
+      return `
+        <button type="button" class="${this.campaignCodexFilter === filter ? "active" : ""}" data-action="codex-filter-${filter}">
+          <span>${this.formatCodexFilterLabel(filter)}</span>
+          <em>${filter === "all" ? `${campaign.evidence.discoveredCount}/${campaign.evidence.totalCount}` : `${logged}/${matching.length}`}</em>
+        </button>
+      `;
+    }).join("");
+    const chainRows = this.getEvidenceChainRows(campaign);
+    const latestLine = campaign.evidence.latest
+      ? `Latest Evidence: ${campaign.evidence.latest.title}`
+      : "Latest Evidence: none logged";
     const listRows = filteredEntries.map((entry) => `
       <button type="button" class="codex-entry ${entry.discovered ? "discovered" : "sealed"} ${entry.latestDiscovery ? "latest" : ""} ${selectedEntry?.id === entry.id ? "selected" : ""}" data-action="codex-select-${entry.id}">
-        <span>${entry.latestDiscovery ? "LATEST // " : ""}${entry.discovered ? entry.type : "SEALED"}</span>
+        <span>${entry.latestDiscovery ? "LATEST // " : ""}${entry.discovered ? this.formatCodexEntryChainLabel(entry) : "SEALED"}</span>
         <strong>${entry.title}</strong>
-        <small>${entry.discovered ? entry.officialClassification : "Classification pending field discovery"}</small>
-        <em>${entry.severity}</em>
+        <small>${entry.discovered ? entry.officialClassification : "CLASSIFIED BY TYCHOSTAR REVIEW"}</small>
+        <em>${entry.discovered ? entry.severity : "LOCKED"}</em>
       </button>
     `).join("");
     const detail = selectedEntry ? `
       <section class="intel-card codex-detail-card ${selectedEntry.discovered ? "discovered" : "sealed"}">
-        <span>Evidence Detail</span>
+        <span>${selectedEntry.discovered ? "Evidence Detail" : "Sealed Evidence"}</span>
         <strong>${selectedEntry.title}</strong>
-        <p>${selectedEntry.discovered ? selectedEntry.publicSummary : selectedEntry.sealedSummary}</p>
-        <small>Type: ${selectedEntry.type} | Severity: ${selectedEntry.severity}</small>
-        <small>Official Classification: ${selectedEntry.officialClassification}</small>
-        <small>Field Conflict: ${selectedEntry.hiddenImplication}</small>
-        <small>Unresolved Note: ${selectedEntry.hiddenImplication}</small>
-        <small>Restricted Summary: ${selectedEntry.restrictedSummary}</small>
-        <small>Source Operation: ${selectedEntry.sourceOperations}</small>
-        <small>Source Family: ${selectedEntry.sourceFamilies}</small>
-        <small>Campaign Signal: ${selectedEntry.meterEffects}</small>
-        <small>Related Operation: ${selectedEntry.relatedOperations}</small>
-        <small>Next Action: ${selectedEntry.discovered ? selectedEntry.relatedNextAction : selectedEntry.discoveryHint}</small>
-        <small>Status: ${selectedEntry.discovered ? `Discovered #${selectedEntry.discoveryOrder}` : selectedEntry.unlockConditionText}</small>
+        <p>${selectedEntry.discovered ? selectedEntry.publicSummary : "CLASSIFIED BY TYCHOSTAR REVIEW. Field conflict redacted pending corroboration."}</p>
+        <div class="codex-detail-rows">${this.renderCodexDetailRows(selectedEntry)}</div>
       </section>
     ` : "";
 
     return `
       <section class="intel-card codex-overview-card">
         <span>Evidence Codex</span>
-        <strong>TYCHOSTAR internal classification terminal</strong>
-        <p>Discovered: ${campaign.evidence.discoveredCount} / ${campaign.evidence.totalCount} | Truth Signal: ${campaign.meters.find((meter) => meter.id === "truth")?.band ?? "none logged"} | Corporate Review: ${campaign.meters.find((meter) => meter.id === "suspicion")?.band ?? "none"}</p>
-        <small>${campaign.evidence.latest ? `Latest: ${campaign.evidence.latest.title}. TYCHOSTAR classification updated.` : "No field evidence logged. Contractor-facing archive remains sealed."}</small>
+        <strong>Investigation archive</strong>
+        <p>${campaign.evidence.discoveredCount} / ${campaign.evidence.totalCount} logged | Truth Signal: ${campaign.meters.find((meter) => meter.id === "truth")?.band ?? "none logged"} | Corporate Review: ${campaign.meters.find((meter) => meter.id === "suspicion")?.band ?? "none"}</p>
+        <small>${latestLine}. Official record and field conflict are tracked separately.</small>
+        <div class="campaign-chain-grid">${chainRows}</div>
         <div class="codex-filter-tabs">${filterButtons}</div>
       </section>
       <section class="codex-panel">
@@ -6589,15 +6681,23 @@ export class App {
         <span>${meter.label}</span>
         <strong>${meter.value}</strong>
         <small>${meter.band}</small>
-        <em>${meter.lastDelta > 0 ? `Last raid +${meter.lastDelta}: ${meter.deltaReason}` : meter.deltaReason}</em>
+        <em>${meter.id === "compliance" ? "Corporate orders followed" : meter.id === "truth" ? "Hidden history documented" : "Company monitoring pressure"}</em>
+        <b>${meter.lastDelta > 0 ? `Last raid +${meter.lastDelta}` : "Last raid +0"}</b>
+        <small>${meter.deltaReason}</small>
       </div>
     `).join("");
     const evidenceRows = campaign.evidence.visibleEvidence.length > 0
       ? campaign.evidence.visibleEvidence.map((evidence) => `
-          <small><b>${evidence.title}</b> | ${evidence.officialClassification}${campaign.evidence.hiddenImplicationUnlocked ? ` | ${evidence.hiddenImplication}` : ""}</small>
+          <div class="campaign-evidence-row">
+            <span>${evidence.type}</span>
+            <strong>${evidence.title}</strong>
+            <small>Official: ${evidence.officialClassification}</small>
+            ${campaign.evidence.hiddenImplicationUnlocked ? `<small>Field Conflict: ${evidence.hiddenImplication}</small>` : "<small>Field Conflict: redacted pending corroboration</small>"}
+          </div>
         `).join("")
       : "<small>Undiscovered evidence remains sealed by TYCHOSTAR classification.</small>";
     const codexMarkup = this.renderEvidenceCodex(campaign);
+    const nextActionItems = this.renderCampaignNextActions(campaign.nextActionLines);
 
     this.menuContent.innerHTML = `
       <div class="intel-board-screen inspect-screen" data-scroll-view="contracts-campaign" data-scroll-key="contracts-campaign">
@@ -6617,34 +6717,42 @@ export class App {
         <section class="intel-card primary campaign-act-card">
           <span>Current Campaign Act</span>
           <strong>ACT I - ${campaign.actTitle}</strong>
-          <p>${campaign.corporateFraming}</p>
-          <small>${campaign.hiddenTruthFraming}</small>
+          <div class="campaign-briefing-columns">
+            <p><b>Official Story</b>${campaign.corporateFraming}</p>
+            <p><b>Field Contradiction</b>${campaign.hiddenTruthFraming}</p>
+          </div>
           <small>${campaign.activeOperation.readiness}</small>
         </section>
         <section class="intel-card primary campaign-active-card">
           <span>Active Operation</span>
           <strong>${campaign.activeOperation.title}</strong>
-          <p>${campaign.activeOperation.corporateObjective}</p>
-          <small>${campaign.activeOperation.hiddenTruthHint}</small>
-          <small>Status: ${campaign.activeOperation.statusLabel} | Recommended: ${campaign.recommendedOperation.title}</small>
-          <small>${activeContract ? this.getCampaignContractAlignmentLine(activeContract.definition) : `No active contract. Recommended family: ${campaign.activeOperation.families}.`}</small>
+          <div class="campaign-operation-brief">
+            <p><b>Corporate Order</b>${campaign.activeOperation.corporateObjective}</p>
+            <p><b>Field Lead</b>${campaign.activeOperation.hiddenTruthHint}</p>
+          </div>
+          <div class="campaign-status-strip">
+            <span>Status <strong>${campaign.activeOperation.statusLabel}</strong></span>
+            <span>Recommended <strong>${campaign.recommendedOperation.title}</strong></span>
+            <span>Family <strong>${campaign.activeOperation.families}</strong></span>
+          </div>
+          <small>${activeContract ? this.getCampaignContractAlignmentLine(activeContract.definition) : "No active contract selected for this lead."}</small>
         </section>
         <section class="intel-card campaign-meter-card">
           <span>Progress Signals</span>
-          <strong>TYCHOSTAR FIELD SIGNALS</strong>
+          <strong>Compliance / Truth / Suspicion</strong>
           <div class="campaign-meter-stack">${meterCards}</div>
           <p>Recent Raid: ${campaign.recentRaidLine}</p>
         </section>
         <section class="intel-card campaign-evidence-card">
           <span>Field Evidence</span>
           <strong>${campaign.evidence.discoveredCount} / ${campaign.evidence.totalCount} logged</strong>
-          <p>${campaign.evidence.summaryLines.join(" | ")}</p>
+          <p>${campaign.evidence.latest ? `Latest Evidence: ${campaign.evidence.latest.title}` : "Latest Evidence: none logged"}</p>
           ${evidenceRows}
         </section>
         <section class="intel-card campaign-next-card">
           <span>Next Actions</span>
           <strong>${campaign.recommendedOperation.title}</strong>
-          <p>${campaign.nextActionLines.join(" | ")}</p>
+          <ul>${nextActionItems}</ul>
         </section>
         ${codexMarkup}
         <section class="campaign-operation-grid">
