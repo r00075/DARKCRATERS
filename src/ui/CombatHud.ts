@@ -476,7 +476,7 @@ export class CombatHud {
     this.revealSignal.innerHTML = this.formatRevealSignal(raid.revealSignal);
     this.revealSignal.classList.toggle("hidden", !showRaidHud || landingActive || !raid.revealSignal.active);
     this.revealSignal.classList.toggle("empty", raid.revealSignal.active && raid.revealSignal.count === 0);
-    this.landingSequence.innerHTML = this.formatLandingSequence(raid.landingSequence);
+    this.landingSequence.innerHTML = this.formatLandingSequence(raid.landingSequence, raid);
     this.landingSequence.classList.toggle("active", landingActive);
     this.tacticalMap.innerHTML = this.formatTacticalMap(raid.tacticalMap, raid.revealAffinity);
     this.tacticalMap.classList.toggle("active", showRaidHud && !landingActive && raid.tacticalMap.open);
@@ -1446,7 +1446,7 @@ export class CombatHud {
     `;
   }
 
-  private formatLandingSequence(sequence: OrbitalDeploymentSequenceState): string {
+  private formatLandingSequence(sequence: OrbitalDeploymentSequenceState, raid: RaidHudState): string {
     if (!sequence.active) {
       return "";
     }
@@ -1461,36 +1461,88 @@ export class CombatHud {
         ? "PENDING"
         : "APPROACH";
     const phaseClass = sequence.phase.replace(/[^a-z0-9-]/gi, "");
+    const activeContract = raid.activeContract?.definition;
+    const landingZone = activeContract?.targetPoi ?? raid.mission.routeTargetLabel ?? "TYCHO SCAR APPROACH";
+    const risk = activeContract?.risk ?? raid.mission.risk;
+    const missionFamily = raid.mission.familyName;
+    const corporateLine = this.getDeploymentCorporateLine(sequence, raid);
+    const truthLine = this.getDeploymentTruthLine(sequence, raid.campaign);
 
     return `
-      <section class="landing-phase-${phaseClass}">
-        <small>TYCHO SCAR | ${sequence.hudPhaseLabel}</small>
-        <strong>${sequence.prompt}</strong>
-        <div class="landing-bars">
-          <label>
-            <span>ROUTE ${Math.round(sequence.totalProgress * 100)}%</span>
-            <b><i style="width: ${Math.round(sequence.totalProgress * 100)}%"></i></b>
-          </label>
-          <label>
-            <span>ALIGN ${alignment}%</span>
-            <b><i style="width: ${alignment}%"></i></b>
-          </label>
-          <label>
-            <span>ALT ${altitude}m</span>
-            <b><i style="width: ${Math.round(sequence.descentProgress * 100)}%"></i></b>
-          </label>
-          <label>
-            <span>STABILITY ${stability}%</span>
-            <b><i style="width: ${stability}%"></i></b>
-          </label>
-          <label>
-            <span>INPUT ${score}%</span>
-            <b><i style="width: ${score}%"></i></b>
-          </label>
+      <section class="landing-phase-${phaseClass}" style="--landing-progress: ${Math.round(sequence.totalProgress * 100)}%">
+        <span class="landing-horizon" aria-hidden="true"></span>
+        <span class="landing-reticle" aria-hidden="true"></span>
+        <span class="landing-scanline" aria-hidden="true"></span>
+        <header class="landing-telemetry landing-telemetry-primary">
+          <small>TYCHOSTAR DROP AUTHORIZATION</small>
+          <strong>KESTREL-9 VECTOR LOCKED</strong>
+          <span>${corporateLine}</span>
+        </header>
+        <div class="landing-telemetry landing-telemetry-context">
+          <span>CONTRACT: ${missionFamily}</span>
+          <span>ZONE: ${landingZone}</span>
+          <span>RETURN ROUTE: PENDING TOUCHDOWN</span>
+          <span>RISK: ${risk}</span>
         </div>
-        <em>${sequence.signalInterferenceActive ? "APPROACH VECTOR UNSTABLE" : sequence.routeReacquisitionTriggered && sequence.phase === "route-reacquisition" ? "LANDING LOCK RESTORING" : quality} | MOUSE ORBIT | WHEEL ZOOM | K: SKIP</em>
+        <div class="landing-telemetry landing-truth-flicker">
+          <span>${truthLine}</span>
+          <em>${sequence.signalInterferenceActive ? "REVIEW: SEISMIC ARTIFACT" : "CULTURAL INFERENCE PROHIBITED"}</em>
+        </div>
+        <aside class="landing-telemetry landing-telemetry-status">
+          <span>ALT ${altitude}M</span>
+          <span>ALIGN ${alignment}%</span>
+          <span>LOCK ${stability}%</span>
+          <span>SIGNAL ${score}%</span>
+          <b><i style="width: ${Math.round(sequence.totalProgress * 100)}%"></i></b>
+          <em>${sequence.hudPhaseLabel} | ${quality} | K: SKIP</em>
+        </aside>
       </section>
     `;
+  }
+
+  private getDeploymentCorporateLine(sequence: OrbitalDeploymentSequenceState, raid: RaidHudState): string {
+    if (sequence.phase === "dock-release") return "DOCKING CLAMPS RELEASED";
+    if (sequence.phase === "clearance-burn") return "DESCENT BURN NOMINAL";
+    if (sequence.phase === "transit-corridor") return "DROP CORRIDOR ACCEPTED";
+    if (sequence.phase === "signal-interference") return "SURFACE TELEMETRY DEGRADED";
+    if (sequence.phase === "route-reacquisition") return "ROUTE REACQUISITION AUTHORIZED";
+    if (sequence.phase === "lunar-approach") return `CRATER PRESSURE ${raid.pressure.phase.toUpperCase()}`;
+    if (sequence.phase === "final-descent") return "TOUCHDOWN SEAL ARMED";
+    if (sequence.phase === "stabilization-window") return "MANUAL STABILIZATION WINDOW";
+    if (sequence.phase === "touchdown") return "BLACK DUST CONTACT";
+    if (sequence.phase === "deploying") return "SUIT LINK RESTORED";
+    return "DROP CORRIDOR ACCEPTED";
+  }
+
+  private getDeploymentTruthLine(sequence: OrbitalDeploymentSequenceState, campaign: CampaignPresentation): string {
+    const discovered = campaign.evidence.codexEntries.filter((entry) => entry.discovered);
+    const hasMemory = discovered.some((entry) => entry.tags.includes("memory") || entry.type.includes("memory"));
+    const hasResonance = discovered.some((entry) => entry.tags.includes("resonance") || entry.type.includes("resonance"));
+    const hasHistory = discovered.some((entry) =>
+      entry.tags.includes("apollo") ||
+      entry.tags.includes("wow") ||
+      entry.tags.includes("lcross") ||
+      entry.tags.includes("awsiti") ||
+      entry.tags.includes("blc1")
+    );
+
+    if (sequence.phase === "signal-interference") {
+      if (hasMemory) return "MEMORY-LIKE PATTERN: REDACTED";
+      if (hasResonance) return "RESONANCE RETURN: UNCONFIRMED";
+      return "SUBSURFACE PULSE DETECTED";
+    }
+    if (sequence.phase === "route-reacquisition") return "TERRAIN RESPONSE: NON-AUTHORIZED";
+    if (sequence.phase === "lunar-approach") {
+      if (hasHistory) return "LEGACY CORRELATION: RESTRICTED";
+      if (hasResonance) return "SIGNAL SOURCE: BELOW LANDING CORRIDOR";
+      return "SEISMIC NOISE DETECTED";
+    }
+    if (sequence.phase === "final-descent" || sequence.phase === "stabilization-window") {
+      return hasMemory ? "STRUCTURED RESIDUE RETURN: PARTIAL" : "OLD FRACTURE RESPONSE";
+    }
+    if (sequence.phase === "touchdown") return "SURFACE RETURN CONTINUES AFTER CONTACT";
+    if (sequence.phase === "deploying") return "THE DUST RETAINS THE SIGNAL";
+    return "RESONANCE SIGNAL DISMISSED";
   }
 
   private formatShipStatus(

@@ -19,11 +19,12 @@ const loadingTips = [
 ] as const;
 
 const craterRunTips = [
-  "PREPARE. DESCEND. DELIVER.",
-  "THE CRATER NEEDS LUMEN.",
-  "SHIP-CENTERED DESCENT CAMERA ONLINE.",
-  "HELIUM-3 RECOVERY AUTHORITY ARMED.",
-  "WARNING: LUNAR SURFACE CONDITIONS HOSTILE.",
+  "KESTREL-9 DESCENT VECTOR LOCKED.",
+  "TYCHOSTAR DROP AUTHORIZATION ACCEPTED.",
+  "SURFACE TELEMETRY DEGRADED.",
+  "SEISMIC ARTIFACT DISMISSED.",
+  "HABITAT STASH LINK STANDBY.",
+  "RETURN ROUTE PENDING TOUCHDOWN.",
 ] as const;
 
 export class LoadingScreenManager {
@@ -68,7 +69,7 @@ export class LoadingScreenManager {
     const taglineElement = this.root.querySelector("[data-loading-tagline]");
     if (taglineElement) {
       taglineElement.textContent = craterRunTransfer
-        ? "LOADING INTO CRATER RUN"
+        ? "DROP CORRIDOR ACCEPTED"
         : habitatTransfer ? "ORBITAL HQ LINK ESTABLISHED" : tagline;
     }
     this.tip.textContent = craterRunTransfer
