@@ -5390,7 +5390,7 @@ export class App {
     const level = this.persistentStash.raidLevel;
     const totalXp = this.loopProfile.xp;
     const commandNav: Array<{ label: string; action: string; station: HQStationId }> = [
-      { label: "PLAY", action: "start", station: "raid-terminal" },
+      { label: "CRATER RUNS", action: "raid-select", station: "raid-terminal" },
       { label: "LOADOUT", action: "hq-loadout", station: "loadout-locker" },
       { label: "ARSENAL", action: "arsenal", station: "arsenal" },
       { label: "SHIP", action: "ship-systems", station: "ship-systems" },
@@ -5425,6 +5425,8 @@ export class App {
       ? this.getCampaignContractAlignmentLine(activeContract)
       : `Recommended family: ${campaign.activeOperation.families}`;
     const evidenceContractLine = this.getEvidenceContractBriefingLine(activeContract);
+    const commandFeedSummary = campaign.commandFeedLines.slice(0, 2).join(" | ");
+    const nextActionSummary = campaign.nextActionLines.slice(0, 1).join(" | ");
     this.menuContent.innerHTML = `
       <div class="hq-screen hq-command-deck">
         <header class="hq-command-topbar">
@@ -5448,7 +5450,7 @@ export class App {
         <section class="hq-context-panel">
           <span>Command Feed</span>
           <strong>${campaign.actTitle} // ${campaign.activeOperation.title}</strong>
-          <p>${campaign.commandFeedLines.join(" | ")} | ${campaign.nextActionLines.join(" | ")}. ${this.environmentState.label} conditions queued.</p>
+          <p>${commandFeedSummary}. ${nextActionSummary}. ${this.environmentState.label} queued.</p>
           <div>
             <span>XP</span><strong>${totalXp}</strong>
             <span>Faction Tags</span><strong>${dogTags}</strong>
@@ -5460,6 +5462,12 @@ export class App {
         <section class="hq-runner-stage">
           <div class="hq-stage-ring"></div>
           ${this.renderHQPlayerPreview()}
+          <div class="hq-stage-launch">
+            <span>Crater Run Access</span>
+            <strong>${this.selectedRaidDefinition.name}</strong>
+            <button type="button" class="hq-deploy-button" data-action="start">Review Assignment</button>
+            <button type="button" class="hq-secondary-deploy" data-action="raid-select">Change Operation</button>
+          </div>
           <div class="hq-runner-summary">
             <span>Current Runner</span>
             <strong>${this.classManager.selectedClass.displayName}</strong>
@@ -5474,26 +5482,18 @@ export class App {
         <section class="hq-deploy-panel">
           <span>TYCHOSTAR FIELD ORDER</span>
           <strong>${mission.title}</strong>
-          <p>${mission.briefing}<br>${contractAlignmentLine} | ${evidenceContractLine} | ${campaign.briefingLines.join(" | ")}</p>
+          <p>${mission.briefing} ${contractAlignmentLine}.</p>
           <div>
-            <span>Campaign</span><strong>Act I - ${campaign.actTitle}</strong>
             <span>Operation</span><strong>${campaign.activeOperation.title}</strong>
-            <span>Advances</span><strong>${campaign.activeOperation.families}</strong>
-            <span>Alignment</span><strong>${contractAlignmentLine}</strong>
-            <span>Family</span><strong>${mission.familyName}</strong>
             <span>Primary</span><strong>${mission.primaryObjective}</strong>
             <span>Step</span><strong>${mission.currentStep}</strong>
-            <span>Optional</span><strong>${mission.optionalObjective}</strong>
-            <span>Extraction</span><strong>${mission.extraction}</strong>
             <span>Risk</span><strong>${mission.risk}</strong>
             <span>Route</span><strong>${mission.recommendedRoute}</strong>
-            <span>Mode</span><strong>${mission.soloSquad}</strong>
             <span>Gear</span><strong>${gearScore} / ${this.selectedRaidDefinition.recommendedGearScore} ${loadoutReady}</strong>
             <span>Ship</span><strong>${this.shipState.statusLabel}</strong>
             <span>Objective</span><strong>${activeContractLabel}</strong>
             <span>Evidence</span><strong>${evidenceContractLine}</strong>
           </div>
-          <button type="button" class="hq-deploy-button" data-action="start">DEPLOY</button>
           <button type="button" class="hq-secondary-deploy" data-action="multiplayer-start">Deploy Multiplayer</button>
         </section>
       </div>
@@ -5554,7 +5554,7 @@ export class App {
           <small>${activeContract ? `Active contract: ${activeContract.title}` : `Primary order: ${mission.title}`}</small>
           <small>Mission family: ${mission.familyName} | ${mission.soloSquad}</small>
           ${weak ? `<small class="raid-warning">Weak loadout: gear score ${gearScore}, recommended ${raid.recommendedGearScore}</small>` : ""}
-          <button type="button" data-action="launch-raid-${raid.id}">Launch Crater Run</button>
+          <button type="button" data-action="launch-raid-${raid.id}">Review Assignment</button>
         </article>
       `;
     }).join("");
@@ -5573,7 +5573,10 @@ export class App {
             <span>Contract</span><strong>${activeContract ? "Active" : "None"}</strong>
             <span>Family</span><strong>${mission.familyName}</strong>
           </div>
-          <button type="button" data-action="menu">Back</button>
+          <div class="inspect-primary-actions">
+            <button type="button" class="class-primary-action" data-action="launch-raid-${this.selectedRaidDefinition.id}">Review Assignment</button>
+            <button type="button" data-action="menu">Back to Habitat</button>
+          </div>
         </header>
         <section class="raid-select-grid">${cards}</section>
       </div>
@@ -5727,7 +5730,7 @@ export class App {
           <div><span>Step</span><b>${mission.currentStep}</b></div>
           <div><span>Risk</span><b>${mission.risk}</b></div>
           <div><span>Route</span><b>${mission.recommendedRoute}</b></div>
-          <button type="button" data-action="start">Launch Mission</button>
+          <button type="button" data-action="start">Review Assignment</button>
         </section>
       </div>
     `;
@@ -5752,7 +5755,7 @@ export class App {
     const sidearmLabel = weaponDefinitions[this.loadout.snapshot.sidearmWeaponId].name;
     const modeLabel = mode === "multiplayer" ? "Multiplayer Crater Run" : mode === "solo" ? "Solo Crater Run" : "Assignment Review";
     const deployAction = mode === "multiplayer" ? "class-deploy-multiplayer" : "class-deploy-solo";
-    const deployLabel = mode === "multiplayer" ? "Deploy Multiplayer" : "Deploy";
+    const deployLabel = mode === "multiplayer" ? "Deploy Multiplayer" : "Begin Descent";
     const mission = this.getMissionPresentation();
     const cards = classDefinitions.map((definition) => `
       <button
@@ -5785,16 +5788,11 @@ export class App {
           <strong>${mission.title}</strong>
           <p>${mission.briefing}</p>
           <div>
-            <span>Family</span><b>${mission.familyName}</b>
             <span>Primary</span><b>${mission.primaryObjective}</b>
             <span>Step</span><b>${mission.currentStep}</b>
-            <span>Optional</span><b>${mission.optionalObjective}</b>
-            <span>Extraction</span><b>${mission.extraction}</b>
             <span>Risk</span><b>${mission.risk}</b>
             <span>Route</span><b>${mission.recommendedRoute}</b>
-            <span>Mode</span><b>${modeLabel}</b>
             <span>Gear</span><b>${gearScore} / ${this.selectedRaidDefinition.recommendedGearScore}</b>
-            <span>Ship</span><b>${this.shipState.statusLabel}</b>
           </div>
         </section>
         <section class="class-deploy-stage">
@@ -5812,7 +5810,7 @@ export class App {
         <section class="class-deploy-detail">
           <span>Readiness</span>
           <strong>${selectedClass.roleLabel}</strong>
-          <p>${this.escapeHtml(selectedClass.shortDescription)}</p>
+          <p>${modeLabel} staged for ${this.selectedRaidDefinition.craterZone}.</p>
           <div class="class-readiness-grid">
             <span>Primary</span><b>${primaryLabel}</b>
             <span>Sidearm</span><b>${sidearmLabel}</b>
@@ -5828,9 +5826,7 @@ export class App {
           <button type="button" data-action="raid-select">Change Operation</button>
           <button type="button" data-action="hq-style">Customize Suit</button>
           <button type="button" data-action="class-review-loadout">Review Loadout</button>
-          ${mode === "assignment"
-            ? `<button type="button" class="class-primary-action" data-action="class-confirm-assignment">Confirm Assignment</button>`
-            : `<button type="button" class="class-primary-action" data-action="${deployAction}">${deployLabel}</button>`}
+          <button type="button" class="class-primary-action" data-action="${deployAction}">${deployLabel}</button>
         </section>
         <section class="class-progression-strip" aria-label="Deployment steps">
           <b>Class</b><b>Loadout</b><b>Ship Prep</b><b>Deploy</b>
