@@ -103,7 +103,12 @@ import {
 import { buildRaidResultPresentation, type RaidResultPresentation } from "../raid/RaidResultPresentation";
 import { RaidTimer, type RaidTimerState } from "../raid/RaidTimer";
 import { missionFamilyById } from "../raid/MissionDefinitions";
-import { buildMissionPresentation, getMissionFamilyForContract, type MissionPresentation } from "../raid/MissionPresentation";
+import {
+  buildMissionPresentation,
+  getMissionFamilyForContract,
+  getMissionObjectiveFlavorForContract,
+  type MissionPresentation,
+} from "../raid/MissionPresentation";
 import { buildRaidPressureState, type RaidPressureState } from "../raid/RaidPressure";
 import { Reputation } from "../raid/Reputation";
 import {
@@ -5386,9 +5391,7 @@ export class App {
     const credits = this.vendorManager.snapshot.credits;
     const scrap = this.getStashQuantity("scrap");
     const rareCores = this.getStashQuantity("rare-core");
-    const dogTags = this.getStashQuantity("dog-tag");
     const level = this.persistentStash.raidLevel;
-    const totalXp = this.loopProfile.xp;
     const commandNav: Array<{ label: string; action: string; station: HQStationId }> = [
       { label: "CRATER RUNS", action: "raid-select", station: "raid-terminal" },
       { label: "LOADOUT", action: "hq-loadout", station: "loadout-locker" },
@@ -5404,7 +5407,7 @@ export class App {
     const navTabs = commandNav.map((item) => `
       <button
         type="button"
-        class="hq-nav-button ${hqState.selectedStationId === item.station ? "active" : ""}"
+        class="habitat-hub-nav-button ${hqState.selectedStationId === item.station ? "active" : ""}"
         data-action="${item.action}"
       >
         ${item.label}
@@ -5421,81 +5424,99 @@ export class App {
     const activeContractLabel = activeContract ? activeContract.title : "No active contract";
     const mission = this.getMissionPresentation();
     const campaign = this.campaignPresentation;
-    const contractAlignmentLine = activeContract
-      ? this.getCampaignContractAlignmentLine(activeContract)
-      : `Recommended family: ${campaign.activeOperation.families}`;
     const evidenceContractLine = this.getEvidenceContractBriefingLine(activeContract);
-    const commandFeedSummary = campaign.commandFeedLines.slice(0, 2).join(" | ");
-    const nextActionSummary = campaign.nextActionLines.slice(0, 1).join(" | ");
+    const truthSignal = campaign.meters.find((meter) => meter.id === "truth")?.band ?? "none logged";
+    const suspicionSignal = campaign.meters.find((meter) => meter.id === "suspicion")?.band ?? "quiet";
+    const readinessLabel = gearScore >= this.selectedRaidDefinition.recommendedGearScore ? "Ready" : "Review gear";
+    const routeLine = mission.routeTargetLabel ?? "Track objective from tactical map";
+    const operationLine = `${campaign.actTitle} // ${campaign.activeOperation.title}`;
+    // Phase 13.8E reference target: reference-game-sequence.png panel 2, true habitat command deck.
     this.menuContent.innerHTML = `
-      <div class="hq-screen hq-command-deck">
-        <header class="hq-command-topbar">
-          <div class="hq-brand-lockup">
-            <span>Lunar Habitat</span>
+      <div class="habitat-hub-screen" aria-label="DARK CRATERS Habitat Hub">
+        <header class="habitat-hub-chrome">
+          <div class="habitat-hub-brand">
+            <span>Lunar Habitat 07</span>
             <strong>${themeConfig.brand.title}</strong>
           </div>
-          <nav class="hq-primary-nav" aria-label="Habitat navigation">
-            ${navTabs}
-          </nav>
-          <div class="hq-utility-cluster">
-            <span>Cr ${credits}</span>
-            <span>Scrap ${scrap}</span>
-            <span>He-3 ${rareCores}</span>
-            <span>Lv ${level}</span>
-            <span>Rep ${this.reputation.value}</span>
+          <div class="habitat-hub-status-strip" aria-label="Habitat resources">
+            <span>CR <strong>${credits}</strong></span>
+            <span>SCRAP <strong>${scrap}</strong></span>
+            <span>H3 <strong>${rareCores}</strong></span>
+            <span>LV <strong>${level}</strong></span>
+            <span>REP <strong>${this.reputation.value}</strong></span>
             <span>${this.multiplayerClient.snapshot.status}</span>
             <button type="button" data-action="settings">Settings</button>
           </div>
         </header>
-        <section class="hq-context-panel">
-          <span>Command Feed</span>
-          <strong>${campaign.actTitle} // ${campaign.activeOperation.title}</strong>
-          <p>${commandFeedSummary}. ${nextActionSummary}. ${this.environmentState.label} queued.</p>
-          <div>
-            <span>XP</span><strong>${totalXp}</strong>
-            <span>Faction Tags</span><strong>${dogTags}</strong>
-            <span>Evidence</span><strong>${campaign.evidence.discoveredCount}/${campaign.evidence.totalCount}</strong>
-            <span>Truth</span><strong>${campaign.meters.find((meter) => meter.id === "truth")?.band ?? "none logged"}</strong>
-            <span>Multiplayer</span><strong>${this.renderMultiplayerStatusLine()}</strong>
-          </div>
-        </section>
-        <section class="hq-runner-stage">
-          <div class="hq-stage-ring"></div>
-          ${this.renderHQPlayerPreview()}
-          <div class="hq-stage-launch">
-            <span>Crater Run Access</span>
-            <strong>${this.selectedRaidDefinition.name}</strong>
-            <button type="button" class="hq-deploy-button" data-action="start">Review Assignment</button>
-            <button type="button" class="hq-secondary-deploy" data-action="raid-select">Change Operation</button>
-          </div>
-          <div class="hq-runner-summary">
-            <span>Current Runner</span>
-            <strong>${this.classManager.selectedClass.displayName}</strong>
-            <div>
-              <span>Outfit</span><strong>${this.cosmeticManager.getEquippedName("outfit")}</strong>
-              <span>Primary</span>${primaryWeaponMarkup}
-              <span>Sidearm</span><button type="button" class="hq-inline-link" data-action="hq-inspect-sidearm">${sidearmName}</button>
-              <span>EVA Pack</span><strong>${this.loadoutManager.raidBagUsedSlots}/${this.loadoutManager.raidBagCapacity} ready</strong>
+        <main class="habitat-hub-stage">
+          <aside class="habitat-hub-left-rail" aria-label="Operator summary">
+            <section class="habitat-hub-operator-card">
+              <span>Crater Runner</span>
+              <strong>${this.classManager.selectedClass.displayName}</strong>
+              <small>${this.classManager.selectedClass.roleLabel}</small>
+            </section>
+            <section class="habitat-hub-operator-grid">
+              <div><span>Outfit</span><strong>${this.cosmeticManager.getEquippedName("outfit")}</strong></div>
+              <div><span>Primary</span>${primaryWeaponMarkup}</div>
+              <div><span>Sidearm</span><button type="button" class="hq-inline-link" data-action="hq-inspect-sidearm">${sidearmName}</button></div>
+              <div><span>EVA Pack</span><strong>${this.loadoutManager.raidBagUsedSlots}/${this.loadoutManager.raidBagCapacity}</strong></div>
+            </section>
+            <section class="habitat-hub-signal-card">
+              <span>Campaign Operation</span>
+              <strong>${operationLine}</strong>
+              <div>
+                <span>Evidence</span><b>${campaign.evidence.discoveredCount}/${campaign.evidence.totalCount}</b>
+                <span>Truth</span><b>${truthSignal}</b>
+                <span>Suspicion</span><b>${suspicionSignal}</b>
+                <span>Link</span><b>${this.renderMultiplayerStatusLine()}</b>
+              </div>
+            </section>
+          </aside>
+          <section class="habitat-hub-environment" aria-label="Habitat command deck">
+            <div class="habitat-hub-backdrop" aria-hidden="true">
+              <i class="habitat-hub-depth-layer layer-a"></i>
+              <i class="habitat-hub-depth-layer layer-b"></i>
+              <i class="habitat-hub-depth-layer layer-c"></i>
+              <i class="habitat-hub-light-cone"></i>
+              <i class="habitat-hub-floor"></i>
+              <i class="habitat-hub-console-glow"></i>
             </div>
-          </div>
-        </section>
-        <section class="hq-deploy-panel">
-          <span>TYCHOSTAR FIELD ORDER</span>
-          <strong>${mission.title}</strong>
-          <p>${mission.briefing} ${contractAlignmentLine}.</p>
-          <div>
-            <span>Operation</span><strong>${campaign.activeOperation.title}</strong>
-            <span>Primary</span><strong>${mission.primaryObjective}</strong>
-            <span>Step</span><strong>${mission.currentStep}</strong>
-            <span>Risk</span><strong>${mission.risk}</strong>
-            <span>Route</span><strong>${mission.recommendedRoute}</strong>
-            <span>Gear</span><strong>${gearScore} / ${this.selectedRaidDefinition.recommendedGearScore} ${loadoutReady}</strong>
-            <span>Ship</span><strong>${this.shipState.statusLabel}</strong>
-            <span>Objective</span><strong>${activeContractLabel}</strong>
-            <span>Evidence</span><strong>${evidenceContractLine}</strong>
-          </div>
-          <button type="button" class="hq-secondary-deploy" data-action="multiplayer-start">Deploy Multiplayer</button>
-        </section>
+            <div class="habitat-hub-runner" aria-label="Runner in habitat bay">
+              ${this.renderHQPlayerPreview()}
+            </div>
+            <section class="habitat-hub-console" aria-label="Mission console">
+              <span>Mission Console</span>
+              <strong>${this.selectedRaidDefinition.name}</strong>
+              <p>${campaign.activeOperation.title} // ${mission.familyName}</p>
+              <div>
+                <span>Gear <b>${gearScore}/${this.selectedRaidDefinition.recommendedGearScore}</b></span>
+                <span class="${readinessLabel === "Ready" ? "ready" : "warning"}">${readinessLabel}</span>
+              </div>
+              <footer>
+                <button type="button" class="habitat-hub-primary-action" data-action="start">Review Assignment</button>
+                <button type="button" data-action="raid-select">Change Operation</button>
+              </footer>
+            </section>
+          </section>
+          <aside class="habitat-hub-field-order" aria-label="Field order">
+            <span>TYCHOSTAR Field Order</span>
+            <strong>${mission.title}</strong>
+            <p>${mission.objectiveFlavor}</p>
+            <div class="habitat-hub-order-rows">
+              <div><span>Family</span><b>${mission.familyName}</b></div>
+              <div><span>Objective</span><b>${mission.objectiveFlavor}</b></div>
+              <div><span>Risk</span><b>${mission.risk}</b></div>
+              <div><span>Route</span><b>${routeLine}</b></div>
+              <div><span>Gear</span><b>${gearScore} / ${this.selectedRaidDefinition.recommendedGearScore} ${loadoutReady}</b></div>
+              <div><span>Contract</span><b>${activeContractLabel}</b></div>
+              <div><span>Signal</span><b>${evidenceContractLine}</b></div>
+            </div>
+            <button type="button" class="habitat-hub-multiplayer-action" data-action="multiplayer-start">Deploy Multiplayer</button>
+          </aside>
+        </main>
+        <nav class="habitat-hub-nav" aria-label="Habitat command navigation">
+          ${navTabs}
+        </nav>
       </div>
       <details class="debug-tools">
         <summary>Debug / Development Tools</summary>
@@ -5514,14 +5535,14 @@ export class App {
       </details>
     `;
     this.bindMenuButtons();
-    this.habitatPreview.mount(this.menuContent.querySelector<HTMLElement>(".hq-runner-preview-host"), {
+    this.habitatPreview.mount(this.menuContent.querySelector<HTMLElement>(".habitat-hub-runner .hq-runner-preview-host"), {
       variant: "habitat",
       framingMode: "fullBody",
       modelPaths: getClassSuitModelCandidates(this.classManager.snapshot.selectedClassId),
       classId: this.classManager.snapshot.selectedClassId,
-      targetHeight: 1.36,
-      verticalLift: 0.02,
-      cameraRadius: 5.35,
+      targetHeight: 1.28,
+      verticalLift: -0.02,
+      cameraRadius: 5.6,
       cameraTargetY: 0.7,
     });
   }
@@ -5539,20 +5560,14 @@ export class App {
           <span>Tier ${raid.tier} | ${raid.difficultyLabel}</span>
           <strong>${raid.name}</strong>
           <p>${raid.description}</p>
-          <div>
+          <div class="raid-card-metrics">
             <small>Time</small><b>${Math.round(raid.lengthSeconds / 60)}m</b>
             <small>Loot</small><b>${raid.lootQuality} (${raid.lootMultiplier.toFixed(2)}x)</b>
             <small>Threat</small><b>${raid.enemyDensityLabel}</b>
             <small>Extract</small><b>${raid.extractionRisk}</b>
-            <small>O2</small><b>${raid.oxygenPressure} (${raid.oxygenDrainMultiplier.toFixed(2)}x)</b>
-            <small>Radiation</small><b>${raid.radiationRisk}</b>
           </div>
           <small>Zone: ${raid.craterZone}</small>
-          <small>Best for: ${raid.bestFor}</small>
-          <small>Hazards: ${raid.environmentalHazards.join(" / ")}</small>
-          <em>${raid.modifiers.join(" / ")}</em>
           <small>${activeContract ? `Active contract: ${activeContract.title}` : `Primary order: ${mission.title}`}</small>
-          <small>Mission family: ${mission.familyName} | ${mission.soloSquad}</small>
           ${weak ? `<small class="raid-warning">Weak loadout: gear score ${gearScore}, recommended ${raid.recommendedGearScore}</small>` : ""}
           <button type="button" data-action="launch-raid-${raid.id}">Review Assignment</button>
         </article>
@@ -5602,7 +5617,7 @@ export class App {
     const conditionLabel = integrityPercent >= 80 ? "GOOD" : integrityPercent >= 55 ? "SERVICEABLE" : "COMPROMISED";
     const upgradeSlotsUsed = this.shipModuleManager.installedModules.filter((module) => module.tier > 0).length;
     const navTabs = [
-      ["PLAY", "menu"],
+      ["CRATER RUNS", "raid-select"],
       ["LOADOUT", "hq-loadout"],
       ["ARSENAL", "arsenal"],
       ["SHIP", "ship-systems"],
@@ -5650,6 +5665,7 @@ export class App {
       ["Extraction Speed", "+5%"],
       ["Fuel Efficiency", "+5%"],
     ].map(([label, value]) => `<div><span>${label}</span><strong>${value}</strong></div>`).join("");
+    // Phase 13.8C reference target: Kestrel-9 ship reference, left identity rail plus dominant ship overview.
     this.menuContent.innerHTML = `
       <div class="ship-dashboard-screen">
         <header class="ship-dashboard-topbar">
@@ -5724,12 +5740,12 @@ export class App {
           <b>Signal Interference Increases Extraction Risk</b>
         </section>
         <section class="ship-mission-panel">
-          <span>Next Mission</span>
-          <strong>${mission.title}</strong>
-          <div><span>Family</span><b>${mission.familyName}</b></div>
-          <div><span>Step</span><b>${mission.currentStep}</b></div>
-          <div><span>Risk</span><b>${mission.risk}</b></div>
-          <div><span>Route</span><b>${mission.recommendedRoute}</b></div>
+          <div class="ship-next-mission-copy">
+            <span>Next Mission</span>
+            <strong>${mission.title}</strong>
+            <p>${mission.familyName} / ${mission.objectiveFlavor}</p>
+            <small>${mission.risk}</small>
+          </div>
           <button type="button" data-action="start">Review Assignment</button>
         </section>
       </div>
@@ -5739,7 +5755,114 @@ export class App {
   }
 
   private showClassAssignmentMenu(): void {
-    this.showPreDeploymentClassMenu("assignment");
+    this.raidScreen = "class-assignment";
+    this.preDeploymentMode = "assignment";
+    this.menuContent.classList.remove("hq-command-content", "ship-dashboard-content", "arsenal-workbench-content");
+    this.menuContent.classList.add("class-deploy-content");
+    const selectedClassId = this.classManager.snapshot.selectedClassId;
+    const selectedClass = this.classManager.selectedClass;
+    const classMeta: Record<ClassId, { trait: string; strengths: readonly string[]; weaknesses: readonly string[]; loadout: string }> = {
+      surveyor: {
+        trait: "Deep Scan",
+        strengths: ["Route reading", "Signal awareness", "Objective finding"],
+        weaknesses: ["Light armor", "Weak breach response", "Needs careful spacing"],
+        loadout: "Scanner kit / survey sidearm",
+      },
+      salvager: {
+        trait: "Recovery Rigging",
+        strengths: ["Material recovery", "Cargo decisions", "Field containment"],
+        weaknesses: ["Slower under load", "Lower direct damage", "Risky retreats"],
+        loadout: "Cargo tools / utility pack",
+      },
+      security: {
+        trait: "Breach Protocol",
+        strengths: ["Weapon handling", "Protection", "Contact discipline"],
+        weaknesses: ["Louder movement", "Higher supply pressure", "Lower signal read"],
+        loadout: "Rifle kit / armor patch",
+      },
+      "systems-specialist": {
+        trait: "Field Systems",
+        strengths: ["Repairs", "Ship stabilization", "Emergency operation"],
+        weaknesses: ["Setup dependent", "Moderate combat", "Tool hungry"],
+        loadout: "Repair kit / systems tool",
+      },
+    };
+    const statBars: Array<[string, number]> = [
+      ["Navigation", selectedClass.futureSkillBranches.includes("crater-navigation") ? 82 : 48],
+      ["Recovery", selectedClass.futureSkillBranches.includes("field-recovery") ? 80 : 50],
+      ["Combat", selectedClass.id === "security" ? 84 : 52],
+      ["Systems", selectedClass.id === "systems-specialist" ? 86 : 48],
+      ["Lumen Read", selectedClass.futureSkillBranches.includes("lumen-signatures") ? 80 : 42],
+    ];
+    const classCards = classDefinitions.map((definition) => {
+      const meta = classMeta[definition.id];
+      const selected = definition.id === selectedClassId;
+      return `
+        <button
+          type="button"
+          class="class-selection-card ${selected ? "active" : ""}"
+          data-action="class-select-${definition.id}"
+          ${definition.unlocked ? "" : "disabled"}
+        >
+          <span>${definition.roleLabel}</span>
+          <strong>${definition.displayName}</strong>
+          <p>${definition.shortDescription}</p>
+          <div class="class-card-trait">
+            <small>Passive Trait</small>
+            <b>${meta.trait}</b>
+          </div>
+          <div class="class-card-columns">
+            <div><small>Strengths</small>${meta.strengths.map((item) => `<em>${item}</em>`).join("")}</div>
+            <div><small>Weaknesses</small>${meta.weaknesses.map((item) => `<em>${item}</em>`).join("")}</div>
+          </div>
+          <small>${meta.loadout}</small>
+          <b>${selected ? "Selected" : "Select Class"}</b>
+        </button>
+      `;
+    }).join("");
+    const statMarkup = statBars.map(([label, value]) => `
+      <div class="class-stat-row"><span>${label}</span><i><em style="width: ${value}%"></em></i></div>
+    `).join("");
+
+    // Phase 13.8C reference target: class selection reference, four large cards plus bottom overview strip.
+    this.menuContent.innerHTML = `
+      <div class="class-selection-screen">
+        <header class="class-selection-topbar">
+          <div>
+            <span>${themeConfig.brand.title}</span>
+            <strong>CLASS SELECTION</strong>
+          </div>
+          <div class="hq-resource-strip">
+            <span>Selected <strong>${selectedClass.displayName}</strong></span>
+            <span>Role <strong>${selectedClass.roleLabel}</strong></span>
+          </div>
+          <button type="button" data-action="menu">Back</button>
+        </header>
+        <section class="class-selection-grid">${classCards}</section>
+        <footer class="class-selection-footer">
+          <section>
+            <span>Class Overview</span>
+            <p>${selectedClass.startingTendency}</p>
+          </section>
+          <section class="class-stat-panel">
+            <span>Assignment Profile</span>
+            ${statMarkup}
+          </section>
+          <section>
+            <span>Starting Loadout</span>
+            <strong>${classMeta[selectedClass.id].loadout}</strong>
+          </section>
+          <button type="button" data-action="class-confirm-assignment">Confirm Selection</button>
+        </footer>
+      </div>
+      <div class="main-menu-actions">
+        <button type="button" data-action="start">Review Assignment</button>
+        <button type="button" data-action="loadout">Loadout</button>
+        <button type="button" data-action="ship-systems">Ship</button>
+        <button type="button" data-action="menu">Back to Habitat</button>
+      </div>
+    `;
+    this.bindMenuButtons();
   }
 
   private showPreDeploymentClassMenu(mode: "assignment" | "solo" | "multiplayer" = "assignment"): void {
@@ -5747,7 +5870,6 @@ export class App {
     this.preDeploymentMode = mode;
     this.menuContent.classList.remove("hq-command-content");
     this.menuContent.classList.add("class-deploy-content");
-    const selectedClassId = this.classManager.snapshot.selectedClassId;
     const selectedClass = this.classManager.selectedClass;
     const gearScore = this.getGearScore();
     const primaryWeapon = this.loadout.snapshot.primaryWeaponId;
@@ -5757,19 +5879,8 @@ export class App {
     const deployAction = mode === "multiplayer" ? "class-deploy-multiplayer" : "class-deploy-solo";
     const deployLabel = mode === "multiplayer" ? "Deploy Multiplayer" : "Begin Descent";
     const mission = this.getMissionPresentation();
-    const cards = classDefinitions.map((definition) => `
-      <button
-        type="button"
-        class="class-choice ${definition.id === selectedClassId ? "active" : ""}"
-        data-action="class-select-${definition.id}"
-        ${definition.unlocked ? "" : "disabled"}
-      >
-        <span>${definition.roleLabel}</span>
-        <strong>${definition.displayName}</strong>
-        <small>${definition.id === selectedClassId ? "Selected" : "Available"}</small>
-      </button>
-    `).join("");
 
+    // Phase 13.8C reference target: projected gameplay sequence panels 4/5 bridge, mission confirmation before descent.
     this.menuContent.innerHTML = `
       <div class="class-deploy-screen">
         <header class="class-deploy-topbar">
@@ -5790,6 +5901,7 @@ export class App {
           <div>
             <span>Primary</span><b>${mission.primaryObjective}</b>
             <span>Step</span><b>${mission.currentStep}</b>
+            <span>Objective</span><b>${mission.objectiveFlavor}</b>
             <span>Risk</span><b>${mission.risk}</b>
             <span>Route</span><b>${mission.recommendedRoute}</b>
             <span>Gear</span><b>${gearScore} / ${this.selectedRaidDefinition.recommendedGearScore}</b>
@@ -5816,15 +5928,12 @@ export class App {
             <span>Sidearm</span><b>${sidearmLabel}</b>
             <span>EVA Pack</span><b>${this.loadoutManager.raidBagUsedSlots}/${this.loadoutManager.raidBagCapacity}</b>
             <span>Route</span><b>${this.selectedRaidDefinition.craterZone}</b>
+            <span>Win</span><b>${mission.winCondition}</b>
           </div>
         </section>
-        <nav class="class-choice-rail" aria-label="Class choices">
-          ${cards}
-        </nav>
         <section class="class-action-rail">
           <button type="button" data-action="menu">Return to Habitat</button>
           <button type="button" data-action="raid-select">Change Operation</button>
-          <button type="button" data-action="hq-style">Customize Suit</button>
           <button type="button" data-action="class-review-loadout">Review Loadout</button>
           <button type="button" class="class-primary-action" data-action="${deployAction}">${deployLabel}</button>
         </section>
@@ -5847,8 +5956,9 @@ export class App {
     const selectedClassId = this.classManager.snapshot.selectedClassId;
     const branchCards = skillBranches.map((branch) => this.renderSkillBranch(branch.id, selectedClassId)).join("");
 
+    // Phase 13.8C reference target: skill tree reference, lane-based matrix with selected detail rail.
     this.menuContent.innerHTML = `
-      <div class="inspect-screen progression-screen">
+      <div class="inspect-screen progression-screen skill-matrix-screen">
         <header class="inspect-header">
           <div>
             <span>Progression Matrix</span>
@@ -5863,6 +5973,16 @@ export class App {
           <button type="button" data-action="menu">Back</button>
         </header>
         <section class="skill-branch-grid">${branchCards}</section>
+        <aside class="skill-detail-rail">
+          <span>Selected Calibration</span>
+          <strong>${this.classManager.selectedClass.displayName}</strong>
+          <p>${this.classManager.selectedClass.startingTendency}</p>
+          <div>
+            <span>Points</span><b>${this.skillManager.snapshot.availableSkillPoints}</b>
+            <span>Acquired</span><b>${this.skillManager.acquiredCount}</b>
+            <span>Prototype</span><b>No stat mutation</b>
+          </div>
+        </aside>
       </div>
       <div class="main-menu-actions">
         <button type="button" data-action="class-assignment">Class Assignment</button>
@@ -5882,12 +6002,14 @@ export class App {
     const nodes = skillNodes
       .filter((node) => node.branchId === branchId)
       .sort((left, right) => left.tier - right.tier)
+      .slice(0, 3)
       .map((node) => {
         const acquired = this.skillManager.isAcquired(node.id);
         const available = this.skillManager.canAcquire(node.id);
         const affinity = node.classAffinity === selectedClassId;
         return `
           <article class="skill-node ${acquired ? "acquired" : available ? "available" : "locked"} ${affinity ? "affinity" : ""}">
+            <i>${node.label.slice(0, 2).toUpperCase()}</i>
             <span>Tier ${node.tier}${affinity ? " | assignment affinity" : ""}</span>
             <strong>${node.label}</strong>
             <p>${node.description}</p>
@@ -6585,8 +6707,6 @@ export class App {
 
   private showIntelMenu(): void {
     this.raidScreen = "stash";
-    const objective = this.objectiveState;
-    const environment = this.environmentState;
     const activeExtracts = this.extractionController.activeZoneIds.length || this.baseExtractionZoneIds.length;
     const contractState = this.contractManager.snapshot;
     const activeContract = contractState.active;
@@ -6614,24 +6734,19 @@ export class App {
       const faction = this.getContractFactionMeta(contract);
       const aligned = this.isContractAlignedWithCampaign(contract);
       const contractFamily = missionFamilyById[getMissionFamilyForContract(contract)].name;
+      const objectiveFlavor = getMissionObjectiveFlavorForContract(contract);
       const evidenceVariant = isEvidenceContractVariant(contract) ? contract.evidenceVariant : null;
       return `
         <section class="intel-card contract-card ${active ? "active" : ""} ${aligned ? "campaign-aligned" : ""} ${evidenceVariant ? "evidence-variant" : ""}" data-contract-type="${contract.type}" style="--faction-accent: ${faction.accent}">
           <span>${faction.name}</span>
           <strong>${contract.title}</strong>
           <p>${contract.description}</p>
-          <small>${faction.motto}</small>
           ${evidenceVariant ? `<small>Evidence Link: ${evidenceVariant.codexHook}</small>` : ""}
-          ${evidenceVariant ? `<small>Operation Alignment: ${evidenceVariant.operationAffinity.map((id) => campaignOperationById[id].title).join(" / ")}</small>` : ""}
-          ${evidenceVariant ? `<small>Campaign Hint: ${evidenceVariant.campaignMeterHint}</small>` : ""}
-          ${evidenceVariant ? `<small>Field Note: ${campaign.evidence.hiddenImplicationUnlocked ? evidenceVariant.hiddenCopy : evidenceVariant.corporateCopy}</small>` : ""}
-          ${evidenceVariant ? `<small>Loadout: ${evidenceVariant.recommendedLoadoutHint}</small>` : ""}
-          <small>${aligned ? `This sortie advances ${campaign.activeOperation.title}.` : `Current contract supports ${contractFamily}, not selected operation.`}</small>
-          <small>Recommended family: ${campaign.activeOperation.families}</small>
           <small>Zone: ${contract.targetPoi} | Tier: ${contract.recommendedTier ?? "Any"} | Risk: ${contract.risk}</small>
-          <small>Objective: ${describeContractTarget(contract)} | ${contract.requiresExtraction ? "Extraction required" : "Field complete"}</small>
-          <small>Rewards: ${this.formatContractReward(contract.reward)}</small>
-          <small>Rep: ${this.formatContractVendorRep(contract.reward.vendorReputation)} | Tokens: ${contract.reward.contractPoints ?? 0}/${contract.reward.reputationTokens ?? 0}</small>
+          <small>Objective: ${objectiveFlavor.objectiveLabel} | Marker: ${objectiveFlavor.markerLabel}</small>
+          <small>Win: ${objectiveFlavor.winCondition} | ${describeContractTarget(contract)} | ${contract.requiresExtraction ? "Extraction required" : "Field complete"}</small>
+          <small>Rep: ${this.formatContractVendorRep(contract.reward.vendorReputation)}</small>
+          <small>${aligned ? `Aligned: ${campaign.activeOperation.title}` : `Family: ${contractFamily}`}</small>
           <button type="button" data-action="contract-activate-${contract.id}" ${active ? "disabled" : ""}>${active ? "Active" : "Activate Contract"}</button>
         </section>
       `;
@@ -6641,6 +6756,7 @@ export class App {
           <span>${this.getContractFactionMeta(activeContract.definition).name}</span>
           <strong>${activeContract.definition.title}</strong>
           <p>${activeContract.status === "failed" ? activeContract.failedReason ?? "Failed" : activeContract.definition.description}</p>
+          <small>Objective ${getMissionObjectiveFlavorForContract(activeContract.definition).objectiveLabel} | ${getMissionObjectiveFlavorForContract(activeContract.definition).winCondition}</small>
           <small>Zone ${activeContract.definition.targetPoi} | Tier ${activeContract.definition.recommendedTier ?? "Any"} | Risk ${activeContract.definition.risk}</small>
           <small>${activeContract.status === "ready-to-claim" ? "READY TO SUBMIT" : `Progress ${activeContract.progress}/${activeContract.goal}${activeContract.extractToClaim ? " | Extract to submit" : ""}`}</small>
           <small>${this.formatContractReward(activeContract.definition.reward)}</small>
@@ -6661,13 +6777,8 @@ export class App {
           <strong>${operation.title}</strong>
           <p>${operation.subtitle}</p>
           <small>Family: ${operation.families}</small>
-          <small>Corporate Order: ${operation.corporateObjective}</small>
           <small>${operation.hiddenTruthVisible ? `Truth Signal: ${operation.hiddenTruthHint}` : "Truth Signal: restricted pending field evidence."}</small>
-          <small>Unlock: ${operation.unlockRequirement}</small>
-          <small>Progress: ${operation.progressRequirement}</small>
           <small>Related Evidence: ${relatedEvidenceCount} logged</small>
-          <small>Recommendation: ${operation.recommendationReason}</small>
-          <small>${operation.reason}</small>
           <button type="button" data-action="campaign-select-${operation.id}" ${operation.selectable ? "" : "disabled"}>${operation.buttonLabel}</button>
         </section>
       `;
@@ -6710,81 +6821,50 @@ export class App {
             <span>Rep Tokens</span><strong>${contractState.reputationTokens}</strong>
           </div>
         </header>
-        <section class="intel-card primary campaign-act-card">
-          <span>Current Campaign Act</span>
-          <strong>ACT I - ${campaign.actTitle}</strong>
-          <div class="campaign-briefing-columns">
-            <p><b>Official Story</b>${campaign.corporateFraming}</p>
-            <p><b>Field Contradiction</b>${campaign.hiddenTruthFraming}</p>
-          </div>
-          <small>${campaign.activeOperation.readiness}</small>
-        </section>
-        <section class="intel-card primary campaign-active-card">
-          <span>Active Operation</span>
-          <strong>${campaign.activeOperation.title}</strong>
-          <div class="campaign-operation-brief">
-            <p><b>Corporate Order</b>${campaign.activeOperation.corporateObjective}</p>
-            <p><b>Field Lead</b>${campaign.activeOperation.hiddenTruthHint}</p>
-          </div>
-          <div class="campaign-status-strip">
-            <span>Status <strong>${campaign.activeOperation.statusLabel}</strong></span>
-            <span>Recommended <strong>${campaign.recommendedOperation.title}</strong></span>
-            <span>Family <strong>${campaign.activeOperation.families}</strong></span>
-          </div>
-          <small>${activeContract ? this.getCampaignContractAlignmentLine(activeContract.definition) : "No active contract selected for this lead."}</small>
-        </section>
-        <section class="intel-card campaign-meter-card">
-          <span>Progress Signals</span>
-          <strong>Compliance / Truth / Suspicion</strong>
-          <div class="campaign-meter-stack">${meterCards}</div>
-          <p>Recent Raid: ${campaign.recentRaidLine}</p>
-        </section>
-        <section class="intel-card campaign-evidence-card">
-          <span>Field Evidence</span>
-          <strong>${campaign.evidence.discoveredCount} / ${campaign.evidence.totalCount} logged</strong>
-          <p>${campaign.evidence.latest ? `Latest Evidence: ${campaign.evidence.latest.title}` : "Latest Evidence: none logged"}</p>
-          ${evidenceRows}
-        </section>
-        <section class="intel-card campaign-next-card">
-          <span>Next Actions</span>
-          <strong>${campaign.recommendedOperation.title}</strong>
-          <ul>${nextActionItems}</ul>
-        </section>
-        ${codexMarkup}
-        <section class="campaign-operation-grid">
-          ${operationCards}
-        </section>
-        <nav class="contract-filter-tabs">${filterTabs}</nav>
-        <section class="intel-card primary">
-          <span>Current Objective Pool</span>
-          <strong>${objective.title}</strong>
-          <p>${objective.description}</p>
-          <small>${objective.completed ? "Completed in last Crater Run state" : "Optional objective generated when a Crater Run starts"}</small>
-        </section>
-        <section class="intel-card">
-          <span>Crater Conditions</span>
-          <strong>${environment.label}</strong>
-          <p>Visibility multiplier ${environment.gameplay.enemyVisionMultiplier.toFixed(2)}. Rare loot multiplier ${environment.gameplay.rareLootChanceMultiplier.toFixed(2)}.</p>
-        </section>
-        <section class="intel-card">
-          <span>Crater Pressure</span>
-          <strong>${Math.round(this.selectedRaidDefinition.lengthSeconds / 60)} Minute ${this.selectedRaidDefinition.name}</strong>
-          <p>${this.selectedRaidDefinition.difficultyLabel} threat. Oxygen pressure, radiation risk, Lumen presence, loot tables, and contract payout scale from the selected crater tier.</p>
-        </section>
-        ${(this.contractUiFilter === "active" || this.contractUiFilter === "ready" || this.contractUiFilter === "all") ? activeContractPanel : ""}
-        ${this.contractUiFilter === "history" ? "" : contractCards}
-        <section class="intel-card">
-          <span>${this.contractUiFilter === "history" ? "Completed History" : "Contract Bank"}</span>
-          <strong>${contractState.contractPoints} Contract Points | ${contractState.reputationTokens} Rep Tokens</strong>
-          <p>Higher-tier submitted contracts build long-term trader leverage and unlock future recipe/vendor tracks.</p>
-          ${historyRows}
-        </section>
-        <section class="intel-card">
-          <span>Manual Refresh</span>
-          <strong>New Intel Leads</strong>
-          <p>Refresh available contracts if the board is offering the wrong kind of trouble.</p>
-          <button type="button" data-action="contract-refresh">Refresh Contracts</button>
-        </section>
+        <aside class="campaign-left-rail">
+          <nav class="contract-filter-tabs">${filterTabs}</nav>
+          <section class="campaign-operation-grid">${operationCards}</section>
+          ${(this.contractUiFilter === "active" || this.contractUiFilter === "ready" || this.contractUiFilter === "all") ? activeContractPanel : ""}
+          ${this.contractUiFilter === "history" ? "" : contractCards}
+        </aside>
+        <main class="campaign-center-dossier">
+          <section class="intel-card primary campaign-active-card">
+            <span>Active Operation</span>
+            <strong>${campaign.activeOperation.title}</strong>
+            <div class="campaign-status-strip">
+              <span>Status <strong>${campaign.activeOperation.statusLabel}</strong></span>
+              <span>Recommended <strong>${campaign.recommendedOperation.title}</strong></span>
+              <span>Family <strong>${campaign.activeOperation.families}</strong></span>
+            </div>
+            <p>${campaign.activeOperation.hiddenTruthHint}</p>
+            <small>${activeContract ? this.getCampaignContractAlignmentLine(activeContract.definition) : campaign.activeOperation.readiness}</small>
+          </section>
+          ${codexMarkup}
+        </main>
+        <aside class="campaign-right-rail">
+          <section class="intel-card campaign-meter-card">
+            <span>Progress Signals</span>
+            <strong>Compliance / Truth / Suspicion</strong>
+            <div class="campaign-meter-stack">${meterCards}</div>
+          </section>
+          <section class="intel-card campaign-evidence-card">
+            <span>Field Evidence</span>
+            <strong>${campaign.evidence.discoveredCount} / ${campaign.evidence.totalCount} logged</strong>
+            <p>${campaign.evidence.latest ? `Latest Evidence: ${campaign.evidence.latest.title}` : "Latest Evidence: none logged"}</p>
+            ${evidenceRows}
+          </section>
+          <section class="intel-card campaign-next-card">
+            <span>Next Actions</span>
+            <strong>${campaign.recommendedOperation.title}</strong>
+            <ul>${nextActionItems}</ul>
+          </section>
+          <section class="intel-card">
+            <span>${this.contractUiFilter === "history" ? "Completed History" : "Contract Bank"}</span>
+            <strong>${contractState.contractPoints} CP | ${contractState.reputationTokens} Rep</strong>
+            ${historyRows}
+            <button type="button" data-action="contract-refresh">Refresh Contracts</button>
+          </section>
+        </aside>
       </div>
       <div class="main-menu-actions">
         <button type="button" data-action="start">Crater Runs</button>
@@ -6808,9 +6888,9 @@ export class App {
       this.menuContent.innerHTML = `
         ${body}
         <div class="main-menu-actions">
-          <button type="button" data-action="start">Crater Runs</button>
-          <button type="button" data-action="workbench">Fabrication Bench</button>
-          <button type="button" data-action="menu">Back</button>
+          <button type="button" data-action="start">Review Assignment</button>
+          <button type="button" data-action="arsenal">Weapon Bench</button>
+          <button type="button" data-action="menu">Back to Habitat</button>
         </div>
       `;
     } catch (error) {
@@ -6928,7 +7008,7 @@ export class App {
             <button type="button" data-action="stash">Stash</button>
             <button type="button" data-action="loadout-stash-compat-open">Compatibility</button>
             <button type="button" data-action="class-assignment">Class</button>
-            <button type="button" class="class-primary-action" data-action="start">Deploy</button>
+            <button type="button" class="class-primary-action" data-action="start">Review Assignment</button>
           </footer>
         </section>
       </div>
@@ -6983,7 +7063,7 @@ export class App {
       .join("");
 
     return `
-      <div class="loadout-screen cosmetics-loadout-screen">
+      <div class="loadout-screen cosmetics-loadout-screen hq-dashboard-shell">
         ${this.renderLoadoutHero()}
         ${this.renderCosmeticRunnerPanel()}
         <section class="equipped-gear-panel cosmetic-equipped-panel">
@@ -7744,6 +7824,9 @@ export class App {
       ["H3", this.getStashQuantity("helium-drill-core") + this.getStashQuantity("rare-core")],
     ].map(([label, value]) => `<span>${label}<strong>${Number(value).toLocaleString()}</strong></span>`).join("");
 
+    const catalogCards = this.renderArsenalWeaponCatalogCards(weaponId);
+
+    // Phase 13.8C reference target: projected starting weapon models reference, catalog-first weapon screen.
     this.menuContent.innerHTML = `
       <div class="arsenal-workbench-screen hq-dashboard-shell" data-scroll-view="arsenal-main" data-scroll-key="arsenal-main" style="--rarity-color: ${rarityColor}">
         <header class="arsenal-workbench-top hq-panel-header">
@@ -7755,15 +7838,23 @@ export class App {
           <div class="hq-resource-strip arsenal-resource-strip">${resourceRows}</div>
           <button type="button" data-action="loadout">Back to Loadout</button>
         </header>
-        <section class="arsenal-list-panel hq-panel">
+        <aside class="arsenal-catalog-rail hq-panel">
+          <span>Weapon Catalog</span>
+          <button type="button" class="active">All Weapons</button>
+          <button type="button">Primary</button>
+          <button type="button">Sidearm</button>
+          <button type="button">Heavy / Utility</button>
+          <button type="button">Attachments</button>
+        </aside>
+        <section class="arsenal-list-panel arsenal-catalog-grid-panel hq-panel">
           <div class="hq-panel-header compact">
             <div>
-              <span>Owned Weapons</span>
-              <h3>Collection</h3>
+              <span>Projected Weapon Models</span>
+              <h3>Catalog</h3>
             </div>
-            <small>Prototype entries are inspect-only references.</small>
+            <small>Owned weapons and prototype references share one catalog view.</small>
           </div>
-          <div class="arsenal-weapon-list" data-scroll-key="arsenal-weapon-list">${this.renderArsenalWeaponRows(weaponId)}</div>
+          <div class="arsenal-weapon-catalog" data-scroll-key="arsenal-weapon-list">${catalogCards}</div>
         </section>
         <section class="arsenal-preview-panel hq-panel hq-preview-panel">
           <div class="hq-panel-header compact">
@@ -7906,24 +7997,6 @@ export class App {
       knife: "Mining Cutter Retrofit",
     };
     return makers[weaponId] ?? "Lunar Field Pattern";
-  }
-
-  private renderArsenalWeaponRows(selectedWeaponId: WeaponId): string {
-    const weaponIds = Object.keys(weaponDefinitions) as WeaponId[];
-    return weaponIds.map((weaponId) => {
-      const definition = getItemDefinition(weaponLootTypes[weaponId]);
-      const color = colorToCss(themeConfig.rarityColors[definition.rarity]);
-      const equipped = this.getEquippedWeaponSlot(weaponId);
-      const owned = this.weaponExistsForInspect(weaponId);
-      const durability = this.weaponController.getDurabilityState(weaponId);
-      return `
-        <button type="button" class="arsenal-weapon-row hq-list-row ${weaponId === selectedWeaponId ? "selected" : ""} ${owned ? "" : "prototype"}" data-action="inspect-select-${weaponId}" style="--rarity-color: ${color}">
-          <strong>${this.getWeaponDisplayName(weaponId)}</strong>
-          <span>${this.getWeaponRoleLabel(weaponId)}</span>
-          <small>${equipped ? `${this.capitalize(equipped)} equipped` : owned ? `${this.getStashQuantity(weaponLootTypes[weaponId])} in stash` : "Prototype reference"} | ${Math.round(durability.durability)}%</small>
-        </button>
-      `;
-    }).join("");
   }
 
   private renderWeaponSchematicFallback(weapon: RuntimeWeaponDefinition): string {
@@ -8440,6 +8513,27 @@ export class App {
       </div>
     `;
     this.bindMenuButtons();
+  }
+
+  private renderArsenalWeaponCatalogCards(selectedWeaponId: WeaponId): string {
+    const weaponIds = Object.keys(weaponDefinitions) as WeaponId[];
+    return weaponIds.map((weaponId, index) => {
+      const definition = getItemDefinition(weaponLootTypes[weaponId]);
+      const color = colorToCss(themeConfig.rarityColors[definition.rarity]);
+      const equipped = this.getEquippedWeaponSlot(weaponId);
+      const owned = this.weaponExistsForInspect(weaponId);
+      const durability = this.weaponController.getDurabilityState(weaponId);
+      const weapon = buildRuntimeWeaponDefinition(weaponId, this.loadout.snapshot.attachments);
+      return `
+        <button type="button" class="arsenal-catalog-card ${weaponId === selectedWeaponId ? "selected" : ""} ${owned ? "" : "prototype"}" data-action="inspect-select-${weaponId}" style="--rarity-color: ${color}">
+          <span>${String(index + 1).padStart(2, "0")}</span>
+          <strong>${this.getWeaponDisplayName(weaponId)}</strong>
+          <small>${this.getWeaponRoleLabel(weaponId)}</small>
+          <div class="catalog-weapon-art">${this.renderWeaponSchematicFallback(weapon)}</div>
+          <em>${equipped ? `${this.capitalize(equipped)} equipped` : owned ? `${this.getStashQuantity(weaponLootTypes[weaponId])} in stash` : "Prototype reference"} | ${Math.round(durability.durability)}%</em>
+        </button>
+      `;
+    }).join("");
   }
 
   private refreshWorkbenchMenuPreservingState(): void {
@@ -9259,7 +9353,11 @@ export class App {
       this.combatHud.showLootNotification(this.classManager.select(classId));
       this.cosmeticManager.setActiveClass(classId);
       this.applyCurrentCosmetics();
-      this.showPreDeploymentClassMenu(this.preDeploymentMode);
+      if (this.menuContent.querySelector(".class-selection-screen")) {
+        this.showClassAssignmentMenu();
+      } else {
+        this.showPreDeploymentClassMenu(this.preDeploymentMode);
+      }
     } else if (action === "class-confirm-assignment") {
       this.combatHud.showLootNotification(`${this.classManager.selectedClass.displayName} assignment confirmed`);
       this.showMainMenu();

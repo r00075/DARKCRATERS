@@ -79,10 +79,12 @@ async function bootHome(page) {
   const playButton = page.getByRole("button", { name: /^play$/i });
   if (await playButton.isVisible({ timeout: 2500 }).catch(() => false)) {
     await playButton.click();
+    await page.waitForTimeout(3000);
     await settle(page);
   }
 
-  await page.locator(".habitat-hub-screen, .hq-command-deck, .main-menu-panel").first().waitFor({ state: "visible", timeout: 15000 });
+  await page.getByText("HABITAT TRANSFER").waitFor({ state: "hidden", timeout: 15000 }).catch(() => {});
+  await page.locator(".habitat-hub-screen, .hq-command-deck").first().waitFor({ state: "visible", timeout: 15000 });
 }
 
 async function ensureHome(page) {

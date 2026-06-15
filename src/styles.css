@@ -9629,3 +9629,3743 @@ button:disabled {
       "secondary";
   }
 }
+
+/* Phase 13.8 gear bay direction: Loadout, Cosmetics, Arsenal, and Workbench use one focused object stage with compact rails. */
+.main-menu-content:has(.loadout-locker-screen),
+.main-menu-content:has(.cosmetics-loadout-screen),
+.main-menu-content:has(.arsenal-workbench-screen) {
+  width: min(100vw, 1480px);
+  max-width: calc(100vw - 18px);
+  max-height: calc(100vh - 18px);
+  place-items: stretch;
+  overflow: hidden;
+}
+
+.loadout-locker-screen,
+.cosmetics-loadout-screen,
+.arsenal-workbench-screen {
+  width: min(1480px, calc(100vw - 18px));
+  max-width: calc(100vw - 18px);
+  height: min(850px, calc(100vh - 52px));
+  max-height: calc(100vh - 52px);
+  margin: 0 auto;
+  border: 1px solid rgba(103, 232, 249, 0.12);
+  border-radius: 8px;
+  background:
+    radial-gradient(ellipse at 50% 20%, rgba(65, 217, 255, 0.09), transparent 42%),
+    linear-gradient(100deg, rgba(2, 6, 12, 0.96), rgba(7, 14, 24, 0.84) 46%, rgba(2, 6, 12, 0.96));
+  box-shadow: inset 0 0 0 1px rgba(230, 237, 243, 0.025), 0 28px 90px rgba(0, 0, 0, 0.44);
+  overflow: hidden;
+}
+
+.loadout-locker-top,
+.arsenal-workbench-top,
+.loadout-hero {
+  min-height: 58px;
+  padding: 10px 14px;
+  border: 0;
+  border-bottom: 1px solid rgba(103, 232, 249, 0.12);
+  background: linear-gradient(90deg, rgba(2, 6, 12, 0.72), rgba(7, 14, 24, 0.38), rgba(2, 6, 12, 0.72));
+}
+
+.loadout-locker-top h2,
+.arsenal-workbench-top h2,
+.loadout-hero h2 {
+  margin: 0;
+  font-size: clamp(22px, 2vw, 34px);
+  letter-spacing: 0.04em;
+}
+
+.loadout-locker-top p,
+.arsenal-workbench-top p,
+.loadout-hero p,
+.loadout-action-rail p,
+.arsenal-action-rail p,
+.cosmetic-rules-panel p {
+  display: -webkit-box;
+  max-width: none;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.loadout-mode-tabs {
+  justify-content: center;
+  border: 1px solid rgba(103, 232, 249, 0.12);
+  border-radius: 999px;
+  padding: 4px;
+  background: rgba(2, 6, 12, 0.46);
+}
+
+.loadout-mode-tabs button {
+  min-height: 30px;
+  border-radius: 999px;
+  padding: 6px 12px;
+}
+
+.loadout-locker-screen {
+  grid-template:
+    "top top top" auto
+    "slots runner details" minmax(0, 1fr)
+    "eva runner rail" minmax(126px, 0.22fr) / minmax(250px, 0.68fr) minmax(470px, 1.46fr) minmax(300px, 0.76fr);
+  gap: 10px;
+  padding: 0 12px 12px;
+}
+
+.loadout-runner-panel,
+.arsenal-preview-panel,
+.cosmetic-runner-panel {
+  position: relative;
+  border-color: rgba(103, 232, 249, 0.1);
+  background:
+    radial-gradient(ellipse at 50% 74%, rgba(65, 217, 255, 0.16), transparent 48%),
+    linear-gradient(180deg, rgba(6, 11, 18, 0.28), rgba(2, 6, 12, 0.62));
+  box-shadow: inset 0 0 54px rgba(65, 217, 255, 0.035);
+}
+
+.loadout-runner-panel {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  padding: 10px;
+}
+
+.loadout-runner-preview-host {
+  width: min(500px, 100%);
+  min-height: min(650px, calc(100vh - 260px));
+  border: 0;
+  background:
+    radial-gradient(ellipse at 50% 84%, rgba(114, 255, 157, 0.14), transparent 38%),
+    radial-gradient(ellipse at 50% 42%, rgba(65, 217, 255, 0.1), transparent 42%);
+}
+
+.loadout-equipped-panel {
+  grid-template-rows: auto minmax(0, 1fr);
+  padding: 10px;
+}
+
+.loadout-slot-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  align-content: start;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.gear-slot.hq-slot-card button,
+.raid-bag-slot {
+  min-height: 58px;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--rarity-color, #67e8f9), transparent 88%), transparent 54%),
+    rgba(2, 6, 12, 0.42);
+}
+
+.gear-slot.hq-slot-card button strong,
+.raid-bag-slot strong,
+.arsenal-weapon-row strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.loadout-detail-panel {
+  padding: 10px;
+}
+
+.loadout-detail-panel .loadout-details-card {
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.loadout-eva-panel {
+  grid-template-rows: auto minmax(0, 1fr);
+  padding: 10px;
+}
+
+.loadout-eva-panel .raid-bag-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-height: none;
+  overflow-y: auto;
+}
+
+.loadout-stash-access {
+  display: none;
+}
+
+.loadout-action-rail {
+  grid-template-columns: 1fr;
+  align-content: end;
+  align-self: stretch;
+  padding: 10px;
+}
+
+.loadout-action-rail .hq-action-bar,
+.arsenal-action-rail .hq-action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.loadout-action-rail .hq-action-bar button,
+.arsenal-action-rail .hq-action-bar button {
+  min-width: 116px;
+  min-height: 34px;
+  flex: 1 1 116px;
+}
+
+.loadout-action-rail .class-primary-action {
+  flex-basis: 100%;
+}
+
+.cosmetics-loadout-screen {
+  display: grid;
+  grid-template:
+    "hero hero hero" auto
+    "gear preview details" minmax(0, 1fr)
+    "browser preview actions" minmax(142px, 0.24fr) / minmax(260px, 0.72fr) minmax(460px, 1.4fr) minmax(300px, 0.8fr);
+  gap: 10px;
+  padding: 0 12px 12px;
+}
+
+.cosmetic-runner-panel {
+  grid-area: preview;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  padding: 10px;
+}
+
+.cosmetic-runner-preview-host {
+  width: min(500px, 100%);
+  min-height: min(650px, calc(100vh - 260px));
+  border: 0;
+  background:
+    radial-gradient(ellipse at 50% 84%, rgba(114, 255, 157, 0.12), transparent 38%),
+    radial-gradient(ellipse at 50% 42%, rgba(65, 217, 255, 0.1), transparent 42%);
+}
+
+.cosmetic-equipped-panel {
+  grid-area: gear;
+}
+
+.cosmetic-browser-panel {
+  grid-area: browser;
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.cosmetic-rules-panel {
+  grid-area: actions;
+  align-content: end;
+}
+
+.cosmetics-loadout-screen .item-details-panel {
+  grid-area: details;
+}
+
+.cosmetic-grid {
+  grid-template-columns: repeat(auto-fit, minmax(138px, 1fr));
+  align-content: start;
+  overflow-y: auto;
+}
+
+.cosmetic-card {
+  min-height: 66px;
+  border-width: 1px;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--rarity-color, #67e8f9), transparent 86%), transparent 58%),
+    rgba(2, 6, 12, 0.42);
+}
+
+.cosmetic-card i {
+  width: 32px;
+  height: 42px;
+  opacity: 0.88;
+}
+
+.cosmetic-rules-panel button {
+  width: 100%;
+  min-height: 34px;
+}
+
+.arsenal-workbench-screen {
+  grid-template:
+    "top top top" auto
+    "list preview details" minmax(0, 1fr)
+    "list preview service" minmax(150px, 0.25fr)
+    "mods preview rail" minmax(132px, 0.2fr) / minmax(250px, 0.62fr) minmax(520px, 1.5fr) minmax(320px, 0.82fr);
+  gap: 10px;
+  padding: 0 12px 12px;
+}
+
+.arsenal-workbench-top {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.62fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.arsenal-resource-strip {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  overflow: hidden;
+}
+
+.arsenal-resource-strip span {
+  min-width: auto;
+}
+
+.arsenal-list-panel,
+.arsenal-details-panel,
+.arsenal-mod-panel,
+.arsenal-service-panel,
+.arsenal-action-rail {
+  padding: 10px;
+  overflow: hidden;
+}
+
+.arsenal-list-panel {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.arsenal-weapon-list {
+  align-content: start;
+  overflow-y: auto;
+}
+
+.arsenal-weapon-row {
+  min-height: 56px;
+  padding: 8px 10px;
+  border-radius: 6px;
+}
+
+.arsenal-preview-panel {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.weapon-bench-preview-host {
+  min-height: min(560px, calc(100vh - 310px));
+  border: 0;
+  border-radius: 6px;
+  background:
+    linear-gradient(90deg, rgba(65, 217, 255, 0.055) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(65, 217, 255, 0.04) 1px, transparent 1px),
+    radial-gradient(ellipse at 50% 62%, color-mix(in srgb, var(--rarity-color, #67e8f9), transparent 82%), transparent 50%),
+    rgba(2, 6, 12, 0.48);
+  background-size: 32px 32px, 32px 32px, auto, auto;
+}
+
+.arsenal-details-panel {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.arsenal-details-panel > p {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.stat-panel {
+  display: grid;
+  gap: 7px;
+  overflow-y: auto;
+}
+
+.inspect-stat {
+  grid-template-columns: minmax(88px, 0.42fr) minmax(0, 1fr) minmax(54px, auto);
+  gap: 8px;
+}
+
+.arsenal-mod-panel .attachment-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.attachment-slot-card,
+.upgrade-row,
+.repair-panel,
+.compare-panel {
+  border-color: rgba(103, 232, 249, 0.11);
+  border-radius: 6px;
+  background: rgba(2, 6, 12, 0.34);
+}
+
+.attachment-slot-card small,
+.attachment-slot-card em,
+.upgrade-row small,
+.compare-panel p {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.arsenal-service-panel {
+  grid-template-columns: 1fr;
+  align-content: start;
+  overflow-y: auto;
+}
+
+.arsenal-action-rail {
+  grid-template-columns: 1fr;
+  align-content: end;
+}
+
+.arsenal-action-rail p {
+  display: none;
+}
+
+@media (max-width: 1180px), (max-height: 760px) {
+  .loadout-locker-screen {
+    grid-template:
+      "top top" auto
+      "runner details" minmax(0, 1fr)
+      "slots rail" minmax(142px, auto)
+      "eva eva" minmax(104px, auto) / minmax(420px, 1.25fr) minmax(300px, 0.75fr);
+  }
+
+  .cosmetics-loadout-screen {
+    grid-template:
+      "hero hero" auto
+      "preview details" minmax(0, 1fr)
+      "gear actions" minmax(120px, auto)
+      "browser browser" minmax(126px, auto) / minmax(420px, 1.25fr) minmax(300px, 0.75fr);
+  }
+
+  .arsenal-workbench-screen {
+    grid-template:
+      "top top" auto
+      "list preview" minmax(0, 1fr)
+      "details service" minmax(168px, auto)
+      "mods rail" minmax(118px, auto) / minmax(260px, 0.62fr) minmax(460px, 1.38fr);
+  }
+
+  .loadout-runner-preview-host,
+  .cosmetic-runner-preview-host {
+    min-height: min(500px, calc(100vh - 280px));
+  }
+
+  .weapon-bench-preview-host {
+    min-height: min(420px, calc(100vh - 330px));
+  }
+}
+
+@media (max-width: 840px) {
+  .main-menu-content:has(.loadout-locker-screen),
+  .main-menu-content:has(.cosmetics-loadout-screen),
+  .main-menu-content:has(.arsenal-workbench-screen) {
+    overflow-y: auto;
+  }
+
+  .loadout-locker-screen,
+  .cosmetics-loadout-screen,
+  .arsenal-workbench-screen {
+    height: auto;
+    max-height: none;
+    grid-template-columns: 1fr;
+    grid-template-areas: none;
+    overflow: visible;
+  }
+
+  .loadout-locker-screen > *,
+  .cosmetics-loadout-screen > *,
+  .arsenal-workbench-screen > * {
+    grid-area: auto;
+  }
+
+  .loadout-runner-preview-host,
+  .cosmetic-runner-preview-host,
+  .weapon-bench-preview-host {
+    min-height: 360px;
+  }
+}
+
+/* Phase 13.8A reference-guided HQ enforcement: one industrial menu language across all habitat screens. */
+:root {
+  --dc-ui-panel: rgba(4, 10, 18, 0.72);
+  --dc-ui-panel-strong: rgba(4, 10, 18, 0.9);
+  --dc-ui-panel-soft: rgba(10, 18, 30, 0.54);
+  --dc-ui-line: rgba(103, 232, 249, 0.16);
+  --dc-ui-line-strong: rgba(103, 232, 249, 0.34);
+  --dc-ui-text: #e6edf3;
+  --dc-ui-muted: rgba(203, 213, 225, 0.72);
+  --dc-ui-cyan: #67e8f9;
+  --dc-ui-amber: #ffb02e;
+  --dc-ui-green: #86efac;
+  --dc-ui-purple: #a78bfa;
+}
+
+.main-menu-content:has(.hq-command-deck),
+.main-menu-content:has(.loadout-locker-screen),
+.main-menu-content:has(.cosmetics-loadout-screen),
+.main-menu-content:has(.arsenal-workbench-screen),
+.main-menu-content:has(.class-deploy-screen),
+.main-menu-content:has(.ship-dashboard-screen),
+.main-menu-content:has(.skill-matrix-screen),
+.main-menu-content:has(.stash-screen),
+.main-menu-content:has(.vendor-screen),
+.main-menu-content:has(.crafting-screen),
+.main-menu-content:has(.intel-board-screen) {
+  width: min(100vw, 1480px);
+  max-width: calc(100vw - 18px);
+  max-height: calc(100vh - 18px);
+  place-items: stretch;
+  overflow: hidden;
+}
+
+.hq-command-deck,
+.loadout-locker-screen,
+.cosmetics-loadout-screen,
+.arsenal-workbench-screen,
+.class-deploy-screen,
+.ship-dashboard-screen,
+.skill-matrix-screen,
+.stash-screen,
+.vendor-screen,
+.crafting-screen,
+.intel-board-screen {
+  color: var(--dc-ui-text);
+  letter-spacing: 0;
+  text-align: left;
+  background:
+    radial-gradient(ellipse at 50% 20%, rgba(65, 217, 255, 0.08), transparent 42%),
+    linear-gradient(100deg, rgba(2, 6, 12, 0.98), rgba(7, 14, 24, 0.86) 46%, rgba(2, 6, 12, 0.98));
+}
+
+.hq-command-deck *,
+.loadout-locker-screen *,
+.cosmetics-loadout-screen *,
+.arsenal-workbench-screen *,
+.class-deploy-screen *,
+.ship-dashboard-screen *,
+.skill-matrix-screen *,
+.stash-screen *,
+.vendor-screen *,
+.crafting-screen *,
+.intel-board-screen *,
+.raid-outcome * {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.hq-command-topbar,
+.loadout-locker-top,
+.arsenal-workbench-top,
+.loadout-hero,
+.class-deploy-topbar,
+.ship-dashboard-topbar,
+.inspect-header {
+  min-height: 54px;
+  border: 0;
+  border-bottom: 1px solid var(--dc-ui-line);
+  border-radius: 0;
+  background: linear-gradient(90deg, rgba(2, 6, 12, 0.78), rgba(7, 14, 24, 0.42), rgba(2, 6, 12, 0.78));
+  box-shadow: inset 0 -1px 0 rgba(230, 237, 243, 0.025);
+}
+
+.hq-panel,
+.inspect-header,
+.inspect-card,
+.intel-card,
+.contract-card,
+.stash-card,
+.vendor-item,
+.crafting-screen section,
+.ship-identity-panel,
+.ship-overview-panel,
+.ship-stat-panel,
+.ship-alert-rail,
+.ship-mission-panel,
+.class-deploy-brief,
+.class-deploy-detail,
+.class-choice,
+.skill-branch-card,
+.skill-node,
+.raid-outcome section div,
+.raid-outcome section .mission-outcome-summary,
+.raid-outcome section .campaign-result-card {
+  border: 1px solid var(--dc-ui-line);
+  border-radius: 6px;
+  background:
+    linear-gradient(145deg, rgba(10, 18, 30, 0.5), rgba(2, 6, 12, 0.34)),
+    var(--dc-ui-panel);
+  box-shadow: inset 0 0 26px rgba(65, 217, 255, 0.032);
+}
+
+.hq-panel-header span,
+.hq-panel > span,
+.inspect-header span,
+.intel-card > span,
+.contract-card > span,
+.stash-card span,
+.vendor-item span,
+.class-deploy-topbar span,
+.class-deploy-brief span,
+.class-deploy-detail span,
+.class-choice span,
+.ship-dashboard-brand span,
+.ship-identity-panel > span,
+.ship-overview-panel header span,
+.ship-stat-panel section > span,
+.ship-alert-rail > span,
+.ship-mission-panel > span,
+.skill-branch-card > span,
+.skill-node span,
+.raid-outcome section b {
+  color: rgba(103, 232, 249, 0.86);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.hq-panel-header h2,
+.hq-panel-header h3,
+.inspect-header h2,
+.loadout-locker-top h2,
+.arsenal-workbench-top h2,
+.loadout-hero h2,
+.class-deploy-topbar strong,
+.class-deploy-brief strong,
+.class-deploy-detail strong,
+.ship-dashboard-brand strong,
+.ship-identity-panel > strong,
+.ship-overview-panel header strong,
+.intel-card > strong,
+.contract-card > strong,
+.skill-branch-card > strong,
+.skill-node strong,
+.raid-outcome strong {
+  color: #f8fafc;
+  letter-spacing: 0;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.hq-panel p,
+.inspect-header p,
+.intel-card p,
+.contract-card p,
+.vendor-item p,
+.class-deploy-brief p,
+.class-deploy-detail p,
+.class-selected-copy p,
+.ship-identity-panel p,
+.ship-preview-stage p,
+.skill-branch-card p,
+.skill-node p,
+.raid-outcome span,
+.raid-outcome em {
+  color: var(--dc-ui-muted);
+  line-height: 1.38;
+}
+
+.main-menu-actions,
+.hq-action-bar,
+.class-action-rail,
+.ship-alert-rail,
+.ship-mission-panel,
+.loadout-action-rail,
+.arsenal-action-rail {
+  border-top: 1px solid var(--dc-ui-line);
+  background: linear-gradient(90deg, rgba(2, 6, 12, 0.68), rgba(7, 14, 24, 0.38), rgba(2, 6, 12, 0.68));
+}
+
+.main-menu button,
+.main-menu-actions button,
+.hq-action-bar button,
+.hq-panel button,
+.inspect-header button,
+.intel-card button,
+.class-action-rail button,
+.class-choice,
+.ship-dashboard-screen button,
+.raid-outcome button {
+  border-radius: 4px;
+  border-color: rgba(103, 232, 249, 0.22);
+  color: #dffbff;
+  background: rgba(2, 6, 12, 0.62);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  box-shadow: none;
+}
+
+.main-menu button:hover,
+.main-menu button:focus-visible,
+.main-menu-actions button:hover,
+.main-menu-actions button:focus-visible,
+.hq-action-bar button:hover,
+.hq-action-bar button:focus-visible,
+.hq-panel button:hover,
+.hq-panel button:focus-visible,
+.inspect-header button:hover,
+.inspect-header button:focus-visible,
+.intel-card button:hover,
+.intel-card button:focus-visible,
+.class-action-rail button:hover,
+.class-action-rail button:focus-visible,
+.class-choice:hover,
+.class-choice:focus-visible,
+.ship-dashboard-screen button:hover,
+.ship-dashboard-screen button:focus-visible,
+.raid-outcome button:hover,
+.raid-outcome button:focus-visible {
+  border-color: rgba(255, 176, 46, 0.58);
+  color: #fff7ed;
+  background: rgba(255, 176, 46, 0.13);
+  outline: none;
+}
+
+.hq-action-bar .class-primary-action,
+.class-action-rail .class-primary-action,
+.ship-mission-panel button,
+.hq-deploy-button,
+.raid-outcome button {
+  border-color: rgba(255, 176, 46, 0.78);
+  color: #120a02;
+  background: linear-gradient(180deg, #ffc857, var(--dc-ui-amber));
+  box-shadow: 0 0 18px rgba(255, 176, 46, 0.16);
+}
+
+.hq-primary-nav,
+.ship-dashboard-topbar nav,
+.loadout-mode-tabs,
+.contract-filter-tabs,
+.codex-filter-tabs {
+  border: 1px solid var(--dc-ui-line);
+  border-radius: 6px;
+  padding: 4px;
+  background: rgba(2, 6, 12, 0.58);
+}
+
+.hq-primary-nav .active,
+.ship-dashboard-topbar nav button.active,
+.loadout-mode-tabs button.active,
+.contract-filter-tabs button.active,
+.codex-filter-tabs button.active {
+  border-color: rgba(103, 232, 249, 0.72);
+  color: #06131c;
+  background: var(--dc-ui-cyan);
+}
+
+.hq-resource-strip span,
+.inspect-currency span,
+.inspect-wallet span,
+.ship-dashboard-resources span,
+.campaign-status-strip span,
+.class-readiness-grid span,
+.preview-meta span,
+.inspect-meta-grid div,
+.ship-live-state,
+.ship-stat-panel div,
+.ship-mission-panel div {
+  border-radius: 4px;
+  border-color: rgba(103, 232, 249, 0.14);
+  background: rgba(2, 6, 12, 0.38);
+}
+
+.loadout-runner-panel,
+.cosmetic-runner-panel,
+.arsenal-preview-panel,
+.class-deploy-stage,
+.ship-preview-stage,
+.hq-runner-stage,
+.weapon-preview-panel,
+.raid-outcome section .mission-outcome-summary {
+  border-color: rgba(103, 232, 249, 0.12);
+  background:
+    linear-gradient(90deg, rgba(65, 217, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(65, 217, 255, 0.035) 1px, transparent 1px),
+    radial-gradient(ellipse at 50% 70%, rgba(65, 217, 255, 0.12), transparent 54%),
+    rgba(2, 6, 12, 0.44);
+  background-size: 34px 34px, 34px 34px, auto, auto;
+}
+
+.loadout-runner-preview-host,
+.cosmetic-runner-preview-host,
+.weapon-bench-preview-host,
+.class-runner-preview-host,
+.ship-dashboard-preview-host {
+  border-radius: 4px;
+  background:
+    radial-gradient(ellipse at 50% 82%, rgba(255, 176, 46, 0.08), transparent 36%),
+    radial-gradient(ellipse at 50% 44%, rgba(65, 217, 255, 0.11), transparent 46%);
+}
+
+.gear-slot.hq-slot-card button,
+.raid-bag-slot,
+.raid-bag-item,
+.arsenal-weapon-row,
+.cosmetic-card,
+.attachment-slot-card,
+.upgrade-row,
+.repair-panel,
+.compare-panel,
+.campaign-evidence-row,
+.campaign-meter-row,
+.campaign-chain-row,
+.campaign-next-card li,
+.codex-entry {
+  border-radius: 4px;
+  border-color: rgba(103, 232, 249, 0.13);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--rarity-color, var(--dc-ui-cyan)), transparent 90%), transparent 60%),
+    rgba(2, 6, 12, 0.42);
+}
+
+.class-choice.active,
+.arsenal-weapon-row.active,
+.cosmetic-card.selected,
+.codex-entry.selected,
+.skill-node.available,
+.campaign-operation-card.active {
+  border-color: rgba(255, 176, 46, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(255, 176, 46, 0.18), 0 0 22px rgba(255, 176, 46, 0.1);
+}
+
+.skill-node.acquired,
+.campaign-operation-card.completed,
+.ship-condition-meter b {
+  color: var(--dc-ui-green);
+  border-color: rgba(134, 239, 172, 0.38);
+}
+
+.campaign-result-card,
+.codex-entry.latest,
+.intel-card.codex-detail-card,
+.intel-card.codex-overview-card {
+  border-color: rgba(167, 139, 250, 0.34);
+}
+
+.codex-entry.latest {
+  box-shadow: inset 0 0 0 1px rgba(167, 139, 250, 0.18);
+}
+
+.intel-board-screen,
+.stash-screen,
+.vendor-screen,
+.crafting-screen,
+.skill-matrix-screen {
+  width: min(1180px, calc(100vw - 28px));
+  max-width: calc(100vw - 28px);
+  max-height: calc(100vh - 92px);
+  gap: 10px;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid var(--dc-ui-line);
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px rgba(230, 237, 243, 0.025), 0 26px 88px rgba(0, 0, 0, 0.42);
+}
+
+.skill-matrix-screen {
+  grid-template-columns: 1fr;
+}
+
+.skill-branch-grid {
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  align-items: start;
+}
+
+.skill-node-list,
+.codex-list,
+.arsenal-weapon-list,
+.loadout-slot-grid,
+.cosmetic-grid,
+.raid-bag-grid,
+.stat-panel,
+.ship-stat-panel section {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(103, 232, 249, 0.45) rgba(2, 6, 12, 0.22);
+}
+
+.intel-board-screen .inspect-header,
+.stash-screen .inspect-header,
+.vendor-screen .inspect-header,
+.crafting-screen .inspect-header,
+.skill-matrix-screen .inspect-header {
+  position: sticky;
+  top: -12px;
+  z-index: 2;
+  margin: -12px -12px 0;
+  padding: 10px 12px;
+}
+
+.intel-board-screen .main-menu-actions,
+.stash-screen + .main-menu-actions,
+.vendor-screen + .main-menu-actions,
+.crafting-screen + .main-menu-actions,
+.skill-matrix-screen + .main-menu-actions,
+.raid-select-screen + .main-menu-actions,
+.loadout-locker-screen + .main-menu-actions,
+.cosmetics-loadout-screen + .main-menu-actions,
+.arsenal-workbench-screen + .main-menu-actions {
+  width: min(1180px, calc(100vw - 28px));
+  margin: 8px auto 0;
+  padding: 8px;
+  border: 1px solid var(--dc-ui-line);
+  border-radius: 6px;
+  justify-content: center;
+}
+
+.intel-card p,
+.contract-card p,
+.campaign-next-card li,
+.campaign-evidence-row small,
+.codex-detail-card small,
+.ship-identity-panel p,
+.class-deploy-brief p,
+.class-deploy-detail p,
+.loadout-action-rail p,
+.arsenal-details-panel > p,
+.cosmetic-rules-panel p {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.raid-outcome {
+  background:
+    radial-gradient(ellipse at 50% 28%, rgba(65, 217, 255, 0.11), transparent 42%),
+    rgba(2, 6, 12, 0.88);
+}
+
+.raid-outcome.lost {
+  background:
+    radial-gradient(ellipse at 50% 32%, rgba(255, 176, 46, 0.12), transparent 42%),
+    rgba(17, 10, 16, 0.9);
+}
+
+.raid-outcome section.raid-result-grid {
+  gap: 10px;
+}
+
+@media (max-width: 1180px), (max-height: 760px) {
+  .class-deploy-screen,
+  .ship-dashboard-screen {
+    width: min(100vw, 1180px);
+    max-width: calc(100vw - 16px);
+    height: min(100vh, 820px);
+    max-height: calc(100vh - 16px);
+    border: 1px solid var(--dc-ui-line);
+    border-radius: 8px;
+  }
+
+  .ship-dashboard-screen {
+    grid-template:
+      "top top" auto
+      "overview stats" minmax(0, 1fr)
+      "identity mission" minmax(118px, auto)
+      "alerts alerts" auto / minmax(440px, 1.35fr) minmax(280px, 0.85fr);
+  }
+
+  .class-deploy-screen {
+    grid-template:
+      "top top" auto
+      "stage detail" minmax(0, 1fr)
+      "brief choices" minmax(128px, auto)
+      "actions actions" auto
+      "steps steps" auto / minmax(430px, 1.25fr) minmax(300px, 0.75fr);
+  }
+}
+
+@media (max-width: 860px) {
+  .hq-command-deck,
+  .loadout-locker-screen,
+  .cosmetics-loadout-screen,
+  .arsenal-workbench-screen,
+  .class-deploy-screen,
+  .ship-dashboard-screen,
+  .intel-board-screen,
+  .stash-screen,
+  .vendor-screen,
+  .crafting-screen,
+  .skill-matrix-screen {
+    width: calc(100vw - 12px);
+    max-width: calc(100vw - 12px);
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .class-deploy-screen,
+  .ship-dashboard-screen {
+    grid-template-columns: 1fr;
+    grid-template-areas: none;
+  }
+
+  .class-deploy-screen > *,
+  .ship-dashboard-screen > * {
+    grid-area: auto;
+  }
+
+  .main-menu-content:has(.class-deploy-screen),
+  .main-menu-content:has(.ship-dashboard-screen),
+  .main-menu-content:has(.intel-board-screen),
+  .main-menu-content:has(.stash-screen),
+  .main-menu-content:has(.vendor-screen),
+  .main-menu-content:has(.crafting-screen),
+  .main-menu-content:has(.skill-matrix-screen) {
+    overflow-y: auto;
+  }
+
+  .inspect-header,
+  .arsenal-workbench-top,
+  .loadout-locker-top,
+  .loadout-hero,
+  .ship-dashboard-topbar,
+  .class-deploy-topbar {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .campaign-briefing-columns,
+  .campaign-operation-brief,
+  .codex-panel,
+  .campaign-status-strip,
+  .ship-preview-stage {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Phase 13.8B interface contract: screen shells use shared chrome, rails, center stage, and bottom commands. */
+.hq-command-deck,
+.loadout-locker-screen,
+.cosmetics-loadout-screen,
+.arsenal-workbench-screen,
+.class-deploy-screen,
+.ship-dashboard-screen {
+  width: min(1480px, calc(100vw - 18px));
+  max-width: calc(100vw - 18px);
+  height: min(850px, calc(100vh - 28px));
+  max-height: calc(100vh - 28px);
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid rgba(103, 232, 249, 0.14);
+  border-radius: 8px;
+}
+
+.hq-command-topbar,
+.loadout-locker-top,
+.arsenal-workbench-top,
+.loadout-hero,
+.class-deploy-topbar,
+.ship-dashboard-topbar,
+.inspect-header {
+  min-height: 52px;
+  padding: 8px 12px;
+}
+
+.hq-command-topbar p,
+.loadout-locker-top p,
+.arsenal-workbench-top p,
+.loadout-hero p,
+.class-deploy-topbar p,
+.ship-dashboard-topbar p,
+.inspect-header p {
+  max-width: 680px;
+  margin: 0;
+  -webkit-line-clamp: 1;
+}
+
+.hq-utility-cluster,
+.hq-resource-strip,
+.inspect-currency,
+.inspect-wallet,
+.ship-dashboard-resources {
+  gap: 6px;
+  align-content: center;
+}
+
+.hq-utility-cluster span,
+.hq-resource-strip span,
+.inspect-currency span,
+.inspect-wallet span,
+.ship-dashboard-resources span {
+  min-height: 24px;
+  padding: 4px 7px;
+  white-space: nowrap;
+}
+
+.hq-command-deck {
+  grid-template-columns: minmax(250px, 0.62fr) minmax(480px, 1.55fr) minmax(300px, 0.78fr);
+  grid-template-rows: 58px minmax(0, 1fr) 58px;
+  padding: 12px;
+}
+
+.hq-context-panel,
+.hq-deploy-panel {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, auto) minmax(0, 1fr) auto;
+  align-content: start;
+  gap: 8px;
+  padding: 12px;
+  overflow: hidden;
+}
+
+.hq-context-panel div,
+.hq-deploy-panel div {
+  grid-template-columns: minmax(80px, 0.48fr) minmax(0, 1fr);
+  gap: 6px 8px;
+  overflow: hidden;
+}
+
+.hq-context-panel p,
+.hq-deploy-panel p {
+  -webkit-line-clamp: 3;
+}
+
+.hq-deploy-panel > button {
+  justify-self: stretch;
+  align-self: end;
+}
+
+.hq-stage-launch {
+  max-width: min(360px, calc(100% - 28px));
+  gap: 7px;
+}
+
+.hq-stage-launch button {
+  min-height: 34px;
+}
+
+.class-deploy-screen {
+  grid-template:
+    "top top top" 56px
+    "brief stage detail" minmax(0, 1fr)
+    "choices choices choices" 118px
+    "actions actions actions" 50px
+    "steps steps steps" 28px / minmax(260px, 0.7fr) minmax(470px, 1.42fr) minmax(300px, 0.78fr);
+  padding: 12px;
+}
+
+.class-choice-rail {
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.class-choice {
+  min-width: 190px;
+  min-height: 90px;
+  padding: 10px;
+}
+
+.class-choice strong,
+.class-choice small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.class-action-rail {
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px;
+}
+
+.class-action-rail button {
+  min-height: 34px;
+  flex: 0 1 150px;
+}
+
+.class-action-rail .class-primary-action {
+  flex-basis: 190px;
+}
+
+.class-deploy-brief p,
+.class-deploy-detail p,
+.class-selected-copy p {
+  -webkit-line-clamp: 2;
+}
+
+.loadout-locker-screen,
+.cosmetics-loadout-screen,
+.arsenal-workbench-screen {
+  height: min(850px, calc(100vh - 72px));
+}
+
+.loadout-detail-panel,
+.arsenal-details-panel,
+.cosmetics-loadout-screen .item-details-panel,
+.arsenal-service-panel,
+.arsenal-mod-panel {
+  overflow: hidden;
+}
+
+.loadout-details-card p,
+.cosmetics-loadout-screen .item-details-panel p,
+.arsenal-details-panel p,
+.attachment-slot-card small,
+.upgrade-row small,
+.repair-panel small,
+.compare-panel p {
+  -webkit-line-clamp: 2;
+}
+
+.loadout-details-card footer,
+.cosmetics-loadout-screen .item-details-panel footer,
+.arsenal-action-rail .hq-action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.loadout-details-card footer button,
+.cosmetics-loadout-screen .item-details-panel footer button,
+.arsenal-action-rail .hq-action-bar button {
+  min-height: 32px;
+  flex: 1 1 118px;
+}
+
+.ship-dashboard-screen {
+  grid-template:
+    "top top top" 56px
+    "identity overview stats" minmax(0, 1fr)
+    "alerts alerts mission" 96px / minmax(220px, 0.62fr) minmax(520px, 1.45fr) minmax(286px, 0.8fr);
+  gap: 10px;
+  padding: 12px;
+}
+
+.ship-overview-panel {
+  grid-template-rows: auto minmax(260px, 1fr) auto auto;
+}
+
+.ship-preview-stage {
+  min-height: 260px;
+}
+
+.ship-dashboard-modules {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.ship-mission-panel {
+  grid-template-columns: minmax(0, 1fr) repeat(3, minmax(76px, auto)) minmax(150px, auto);
+  grid-template-rows: auto 1fr;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 8px 10px;
+}
+
+.ship-mission-panel > span {
+  grid-column: 1 / -1;
+}
+
+.ship-mission-panel strong {
+  align-self: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ship-mission-panel div {
+  display: grid;
+  gap: 2px;
+  line-height: 1.05;
+}
+
+.ship-mission-panel button {
+  align-self: center;
+  min-height: 34px;
+}
+
+.skill-matrix-screen {
+  display: grid;
+  grid-template:
+    "header header" auto
+    "branches summary" minmax(0, 1fr) / minmax(0, 1fr) minmax(240px, 0.28fr);
+  width: min(1320px, calc(100vw - 28px));
+  max-height: calc(100vh - 92px);
+}
+
+.skill-matrix-screen .inspect-header {
+  grid-area: header;
+}
+
+.skill-matrix-screen .skill-branch-grid {
+  grid-area: branches;
+  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  min-height: 0;
+  overflow: auto;
+}
+
+.skill-branch-card {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.skill-branch-card > p,
+.skill-node p {
+  -webkit-line-clamp: 2;
+}
+
+.skill-node {
+  min-height: 118px;
+}
+
+.intel-board-screen {
+  display: grid;
+  grid-template:
+    "header header header" auto
+    "left center right" minmax(0, 1fr) / minmax(250px, 0.64fr) minmax(430px, 1.25fr) minmax(270px, 0.72fr);
+  width: min(1420px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  height: min(850px, calc(100vh - 76px));
+  max-height: calc(100vh - 76px);
+  overflow: hidden;
+}
+
+.intel-board-screen > .inspect-header {
+  grid-area: header;
+  position: static;
+  margin: -12px -12px 0;
+}
+
+.campaign-left-rail,
+.campaign-center-dossier,
+.campaign-right-rail {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 3px;
+}
+
+.campaign-left-rail {
+  grid-area: left;
+}
+
+.campaign-center-dossier {
+  grid-area: center;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.campaign-right-rail {
+  grid-area: right;
+}
+
+.campaign-operation-grid {
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.campaign-operation-card,
+.contract-card {
+  min-height: auto;
+  padding: 10px;
+}
+
+.campaign-operation-card p,
+.contract-card p,
+.campaign-active-card p,
+.campaign-evidence-card p,
+.campaign-next-card li {
+  -webkit-line-clamp: 2;
+}
+
+.campaign-operation-card small,
+.contract-card small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contract-filter-tabs,
+.codex-filter-tabs {
+  max-height: 82px;
+  overflow: auto;
+}
+
+.codex-overview-card {
+  padding: 10px;
+}
+
+.codex-overview-card p,
+.codex-overview-card small,
+.campaign-chain-row small {
+  display: none;
+}
+
+.campaign-chain-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.codex-panel {
+  grid-template-columns: minmax(200px, 0.72fr) minmax(0, 1.28fr);
+  min-height: 0;
+}
+
+.codex-list,
+.codex-detail-card,
+.codex-detail-rows,
+.campaign-meter-stack {
+  min-height: 0;
+  overflow: auto;
+}
+
+.codex-entry {
+  padding: 8px;
+}
+
+.codex-entry small,
+.codex-entry em {
+  display: none;
+}
+
+.codex-detail-card p {
+  -webkit-line-clamp: 3;
+}
+
+.codex-detail-row {
+  grid-template-columns: minmax(110px, 0.35fr) minmax(0, 1fr);
+}
+
+.stash-screen,
+.vendor-screen {
+  display: grid;
+  width: min(1220px, calc(100vw - 28px));
+  max-height: calc(100vh - 92px);
+  overflow: hidden;
+}
+
+.stash-screen {
+  grid-template:
+    "header header header" auto
+    "filters sort detail" auto
+    "filters grid detail" minmax(0, 1fr) / minmax(170px, 0.45fr) minmax(420px, 1.2fr) minmax(280px, 0.72fr);
+}
+
+.stash-screen .inspect-header,
+.vendor-screen .inspect-header {
+  grid-area: header;
+  position: static;
+  margin: -12px -12px 0;
+}
+
+.stash-tabs {
+  grid-area: filters;
+  align-content: start;
+  overflow: auto;
+}
+
+.stash-sort-tabs {
+  grid-area: sort;
+}
+
+.stash-card-grid {
+  grid-area: grid;
+  min-height: 0;
+  overflow: auto;
+}
+
+.stash-detail-panel {
+  grid-area: detail;
+  min-height: 0;
+  overflow: auto;
+}
+
+.vendor-screen {
+  grid-template:
+    "header header" auto
+    "vendors panel" minmax(0, 1fr) / minmax(240px, 0.58fr) minmax(520px, 1.42fr);
+}
+
+.vendor-list {
+  grid-area: vendors;
+  min-height: 0;
+  overflow: auto;
+}
+
+.vendor-panel {
+  grid-area: panel;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.vendor-item-grid {
+  min-height: 0;
+  overflow: auto;
+}
+
+.vendor-select-card span,
+.vendor-select-card small,
+.vendor-item span,
+.vendor-item small,
+.stash-card span,
+.stash-card small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.main-menu-actions {
+  max-width: min(1220px, calc(100vw - 28px));
+  min-height: 44px;
+  margin: 8px auto 0;
+  padding: 6px 8px;
+  justify-content: center;
+}
+
+.main-menu-actions button {
+  min-height: 32px;
+  flex: 0 1 152px;
+}
+
+@media (max-width: 1120px), (max-height: 740px) {
+  .hq-command-deck,
+  .class-deploy-screen,
+  .ship-dashboard-screen,
+  .intel-board-screen,
+  .stash-screen,
+  .vendor-screen,
+  .skill-matrix-screen {
+    height: auto;
+    max-height: none;
+    overflow: auto;
+  }
+
+  .intel-board-screen,
+  .stash-screen,
+  .vendor-screen,
+  .skill-matrix-screen {
+    grid-template-columns: 1fr;
+    grid-template-areas: none;
+  }
+
+  .intel-board-screen > *,
+  .stash-screen > *,
+  .vendor-screen > *,
+  .skill-matrix-screen > * {
+    grid-area: auto;
+  }
+
+  .campaign-left-rail,
+  .campaign-center-dossier,
+  .campaign-right-rail,
+  .stash-card-grid,
+  .stash-detail-panel,
+  .vendor-list,
+  .vendor-panel {
+    overflow: visible;
+  }
+}
+
+/* Phase 13.8C reference-locked reset: enforce visual targets from public/design-reference. */
+.hq-command-deck {
+  position: relative;
+  isolation: isolate;
+  background:
+    linear-gradient(180deg, rgba(2, 6, 12, 0.18), rgba(2, 6, 12, 0.86)),
+    radial-gradient(ellipse at 50% 22%, rgba(255, 176, 46, 0.11), transparent 22%),
+    radial-gradient(ellipse at 50% 65%, rgba(65, 217, 255, 0.13), transparent 46%),
+    linear-gradient(100deg, rgba(2, 6, 12, 0.98), rgba(9, 17, 27, 0.92), rgba(2, 6, 12, 0.98));
+}
+
+.hq-command-deck::before,
+.hq-command-deck::after {
+  content: "";
+  position: absolute;
+  inset: 64px 18% 62px;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.hq-command-deck::before {
+  background:
+    linear-gradient(90deg, transparent 0 9%, rgba(103, 232, 249, 0.08) 9% 9.25%, transparent 9.25% 18%),
+    linear-gradient(0deg, transparent 0 78%, rgba(255, 176, 46, 0.1) 78% 78.25%, transparent 78.25%),
+    radial-gradient(ellipse at 50% 78%, rgba(255, 176, 46, 0.14), transparent 34%);
+  background-size: 120px 100%, 100% 72px, auto;
+  opacity: 0.72;
+}
+
+.hq-command-deck::after {
+  inset: auto 24% 58px;
+  height: 34%;
+  transform: perspective(440px) rotateX(64deg);
+  transform-origin: 50% 100%;
+  border-top: 1px solid rgba(255, 176, 46, 0.2);
+  background:
+    linear-gradient(90deg, rgba(103, 232, 249, 0.09) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(103, 232, 249, 0.08) 1px, transparent 1px);
+  background-size: 54px 54px;
+  opacity: 0.42;
+}
+
+.hq-runner-stage {
+  overflow: hidden;
+  border: 1px solid rgba(103, 232, 249, 0.1);
+  background:
+    radial-gradient(ellipse at 50% 78%, rgba(255, 176, 46, 0.12), transparent 42%),
+    radial-gradient(ellipse at 50% 36%, rgba(65, 217, 255, 0.08), transparent 46%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(2, 6, 12, 0.3));
+}
+
+.hq-stage-ring {
+  border-color: rgba(255, 176, 46, 0.22);
+  box-shadow: 0 0 42px rgba(255, 176, 46, 0.08);
+}
+
+.hq-stage-launch {
+  left: 50%;
+  right: auto;
+  bottom: 18px;
+  transform: translateX(-50%);
+  width: min(330px, calc(100% - 28px));
+  border-color: rgba(255, 176, 46, 0.24);
+  background: rgba(3, 7, 12, 0.78);
+}
+
+.hq-runner-summary {
+  max-width: min(360px, calc(100% - 28px));
+  border-color: rgba(103, 232, 249, 0.12);
+  background: rgba(3, 7, 12, 0.62);
+}
+
+.class-selection-screen {
+  width: min(1480px, calc(100vw - 18px));
+  height: min(850px, calc(100vh - 72px));
+  max-height: calc(100vh - 72px);
+  margin: 0 auto;
+  display: grid;
+  grid-template:
+    "top" 58px
+    "cards" minmax(0, 1fr)
+    "footer" 150px / 1fr;
+  gap: 12px;
+  padding: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(103, 232, 249, 0.14);
+  border-radius: 8px;
+  color: var(--dc-ui-text);
+  background:
+    radial-gradient(ellipse at 50% 30%, rgba(65, 217, 255, 0.1), transparent 34%),
+    linear-gradient(100deg, rgba(2, 6, 12, 0.98), rgba(7, 14, 24, 0.9), rgba(2, 6, 12, 0.98));
+}
+
+.class-selection-topbar,
+.class-selection-footer {
+  display: grid;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid rgba(103, 232, 249, 0.13);
+  border-radius: 6px;
+  background: rgba(2, 6, 12, 0.62);
+}
+
+.class-selection-topbar {
+  grid-area: top;
+  grid-template-columns: minmax(220px, auto) minmax(0, 1fr) auto;
+  padding: 8px 12px;
+}
+
+.class-selection-topbar span,
+.class-selection-card span,
+.class-selection-footer span,
+.class-card-trait small,
+.class-card-columns small {
+  color: rgba(103, 232, 249, 0.86);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.class-selection-topbar strong {
+  color: #f8fafc;
+  font-size: clamp(24px, 2.4vw, 38px);
+  line-height: 0.95;
+}
+
+.class-selection-grid {
+  grid-area: cards;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  min-height: 0;
+}
+
+.class-selection-card {
+  display: grid;
+  grid-template-rows: auto auto minmax(42px, auto) auto minmax(0, 1fr) auto auto;
+  gap: 10px;
+  min-height: 0;
+  padding: 16px;
+  text-align: left;
+  border: 1px solid rgba(103, 232, 249, 0.18);
+  border-radius: 6px;
+  color: #e6edf3;
+  background:
+    radial-gradient(ellipse at 50% 28%, rgba(65, 217, 255, 0.09), transparent 42%),
+    linear-gradient(180deg, rgba(11, 18, 28, 0.74), rgba(2, 6, 12, 0.7));
+}
+
+.class-selection-card.active {
+  border-color: rgba(255, 176, 46, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(255, 176, 46, 0.16), 0 0 32px rgba(255, 176, 46, 0.09);
+}
+
+.class-selection-card strong {
+  color: #f8fafc;
+  font-size: clamp(24px, 2.1vw, 34px);
+  line-height: 0.95;
+  text-transform: uppercase;
+}
+
+.class-selection-card p {
+  margin: 0;
+  color: rgba(226, 232, 240, 0.76);
+  line-height: 1.35;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.class-card-trait {
+  display: grid;
+  gap: 4px;
+  border-top: 1px solid rgba(103, 232, 249, 0.12);
+  border-bottom: 1px solid rgba(103, 232, 249, 0.12);
+  padding: 10px 0;
+}
+
+.class-card-trait b {
+  color: #ffcf6d;
+  font-size: 13px;
+  text-transform: uppercase;
+}
+
+.class-card-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-content: start;
+}
+
+.class-card-columns div {
+  display: grid;
+  gap: 5px;
+}
+
+.class-card-columns em {
+  color: rgba(226, 232, 240, 0.74);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.2;
+}
+
+.class-selection-card > b {
+  align-self: end;
+  justify-self: stretch;
+  border: 1px solid rgba(255, 176, 46, 0.44);
+  border-radius: 4px;
+  padding: 9px;
+  color: #ffcf6d;
+  text-align: center;
+  text-transform: uppercase;
+  background: rgba(255, 176, 46, 0.08);
+}
+
+.class-selection-footer {
+  grid-area: footer;
+  grid-template-columns: minmax(220px, 0.7fr) minmax(280px, 1fr) minmax(220px, 0.72fr) minmax(190px, auto);
+  padding: 12px;
+}
+
+.class-selection-footer p {
+  margin: 0;
+  color: rgba(226, 232, 240, 0.74);
+  line-height: 1.35;
+}
+
+.class-stat-panel {
+  display: grid;
+  gap: 6px;
+}
+
+.class-stat-row {
+  display: grid;
+  grid-template-columns: minmax(92px, 0.36fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.class-stat-row i {
+  height: 6px;
+  overflow: hidden;
+  border: 1px solid rgba(103, 232, 249, 0.18);
+  border-radius: 999px;
+  background: rgba(2, 6, 12, 0.7);
+}
+
+.class-stat-row em {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(255, 176, 46, 0.86), rgba(103, 232, 249, 0.62));
+}
+
+.class-selection-footer button {
+  min-height: 42px;
+  border-color: rgba(255, 176, 46, 0.72);
+  color: #120a02;
+  background: linear-gradient(180deg, #ffc857, var(--dc-ui-amber));
+}
+
+.class-deploy-screen .assignment-role-strip {
+  height: 100%;
+  align-content: center;
+}
+
+.class-deploy-screen .assignment-role-strip .class-choice {
+  min-height: 74px;
+}
+
+.ship-dashboard-screen .ship-preview-stage {
+  min-height: 360px;
+  background:
+    radial-gradient(ellipse at 50% 70%, rgba(255, 176, 46, 0.13), transparent 38%),
+    radial-gradient(ellipse at 50% 32%, rgba(65, 217, 255, 0.1), transparent 44%),
+    rgba(2, 6, 12, 0.42);
+}
+
+.ship-dashboard-screen .kestrel-silhouette {
+  min-height: 280px;
+}
+
+.ship-dashboard-screen .ship-dashboard-module {
+  min-height: 86px;
+}
+
+.skill-matrix-screen {
+  grid-template:
+    "header header" 58px
+    "matrix detail" minmax(0, 1fr) / minmax(0, 1fr) minmax(270px, 0.27fr);
+  background:
+    radial-gradient(ellipse at 36% 78%, rgba(255, 176, 46, 0.09), transparent 42%),
+    radial-gradient(ellipse at 64% 34%, rgba(167, 139, 250, 0.08), transparent 38%),
+    linear-gradient(100deg, rgba(2, 6, 12, 0.98), rgba(7, 14, 24, 0.88), rgba(2, 6, 12, 0.98));
+}
+
+.skill-matrix-screen .skill-branch-grid {
+  grid-template-columns: repeat(5, minmax(150px, 1fr));
+  gap: 12px;
+  padding: 12px;
+  background:
+    linear-gradient(90deg, rgba(103, 232, 249, 0.045) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(103, 232, 249, 0.035) 1px, transparent 1px);
+  background-size: 58px 58px;
+}
+
+.skill-detail-rail {
+  grid-area: detail;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-height: 0;
+  padding: 12px;
+  border: 1px solid rgba(103, 232, 249, 0.14);
+  border-radius: 6px;
+  background: rgba(2, 6, 12, 0.62);
+}
+
+.skill-detail-rail span,
+.skill-detail-rail div span {
+  color: rgba(103, 232, 249, 0.86);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.skill-detail-rail strong {
+  color: #f8fafc;
+  font-size: 22px;
+  text-transform: uppercase;
+}
+
+.skill-detail-rail p {
+  margin: 0;
+  color: rgba(226, 232, 240, 0.72);
+  line-height: 1.35;
+}
+
+.skill-detail-rail div {
+  display: grid;
+  grid-template-columns: minmax(86px, 0.45fr) minmax(0, 1fr);
+  gap: 7px;
+}
+
+.skill-branch-card {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.skill-branch-card > span {
+  justify-self: center;
+  color: #ffcf6d;
+}
+
+.skill-branch-card > p {
+  display: none;
+}
+
+.skill-node-list {
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  gap: 14px;
+  overflow: visible;
+}
+
+.skill-node {
+  position: relative;
+  width: min(132px, 100%);
+  min-height: 112px;
+  justify-items: center;
+  text-align: center;
+  border-radius: 6px;
+  background: rgba(2, 6, 12, 0.58);
+}
+
+.skill-node::before,
+.skill-node::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  width: 1px;
+  height: 14px;
+  background: rgba(103, 232, 249, 0.18);
+  transform: translateX(-50%);
+}
+
+.skill-node::before {
+  top: -14px;
+}
+
+.skill-node::after {
+  bottom: -14px;
+}
+
+.skill-node i {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 32px;
+  border: 1px solid rgba(103, 232, 249, 0.28);
+  clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
+  color: #dffbff;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 950;
+  background: rgba(65, 217, 255, 0.08);
+}
+
+.skill-node.acquired i {
+  border-color: rgba(134, 239, 172, 0.56);
+  color: #dcfce7;
+}
+
+.skill-node.available i {
+  border-color: rgba(255, 176, 46, 0.64);
+  color: #ffcf6d;
+}
+
+.skill-node.locked {
+  opacity: 0.48;
+}
+
+.skill-node p {
+  display: none;
+}
+
+.skill-node button {
+  min-height: 28px;
+  width: 100%;
+}
+
+.arsenal-workbench-screen {
+  grid-template:
+    "top top top" auto
+    "rail catalog preview" minmax(0, 1fr)
+    "notes mods details" minmax(132px, 0.18fr)
+    "notes service details" minmax(132px, 0.18fr) / minmax(190px, 0.42fr) minmax(560px, 1.25fr) minmax(360px, 0.78fr);
+}
+
+.arsenal-catalog-rail {
+  grid-area: rail;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 12px;
+}
+
+.arsenal-catalog-rail button {
+  min-height: 38px;
+  justify-content: start;
+  text-align: left;
+}
+
+.arsenal-catalog-grid-panel {
+  grid-area: catalog;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.arsenal-weapon-catalog {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 10px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.arsenal-catalog-card {
+  display: grid;
+  grid-template:
+    "num name tag" auto
+    "art art art" minmax(108px, 1fr)
+    "meta meta meta" auto / auto minmax(0, 1fr) auto;
+  gap: 8px;
+  min-height: 184px;
+  padding: 10px;
+  border: 1px solid rgba(103, 232, 249, 0.14);
+  border-radius: 4px;
+  color: #e6edf3;
+  text-align: left;
+  background: rgba(2, 6, 12, 0.5);
+}
+
+.arsenal-catalog-card.selected {
+  border-color: rgba(255, 176, 46, 0.7);
+  box-shadow: inset 0 0 0 1px rgba(255, 176, 46, 0.14);
+}
+
+.arsenal-catalog-card > span {
+  grid-area: num;
+  color: #cbd5e1;
+  font-weight: 950;
+}
+
+.arsenal-catalog-card > strong {
+  grid-area: name;
+  color: #f8fafc;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.arsenal-catalog-card > small {
+  grid-area: tag;
+  color: #cbd5e1;
+  text-transform: uppercase;
+}
+
+.catalog-weapon-art {
+  grid-area: art;
+  display: grid;
+  place-items: center;
+  min-height: 108px;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 50% 62%, color-mix(in srgb, var(--rarity-color), transparent 82%), transparent 52%),
+    rgba(255, 255, 255, 0.02);
+}
+
+.catalog-weapon-art .weapon-schematic-fallback {
+  transform: scale(0.86);
+}
+
+.arsenal-catalog-card > em {
+  grid-area: meta;
+  color: rgba(203, 213, 225, 0.74);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.arsenal-preview-panel {
+  grid-area: preview;
+}
+
+.arsenal-details-panel {
+  grid-area: details;
+}
+
+.arsenal-mod-panel {
+  grid-area: mods;
+}
+
+.arsenal-service-panel {
+  grid-area: service;
+}
+
+.arsenal-action-rail {
+  grid-area: notes;
+}
+
+@media (max-width: 1180px), (max-height: 780px) {
+  .class-selection-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: auto;
+  }
+
+  .class-selection-footer {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: auto;
+  }
+
+  .skill-matrix-screen .skill-branch-grid {
+    grid-template-columns: repeat(3, minmax(150px, 1fr));
+  }
+
+  .arsenal-workbench-screen {
+    grid-template:
+      "top top" auto
+      "rail catalog" minmax(0, 1fr)
+      "preview details" minmax(220px, auto)
+      "mods service" minmax(132px, auto)
+      "notes notes" auto / minmax(190px, 0.44fr) minmax(460px, 1.56fr);
+  }
+
+  .arsenal-weapon-catalog {
+    grid-template-columns: repeat(2, minmax(190px, 1fr));
+  }
+}
+
+/* Phase 13.8D acceptance hotfix: tighten projected HQ screens without changing gameplay systems. */
+.hq-command-deck {
+  grid-template-columns: minmax(260px, 0.72fr) minmax(520px, 1.32fr) minmax(320px, 0.86fr);
+  grid-template-rows: 56px minmax(0, 1fr) 54px;
+}
+
+.hq-runner-stage {
+  display: grid;
+  grid-template:
+    "summary" auto
+    "preview" minmax(0, 1fr)
+    "launch" auto / minmax(0, 1fr);
+  align-items: stretch;
+  gap: 10px;
+  padding: 12px;
+  overflow: hidden;
+  background:
+    linear-gradient(90deg, rgba(103, 232, 249, 0.06) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(103, 232, 249, 0.04) 1px, transparent 1px),
+    radial-gradient(ellipse at 50% 55%, rgba(255, 176, 46, 0.13), transparent 42%),
+    linear-gradient(180deg, rgba(8, 15, 24, 0.86), rgba(2, 6, 12, 0.7));
+  background-size: 42px 42px, 42px 42px, auto, auto;
+}
+
+.hq-stage-ring {
+  display: none;
+}
+
+.hq-runner-stage .hq-runner-preview-host {
+  grid-area: preview;
+  width: min(420px, 82%);
+  min-height: 300px;
+  max-height: 100%;
+  justify-self: center;
+  align-self: stretch;
+  overflow: hidden;
+  border: 1px solid rgba(103, 232, 249, 0.13);
+  border-radius: 6px;
+}
+
+.hq-stage-launch,
+.hq-runner-summary {
+  position: static;
+  inset: auto;
+  transform: none;
+  width: 100%;
+  max-width: none;
+  border: 1px solid rgba(103, 232, 249, 0.16);
+  border-radius: 6px;
+}
+
+.hq-stage-launch {
+  grid-area: launch;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(170px, auto) minmax(150px, auto);
+  align-items: center;
+}
+
+.hq-stage-launch span,
+.hq-stage-launch strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hq-stage-launch .hq-deploy-button {
+  min-height: 40px;
+}
+
+.hq-runner-summary {
+  grid-area: summary;
+  display: grid;
+  gap: 7px;
+}
+
+.hq-deploy-panel strong,
+.hq-deploy-panel b,
+.hq-deploy-panel p,
+.class-deploy-brief strong,
+.class-deploy-brief b,
+.class-deploy-detail b {
+  overflow-wrap: anywhere;
+}
+
+.hq-deploy-panel > strong,
+.class-deploy-brief > strong {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.hq-deploy-panel p,
+.class-deploy-brief p {
+  -webkit-line-clamp: 2;
+}
+
+.class-deploy-screen {
+  grid-template:
+    "top top top" 56px
+    "brief stage detail" minmax(0, 1fr)
+    "actions actions actions" 52px
+    "steps steps steps" 28px / minmax(280px, 0.76fr) minmax(500px, 1.32fr) minmax(310px, 0.8fr);
+}
+
+.class-deploy-stage {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.class-selected-copy {
+  max-height: 146px;
+  overflow: hidden;
+}
+
+.class-readiness-grid {
+  grid-template-columns: minmax(92px, 0.42fr) minmax(0, 1fr);
+}
+
+.class-action-rail {
+  justify-content: end;
+  overflow: hidden;
+}
+
+.class-progression-strip {
+  align-items: center;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.class-selection-screen {
+  grid-template:
+    "top" 60px
+    "cards" minmax(0, 1fr)
+    "footer" 136px / minmax(0, 1fr);
+}
+
+.class-selection-topbar {
+  overflow: hidden;
+}
+
+.class-selection-topbar strong {
+  font-size: clamp(22px, 2vw, 30px);
+}
+
+.class-selection-grid {
+  align-items: stretch;
+}
+
+.class-selection-card {
+  grid-template-rows: auto auto minmax(42px, auto) auto minmax(0, 1fr) auto auto;
+  gap: 8px;
+  padding: 13px;
+  overflow: hidden;
+}
+
+.class-selection-card strong {
+  font-size: clamp(20px, 1.55vw, 28px);
+}
+
+.class-card-columns {
+  overflow: hidden;
+}
+
+.class-card-columns em {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.class-selection-footer {
+  grid-template-columns: minmax(210px, 0.72fr) minmax(280px, 1fr) minmax(210px, 0.72fr) minmax(180px, auto);
+  overflow: hidden;
+}
+
+.class-selection-footer p {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.ship-dashboard-screen {
+  grid-template:
+    "top top top" 56px
+    "identity overview stats" minmax(0, 1fr)
+    "alerts mission mission" 104px / minmax(230px, 0.62fr) minmax(540px, 1.42fr) minmax(310px, 0.82fr);
+}
+
+.ship-preview-stage {
+  overflow: hidden;
+}
+
+.ship-dashboard-screen .kestrel-silhouette {
+  max-width: 100%;
+  max-height: 100%;
+  transform: scale(0.94);
+  transform-origin: center;
+}
+
+.ship-mission-panel {
+  grid-template-columns: minmax(190px, 1.15fr) repeat(4, minmax(86px, 0.72fr)) minmax(150px, auto);
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.ship-mission-panel div b,
+.ship-mission-panel strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-matrix-screen {
+  grid-template:
+    "header header" 70px
+    "branches summary" minmax(0, 1fr) / minmax(0, 1fr) minmax(270px, 0.28fr);
+  overflow: hidden;
+}
+
+.skill-matrix-screen .inspect-header {
+  position: static;
+  display: grid;
+  grid-template-columns: minmax(260px, 0.9fr) minmax(360px, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.skill-matrix-screen .inspect-header h2 {
+  font-size: clamp(24px, 2vw, 34px);
+}
+
+.skill-matrix-screen .inspect-header p {
+  -webkit-line-clamp: 1;
+}
+
+.skill-matrix-screen .skill-branch-grid {
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  align-content: stretch;
+  overflow: auto;
+}
+
+.skill-branch-card {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.skill-node-list {
+  gap: 12px;
+  min-height: 0;
+  overflow: visible;
+}
+
+.skill-node {
+  width: min(124px, 100%);
+  min-height: 96px;
+  padding: 9px;
+}
+
+.skill-node strong {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 12px;
+}
+
+.skill-node.selected,
+.skill-node.affinity.available {
+  border-color: rgba(255, 176, 46, 0.76);
+}
+
+.skill-detail-rail {
+  overflow: hidden;
+}
+
+.arsenal-preview-panel,
+.weapon-bench-preview-host,
+.catalog-weapon-art {
+  contain: layout paint;
+  overflow: hidden;
+}
+
+.arsenal-preview-panel .weapon-bench-preview-host {
+  min-height: 220px;
+  max-height: 330px;
+  border: 1px solid rgba(103, 232, 249, 0.14);
+}
+
+.arsenal-preview-panel .weapon-schematic-fallback,
+.weapon-bench-preview-host .weapon-schematic-fallback {
+  max-width: min(100%, 360px);
+  max-height: 210px;
+  transform: scale(0.82);
+  transform-origin: center;
+}
+
+.arsenal-mod-panel,
+.arsenal-service-panel,
+.arsenal-details-panel {
+  min-height: 0;
+  overflow: auto;
+}
+
+.arsenal-action-rail .hq-action-bar {
+  align-content: start;
+}
+
+.intel-card p,
+.contract-card p,
+.campaign-active-card p,
+.campaign-evidence-card p,
+.codex-detail-card p {
+  -webkit-line-clamp: 2;
+}
+
+.codex-detail-card,
+.codex-list,
+.campaign-center-dossier,
+.campaign-left-rail,
+.campaign-right-rail {
+  scrollbar-gutter: stable;
+}
+
+.stash-screen {
+  gap: 8px;
+}
+
+.stash-tabs button,
+.stash-sort-tabs button,
+.stash-detail-card footer button {
+  min-height: 32px;
+}
+
+.vendor-screen {
+  grid-template:
+    "header header" 96px
+    "vendors panel" minmax(0, 1fr) / minmax(250px, 0.54fr) minmax(600px, 1.46fr);
+}
+
+.vendor-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 92px minmax(120px, auto);
+  align-items: center;
+  overflow: hidden;
+}
+
+.vendor-portrait {
+  width: 74px;
+  height: 74px;
+  justify-self: center;
+}
+
+.vendor-panel {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 10px;
+  padding: 12px;
+  background:
+    radial-gradient(ellipse at 90% 12%, color-mix(in srgb, var(--vendor-accent), transparent 86%), transparent 34%),
+    rgba(2, 6, 12, 0.56);
+}
+
+.vendor-reputation {
+  min-height: 58px;
+  padding: 10px;
+}
+
+.vendor-item-grid {
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.vendor-item {
+  min-height: 92px;
+}
+
+@media (max-width: 1180px), (max-height: 780px) {
+  .hq-stage-launch,
+  .class-selection-footer,
+  .skill-matrix-screen .inspect-header,
+  .vendor-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .class-deploy-screen {
+    grid-template:
+      "top top" auto
+      "brief detail" minmax(180px, auto)
+      "stage stage" minmax(260px, 1fr)
+      "actions actions" auto
+      "steps steps" auto / minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .ship-mission-panel {
+    grid-template-columns: minmax(0, 1fr) minmax(150px, auto);
+  }
+
+  .ship-mission-panel div {
+    display: none;
+  }
+
+  .skill-matrix-screen {
+    grid-template:
+      "header" auto
+      "branches" minmax(0, 1fr)
+      "summary" auto / minmax(0, 1fr);
+  }
+
+  .vendor-item-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Phase 13.8E Habitat Hub true screen replacement: reference-game-sequence.png panel 2. */
+.main-menu-content:has(.habitat-hub-screen) {
+  width: min(100vw, 1580px);
+  max-width: calc(100vw - 18px);
+  max-height: calc(100vh - 18px);
+  place-items: stretch;
+  overflow: hidden;
+}
+
+.habitat-hub-screen {
+  --habitat-cyan: rgba(103, 232, 249, 0.86);
+  --habitat-line: rgba(148, 163, 184, 0.18);
+  --habitat-panel: rgba(4, 10, 18, 0.58);
+  --habitat-amber: #d8953f;
+  width: min(1580px, calc(100vw - 18px));
+  height: min(900px, calc(100vh - 26px));
+  min-height: 720px;
+  margin: 0 auto;
+  display: grid;
+  grid-template:
+    "chrome" 62px
+    "stage" minmax(0, 1fr)
+    "nav" 62px / minmax(0, 1fr);
+  overflow: hidden;
+  color: #e6edf3;
+  border: 1px solid rgba(103, 232, 249, 0.18);
+  border-radius: 8px;
+  background:
+    radial-gradient(ellipse at 52% 48%, rgba(216, 149, 63, 0.12), transparent 34%),
+    radial-gradient(ellipse at 50% 18%, rgba(103, 232, 249, 0.1), transparent 38%),
+    linear-gradient(180deg, #04070c 0%, #07101a 48%, #02050a 100%);
+  box-shadow: inset 0 0 0 1px rgba(230, 237, 243, 0.03), 0 28px 90px rgba(0, 0, 0, 0.56);
+}
+
+.habitat-hub-screen *,
+.habitat-hub-screen *::before,
+.habitat-hub-screen *::after {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.habitat-hub-chrome {
+  grid-area: chrome;
+  display: grid;
+  grid-template-columns: minmax(240px, 0.45fr) minmax(0, auto);
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--habitat-line);
+  background:
+    linear-gradient(90deg, rgba(2, 6, 12, 0.96), rgba(9, 16, 25, 0.72) 48%, rgba(2, 6, 12, 0.96)),
+    linear-gradient(0deg, rgba(103, 232, 249, 0.04), transparent);
+}
+
+.habitat-hub-brand {
+  display: grid;
+  gap: 3px;
+}
+
+.habitat-hub-brand span,
+.habitat-hub-left-rail span,
+.habitat-hub-console span,
+.habitat-hub-field-order > span,
+.habitat-hub-order-rows span,
+.habitat-hub-status-strip span {
+  color: var(--habitat-cyan);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.habitat-hub-brand strong {
+  color: #f8fafc;
+  font-size: clamp(24px, 2.1vw, 34px);
+  font-weight: 950;
+  letter-spacing: 0.04em;
+  line-height: 0.92;
+  text-transform: uppercase;
+}
+
+.habitat-hub-status-strip {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  justify-content: end;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.habitat-hub-status-strip span {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px;
+  border: 1px solid rgba(103, 232, 249, 0.14);
+  border-radius: 4px;
+  background: rgba(2, 6, 12, 0.46);
+  white-space: nowrap;
+}
+
+.habitat-hub-status-strip strong {
+  color: #f8fafc;
+  font-size: 11px;
+}
+
+.habitat-hub-screen button {
+  min-height: 34px;
+  border: 1px solid rgba(103, 232, 249, 0.26);
+  border-radius: 4px;
+  color: #dffbff;
+  background: rgba(2, 6, 12, 0.66);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  box-shadow: none;
+}
+
+.habitat-hub-screen button:hover,
+.habitat-hub-screen button:focus-visible {
+  border-color: rgba(255, 176, 46, 0.62);
+  color: #fff7ed;
+  background: rgba(216, 149, 63, 0.14);
+  outline: none;
+}
+
+.habitat-hub-stage {
+  grid-area: stage;
+  display: grid;
+  grid-template-columns: minmax(280px, 0.62fr) minmax(560px, 1.5fr) minmax(300px, 0.68fr);
+  gap: 12px;
+  min-height: 0;
+  padding: 12px;
+  overflow: hidden;
+}
+
+.habitat-hub-left-rail,
+.habitat-hub-field-order,
+.habitat-hub-console,
+.habitat-hub-nav {
+  border: 1px solid var(--habitat-line);
+  border-radius: 6px;
+  background:
+    linear-gradient(145deg, rgba(10, 18, 30, 0.58), rgba(2, 6, 12, 0.42)),
+    var(--habitat-panel);
+  box-shadow: inset 0 0 30px rgba(65, 217, 255, 0.035);
+}
+
+.habitat-hub-left-rail {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  align-content: start;
+  gap: 10px;
+  min-height: 0;
+  padding: 12px;
+  overflow: hidden;
+}
+
+.habitat-hub-operator-card,
+.habitat-hub-operator-grid,
+.habitat-hub-signal-card {
+  border: 1px solid rgba(103, 232, 249, 0.12);
+  border-radius: 5px;
+  background: rgba(2, 6, 12, 0.38);
+}
+
+.habitat-hub-operator-card {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+}
+
+.habitat-hub-operator-card strong {
+  color: #f8fafc;
+  font-size: clamp(21px, 1.8vw, 30px);
+  line-height: 0.96;
+  text-transform: uppercase;
+}
+
+.habitat-hub-operator-card small {
+  color: rgba(226, 232, 240, 0.72);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.habitat-hub-operator-grid,
+.habitat-hub-signal-card div {
+  display: grid;
+  grid-template-columns: minmax(80px, 0.42fr) minmax(0, 1fr);
+  gap: 7px 8px;
+  padding: 10px;
+}
+
+.habitat-hub-operator-grid div {
+  display: contents;
+}
+
+.habitat-hub-operator-grid strong,
+.habitat-hub-operator-grid button,
+.habitat-hub-signal-card b {
+  min-height: 24px;
+  overflow: hidden;
+  color: #f8fafc;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.habitat-hub-signal-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  overflow: hidden;
+}
+
+.habitat-hub-signal-card strong {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #f8fafc;
+  font-size: 16px;
+  line-height: 1.08;
+  text-transform: uppercase;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.habitat-hub-environment {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid rgba(103, 232, 249, 0.13);
+  border-radius: 7px;
+  background: #03070d;
+}
+
+.habitat-hub-backdrop,
+.habitat-hub-backdrop i {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.habitat-hub-backdrop {
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 50% 38%, rgba(255, 176, 46, 0.16), transparent 31%),
+    radial-gradient(ellipse at 50% 7%, rgba(199, 226, 255, 0.18), transparent 18%),
+    linear-gradient(180deg, rgba(10, 18, 28, 0.92), rgba(3, 7, 12, 0.48) 45%, rgba(1, 3, 6, 0.94));
+}
+
+.habitat-hub-backdrop::before,
+.habitat-hub-backdrop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+.habitat-hub-backdrop::before {
+  background:
+    linear-gradient(90deg, rgba(255, 176, 46, 0.08) 0 2px, transparent 2px 18%, rgba(103, 232, 249, 0.05) 18% 18.4%, transparent 18.4% 81.6%, rgba(103, 232, 249, 0.05) 81.6% 82%, transparent 82%),
+    repeating-linear-gradient(90deg, transparent 0 48px, rgba(148, 163, 184, 0.05) 48px 49px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.52), transparent 16%, transparent 84%, rgba(0, 0, 0, 0.52));
+}
+
+.habitat-hub-backdrop::after {
+  background:
+    radial-gradient(ellipse at 50% 50%, transparent 46%, rgba(0, 0, 0, 0.48) 100%),
+    linear-gradient(0deg, rgba(0, 0, 0, 0.58), transparent 32%);
+}
+
+.habitat-hub-depth-layer.layer-a {
+  top: 9%;
+  left: 12%;
+  right: 12%;
+  bottom: 47%;
+  border: 1px solid rgba(148, 163, 184, 0.13);
+  border-bottom-color: rgba(255, 176, 46, 0.16);
+  background:
+    linear-gradient(90deg, rgba(8, 16, 26, 0.74), rgba(20, 28, 38, 0.48) 50%, rgba(8, 16, 26, 0.74));
+  transform: perspective(720px) rotateX(8deg);
+}
+
+.habitat-hub-depth-layer.layer-b {
+  top: 18%;
+  left: 22%;
+  right: 22%;
+  bottom: 52%;
+  border: 1px solid rgba(255, 176, 46, 0.18);
+  background:
+    linear-gradient(90deg, transparent, rgba(255, 176, 46, 0.12), transparent),
+    rgba(2, 6, 12, 0.68);
+  box-shadow: 0 0 30px rgba(255, 176, 46, 0.08);
+}
+
+.habitat-hub-depth-layer.layer-c {
+  top: 31%;
+  left: 29%;
+  right: 29%;
+  bottom: 45%;
+  border: 1px solid rgba(103, 232, 249, 0.14);
+  background: rgba(3, 10, 17, 0.64);
+  box-shadow: inset 0 0 22px rgba(103, 232, 249, 0.06);
+}
+
+.habitat-hub-light-cone {
+  top: -8%;
+  left: 28%;
+  right: 28%;
+  bottom: 20%;
+  clip-path: polygon(42% 0, 58% 0, 100% 100%, 0 100%);
+  background: linear-gradient(180deg, rgba(255, 245, 215, 0.16), rgba(255, 176, 46, 0.045) 48%, transparent);
+  mix-blend-mode: screen;
+}
+
+.habitat-hub-floor {
+  top: 54%;
+  bottom: -12%;
+  background:
+    linear-gradient(rgba(103, 232, 249, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(103, 232, 249, 0.1) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(255, 176, 46, 0.1), rgba(2, 6, 12, 0.88));
+  background-size: 100% 36px, 54px 100%, auto;
+  transform: perspective(540px) rotateX(62deg) scaleX(1.45);
+  transform-origin: 50% 0;
+  opacity: 0.72;
+}
+
+.habitat-hub-console-glow {
+  top: 61%;
+  left: 22%;
+  right: 22%;
+  bottom: 8%;
+  border-radius: 999px;
+  background:
+    radial-gradient(ellipse at 50% 50%, rgba(255, 176, 46, 0.22), transparent 56%),
+    radial-gradient(ellipse at 50% 60%, rgba(103, 232, 249, 0.12), transparent 64%);
+  filter: blur(2px);
+}
+
+.habitat-hub-runner {
+  position: absolute;
+  left: 50%;
+  bottom: 150px;
+  z-index: 2;
+  width: min(360px, 44%);
+  height: min(470px, calc(100% - 180px));
+  transform: translateX(-50%);
+  display: grid;
+  place-items: end center;
+  overflow: hidden;
+}
+
+.habitat-hub-runner .hq-runner-preview-host {
+  width: 100%;
+  height: 100%;
+  min-height: 280px;
+  border: 0;
+  background: transparent;
+}
+
+.habitat-hub-runner .preview-model-status {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  max-width: 90%;
+  transform: translateX(-50%);
+  opacity: 0.62;
+  white-space: nowrap;
+}
+
+.habitat-hub-console {
+  position: absolute;
+  left: 50%;
+  bottom: 20px;
+  z-index: 3;
+  width: min(520px, calc(100% - 64px));
+  transform: translateX(-50%);
+  display: grid;
+  grid-template:
+    "label status" auto
+    "title title" auto
+    "copy copy" auto
+    "meta meta" auto
+    "actions actions" auto / minmax(0, 1fr) auto;
+  gap: 7px 12px;
+  padding: 14px;
+  background:
+    linear-gradient(180deg, rgba(16, 25, 36, 0.86), rgba(3, 8, 14, 0.84)),
+    rgba(2, 6, 12, 0.76);
+  backdrop-filter: blur(4px);
+}
+
+.habitat-hub-console > span {
+  grid-area: label;
+}
+
+.habitat-hub-console > strong {
+  grid-area: title;
+  color: #f8fafc;
+  font-size: clamp(22px, 2.1vw, 32px);
+  line-height: 0.96;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.habitat-hub-console p {
+  grid-area: copy;
+  margin: 0;
+  color: rgba(226, 232, 240, 0.76);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.habitat-hub-console div {
+  grid-area: meta;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.habitat-hub-console div span {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px;
+  border: 1px solid rgba(103, 232, 249, 0.13);
+  border-radius: 4px;
+  background: rgba(2, 6, 12, 0.48);
+}
+
+.habitat-hub-console div span.ready {
+  border-color: rgba(134, 239, 172, 0.36);
+  color: #bbf7d0;
+}
+
+.habitat-hub-console div span.warning {
+  border-color: rgba(255, 176, 46, 0.4);
+  color: #fed7aa;
+}
+
+.habitat-hub-console footer {
+  grid-area: actions;
+  display: grid;
+  grid-template-columns: minmax(170px, 1fr) minmax(150px, 0.72fr);
+  gap: 8px;
+}
+
+.habitat-hub-primary-action {
+  border-color: rgba(134, 239, 172, 0.64) !important;
+  color: #06130c !important;
+  background: linear-gradient(180deg, #9be7a9, #54b86b) !important;
+  box-shadow: 0 0 22px rgba(134, 239, 172, 0.16) !important;
+}
+
+.habitat-hub-field-order {
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  gap: 10px;
+  min-height: 0;
+  padding: 13px;
+  overflow: hidden;
+}
+
+.habitat-hub-field-order > strong {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #f8fafc;
+  font-size: clamp(20px, 1.55vw, 28px);
+  line-height: 1;
+  text-transform: uppercase;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.habitat-hub-field-order > p {
+  margin: 0;
+  color: rgba(226, 232, 240, 0.76);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.habitat-hub-order-rows {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.habitat-hub-order-rows div {
+  display: grid;
+  grid-template-columns: minmax(74px, 0.36fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 7px 8px;
+  border: 1px solid rgba(103, 232, 249, 0.12);
+  border-radius: 4px;
+  background: rgba(2, 6, 12, 0.38);
+}
+
+.habitat-hub-order-rows b {
+  display: block;
+  overflow: hidden;
+  color: #f8fafc;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.18;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.habitat-hub-multiplayer-action {
+  align-self: end;
+}
+
+.habitat-hub-nav {
+  grid-area: nav;
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0 12px 12px;
+  padding: 8px;
+  background:
+    linear-gradient(90deg, rgba(2, 6, 12, 0.78), rgba(7, 14, 24, 0.58), rgba(2, 6, 12, 0.78));
+}
+
+.habitat-hub-nav-button {
+  width: 100%;
+  min-height: 38px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.habitat-hub-nav-button.active {
+  border-color: rgba(255, 176, 46, 0.72);
+  color: #120a02;
+  background: linear-gradient(180deg, #ffc857, var(--dc-ui-amber));
+}
+
+.main-menu-content:has(.habitat-hub-screen) + .debug-tools,
+.habitat-hub-screen + .debug-tools {
+  width: min(1580px, calc(100vw - 18px));
+  max-height: 86px;
+  margin: 6px auto 0;
+  overflow: auto;
+}
+
+.habitat-hub-screen + .debug-tools summary {
+  font-size: 11px;
+}
+
+.habitat-hub-screen + .debug-tools .debug-actions {
+  padding: 6px;
+}
+
+@media (max-width: 1366px), (max-height: 820px) {
+  .habitat-hub-screen {
+    height: min(768px, calc(100vh - 14px));
+    min-height: 640px;
+    grid-template:
+      "chrome" 54px
+      "stage" minmax(0, 1fr)
+      "nav" 54px / minmax(0, 1fr);
+  }
+
+  .habitat-hub-chrome,
+  .habitat-hub-stage {
+    padding: 8px;
+  }
+
+  .habitat-hub-stage {
+    grid-template-columns: minmax(230px, 0.56fr) minmax(470px, 1.44fr) minmax(260px, 0.68fr);
+    gap: 8px;
+  }
+
+  .habitat-hub-left-rail,
+  .habitat-hub-field-order {
+    padding: 9px;
+  }
+
+  .habitat-hub-runner {
+    bottom: 132px;
+    height: min(390px, calc(100% - 154px));
+  }
+
+  .habitat-hub-console {
+    bottom: 14px;
+    padding: 11px;
+  }
+
+  .habitat-hub-order-rows {
+    gap: 6px;
+  }
+
+  .habitat-hub-order-rows div {
+    min-height: 32px;
+    padding: 5px 7px;
+  }
+
+  .habitat-hub-nav {
+    margin: 0 8px 8px;
+    padding: 6px;
+  }
+
+  .habitat-hub-nav-button {
+    min-height: 34px;
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 1100px) {
+  .main-menu-content:has(.habitat-hub-screen) {
+    overflow: auto;
+  }
+
+  .habitat-hub-screen {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+    grid-template:
+      "chrome" auto
+      "stage" auto
+      "nav" auto / minmax(0, 1fr);
+  }
+
+  .habitat-hub-chrome,
+  .habitat-hub-stage {
+    grid-template-columns: 1fr;
+  }
+
+  .habitat-hub-stage {
+    overflow: visible;
+  }
+
+  .habitat-hub-environment {
+    min-height: 620px;
+  }
+
+  .habitat-hub-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Phase 13.8F screenshot acceptance repair: targeted containment and readability only. */
+.class-selection-card.active {
+  color: #e6edf3 !important;
+  border-color: rgba(255, 176, 46, 0.86) !important;
+  background:
+    radial-gradient(ellipse at 50% 18%, rgba(103, 232, 249, 0.16), transparent 44%),
+    linear-gradient(180deg, rgba(7, 19, 30, 0.98), rgba(2, 7, 13, 0.98)) !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 176, 46, 0.2), 0 0 34px rgba(255, 176, 46, 0.12) !important;
+}
+
+.class-selection-card.active span,
+.class-selection-card.active small,
+.class-selection-card.active p,
+.class-selection-card.active em,
+.class-selection-card.active strong {
+  color: inherit;
+}
+
+.class-selection-card.active > span,
+.class-selection-card.active .class-card-columns small,
+.class-selection-card.active .class-card-trait small {
+  color: #67e8f9;
+}
+
+.class-selection-card.active .class-card-trait b,
+.class-selection-card.active > b {
+  color: #ffcf6d;
+}
+
+.class-selection-card.active > b {
+  background: rgba(255, 176, 46, 0.12);
+}
+
+.skill-matrix-screen {
+  width: min(1480px, calc(100vw - 20px));
+  height: min(820px, calc(100vh - 82px));
+  max-height: calc(100vh - 82px);
+  display: grid !important;
+  grid-template:
+    "header header" 72px
+    "branches summary" minmax(0, 1fr) / minmax(0, 1fr) 300px !important;
+  gap: 12px;
+  padding: 12px;
+  overflow: hidden !important;
+}
+
+.skill-matrix-screen .inspect-header {
+  grid-area: header !important;
+  min-height: 0;
+  padding: 10px 12px;
+}
+
+.skill-matrix-screen .skill-branch-grid {
+  grid-area: branches !important;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  align-items: stretch;
+  align-content: stretch;
+  gap: 10px;
+  min-height: 0;
+  overflow: hidden !important;
+  border: 1px solid rgba(103, 232, 249, 0.12);
+  border-radius: 6px;
+}
+
+.skill-branch-card {
+  min-width: 0;
+  padding: 8px 6px;
+}
+
+.skill-branch-card > span {
+  display: block;
+  min-height: 30px;
+  text-align: center;
+  font-size: 10px;
+  line-height: 1.15;
+}
+
+.skill-node-list {
+  gap: 10px;
+  justify-items: stretch;
+  overflow: hidden !important;
+}
+
+.skill-node {
+  width: 100% !important;
+  min-height: 118px;
+  padding: 9px 8px;
+}
+
+.skill-node span {
+  font-size: 9px;
+  line-height: 1.15;
+}
+
+.skill-node button {
+  padding-inline: 6px;
+  font-size: 10px;
+}
+
+.skill-detail-rail {
+  grid-area: summary !important;
+  align-self: stretch;
+  min-height: 0;
+}
+
+.ship-dashboard-screen {
+  grid-template:
+    "top top top" 56px
+    "identity overview stats" minmax(0, 1fr)
+    "alerts mission mission" 116px / minmax(230px, 0.62fr) minmax(540px, 1.42fr) minmax(310px, 0.82fr) !important;
+}
+
+.ship-alert-rail {
+  grid-template-columns: minmax(78px, 0.4fr) minmax(0, 1fr);
+  align-content: center;
+  gap: 6px 10px;
+  overflow: hidden;
+}
+
+.ship-alert-rail b {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ship-mission-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, auto) !important;
+  grid-template-rows: 1fr !important;
+  align-items: center;
+  gap: 16px;
+  min-height: 0;
+  padding: 14px 16px;
+}
+
+.ship-next-mission-copy {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.ship-next-mission-copy span {
+  color: rgba(103, 232, 249, 0.9);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ship-next-mission-copy strong,
+.ship-next-mission-copy p,
+.ship-next-mission-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ship-next-mission-copy strong {
+  color: #f8fafc;
+  font-size: 20px;
+}
+
+.ship-next-mission-copy p,
+.ship-next-mission-copy small {
+  margin: 0;
+  color: rgba(226, 232, 240, 0.78);
+}
+
+.ship-mission-panel button {
+  justify-self: end;
+  min-width: 164px;
+}
+
+.arsenal-workbench-screen {
+  height: min(828px, calc(100vh - 60px));
+  max-height: calc(100vh - 60px);
+  display: grid !important;
+  grid-template:
+    "top top top" 78px
+    "rail catalog preview" minmax(0, 1fr)
+    "actions mods details" 150px
+    "actions service details" 118px / 250px minmax(520px, 1fr) minmax(390px, 0.78fr) !important;
+  gap: 10px;
+  overflow: hidden !important;
+}
+
+.arsenal-catalog-rail {
+  grid-area: rail !important;
+}
+
+.arsenal-list-panel,
+.arsenal-catalog-grid-panel {
+  grid-area: catalog !important;
+}
+
+.arsenal-preview-panel {
+  grid-area: preview !important;
+}
+
+.arsenal-details-panel {
+  grid-area: details !important;
+}
+
+.arsenal-mod-panel {
+  grid-area: mods !important;
+}
+
+.arsenal-service-panel {
+  grid-area: service !important;
+}
+
+.arsenal-action-rail {
+  grid-area: actions !important;
+}
+
+.arsenal-workbench-top {
+  grid-area: top !important;
+  overflow: hidden;
+}
+
+.arsenal-resource-strip {
+  overflow: hidden;
+}
+
+.arsenal-weapon-catalog {
+  grid-template-columns: repeat(2, minmax(230px, 1fr)) !important;
+  align-content: start;
+}
+
+.arsenal-catalog-card {
+  min-height: 148px !important;
+  grid-template:
+    "num name tag" auto
+    "art art art" 76px
+    "meta meta meta" auto / auto minmax(0, 1fr) auto !important;
+}
+
+.catalog-weapon-art {
+  min-height: 76px;
+}
+
+.arsenal-preview-panel .weapon-bench-preview-host {
+  min-height: 190px;
+  max-height: 260px;
+}
+
+.arsenal-mod-panel,
+.arsenal-service-panel,
+.arsenal-details-panel,
+.arsenal-action-rail {
+  min-height: 0;
+  overflow: hidden !important;
+}
+
+.arsenal-mod-panel .attachment-panel,
+.arsenal-service-panel .upgrade-panel,
+.arsenal-service-panel .repair-panel,
+.arsenal-service-panel .compare-panel {
+  min-height: 0;
+  margin: 0;
+}
+
+.arsenal-mod-panel .attachment-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  overflow: hidden;
+}
+
+.attachment-slot-card {
+  min-height: 112px;
+  padding: 9px;
+  overflow: hidden;
+}
+
+.attachment-slot-card small,
+.attachment-slot-card em {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+}
+
+.attachment-slot-card footer {
+  grid-template-columns: 1fr;
+  gap: 5px;
+}
+
+.attachment-slot-card footer button:last-child {
+  display: none;
+}
+
+.arsenal-service-panel {
+  display: block;
+  gap: 8px;
+}
+
+.arsenal-service-panel .upgrade-panel {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  align-content: start;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.arsenal-service-panel .upgrade-panel h3 {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 13px;
+}
+
+.arsenal-service-panel .upgrade-row {
+  display: block;
+  min-height: 0;
+  padding: 7px;
+}
+
+.arsenal-service-panel .upgrade-row div {
+  display: grid;
+  gap: 2px;
+}
+
+.arsenal-service-panel .upgrade-row strong,
+.arsenal-service-panel .upgrade-row span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.arsenal-service-panel .upgrade-row small,
+.arsenal-service-panel .upgrade-row .bench-materials,
+.arsenal-service-panel .upgrade-row button,
+.arsenal-service-panel .repair-panel {
+  display: none;
+}
+
+.arsenal-service-panel .upgrade-row:nth-of-type(n+3) {
+  display: block;
+}
+
+.arsenal-service-panel .upgrade-row:nth-of-type(n+6) {
+  display: none;
+}
+
+.arsenal-service-panel .repair-panel,
+.arsenal-service-panel .compare-panel {
+  overflow: hidden;
+}
+
+.arsenal-service-panel .compare-panel {
+  display: none;
+}
+
+.raid-select-screen {
+  height: min(820px, calc(100vh - 82px));
+  max-height: calc(100vh - 82px);
+  overflow: hidden;
+}
+
+.raid-select-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 12px;
+  overflow: hidden !important;
+}
+
+.raid-select-card {
+  min-height: 0;
+  grid-template-rows: auto auto auto auto auto auto 42px;
+  gap: 9px;
+  padding: 14px;
+  overflow: hidden;
+}
+
+.raid-select-card p {
+  display: -webkit-box;
+  min-height: 44px;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.raid-card-metrics {
+  grid-template-columns: minmax(52px, 0.45fr) minmax(0, 1fr) !important;
+  gap: 6px 8px !important;
+}
+
+.raid-select-card small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.raid-select-card > small {
+  white-space: nowrap;
+}
+
+.raid-select-card button {
+  align-self: end;
+}
+
+.habitat-hub-environment {
+  background:
+    linear-gradient(90deg, rgba(255, 176, 46, 0.06), transparent 18%, transparent 82%, rgba(255, 176, 46, 0.05)),
+    #03070d;
+}
+
+.habitat-hub-backdrop {
+  background:
+    radial-gradient(ellipse at 50% 40%, rgba(255, 176, 46, 0.18), transparent 32%),
+    radial-gradient(ellipse at 20% 64%, rgba(103, 232, 249, 0.08), transparent 24%),
+    radial-gradient(ellipse at 80% 64%, rgba(255, 176, 46, 0.08), transparent 24%),
+    linear-gradient(180deg, rgba(12, 20, 30, 0.96), rgba(3, 7, 12, 0.52) 45%, rgba(1, 3, 6, 0.98));
+}
+
+.habitat-hub-backdrop::before {
+  background:
+    linear-gradient(105deg, rgba(0, 0, 0, 0.8) 0 14%, transparent 14% 28%, rgba(103, 232, 249, 0.06) 28% 28.3%, transparent 28.3% 72%, rgba(103, 232, 249, 0.06) 72% 72.3%, transparent 72.3% 86%, rgba(0, 0, 0, 0.82) 86% 100%),
+    repeating-linear-gradient(90deg, transparent 0 46px, rgba(148, 163, 184, 0.055) 46px 47px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.58), transparent 18%, transparent 82%, rgba(0, 0, 0, 0.58));
+}
+
+.habitat-hub-floor {
+  top: 50%;
+  background-size: 100% 30px, 44px 100%, auto;
+  opacity: 0.9;
+}
+
+.habitat-hub-depth-layer.layer-a {
+  left: 8%;
+  right: 8%;
+  bottom: 43%;
+  box-shadow: inset 0 -18px 40px rgba(0, 0, 0, 0.32);
+}
+
+.habitat-hub-depth-layer.layer-b {
+  left: 18%;
+  right: 18%;
+  bottom: 49%;
+}
+
+.habitat-hub-console-glow {
+  left: 14%;
+  right: 14%;
+  bottom: 5%;
+}
+
+.class-deploy-brief div,
+.class-readiness-grid {
+  grid-template-columns: minmax(84px, 0.34fr) minmax(0, 1fr);
+}
+
+.class-deploy-brief b,
+.class-readiness-grid b {
+  text-align: left;
+}
+
+.class-deploy-detail p,
+.class-selected-copy p,
+.class-selected-copy small {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.intel-board-screen {
+  height: min(820px, calc(100vh - 76px));
+  max-height: calc(100vh - 76px);
+  overflow: hidden !important;
+}
+
+.campaign-left-rail,
+.campaign-center-dossier,
+.campaign-right-rail,
+.codex-list,
+.codex-detail-card {
+  min-height: 0;
+  overflow: hidden !important;
+}
+
+.codex-list {
+  overflow-y: auto !important;
+}
+
+.codex-entry,
+.campaign-evidence-card,
+.contract-card {
+  min-height: 0;
+}
+
+.codex-panel {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.64fr) minmax(0, 1.36fr);
+  gap: 10px;
+  min-height: 0;
+  overflow: hidden !important;
+}
+
+.codex-entry {
+  display: grid;
+  gap: 2px;
+  min-height: 44px;
+  padding: 7px 9px;
+}
+
+.codex-entry span,
+.codex-entry strong {
+  display: block;
+  overflow: hidden;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codex-entry span {
+  display: none;
+}
+
+.codex-entry strong {
+  font-size: 13px;
+}
+
+.codex-entry p,
+.campaign-evidence-card p,
+.contract-card p,
+.codex-detail-card p {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.codex-detail-card {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.loadout-locker-screen,
+.cosmetics-loadout-screen {
+  max-height: calc(100vh - 82px);
+  overflow: hidden;
+}
+
+.loadout-locker-screen + .main-menu-actions,
+.cosmetics-loadout-screen + .main-menu-actions,
+.class-selection-screen + .main-menu-actions,
+.skill-matrix-screen + .main-menu-actions {
+  min-height: 48px;
+  padding: 7px;
+}
