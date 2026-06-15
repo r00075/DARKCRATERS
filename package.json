@@ -9,7 +9,8 @@
     "dev:server": "npm run server",
     "dev:all": "node scripts/dev-all.mjs",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "capture:ui": "node scripts/capture-ui-screenshots.mjs"
   },
   "dependencies": {
     "@babylonjs/core": "^9.7.0",
@@ -20,6 +21,7 @@
     "vite": "^8.0.10"
   },
   "devDependencies": {
+    "playwright": "^1.60.0",
     "tsx": "^4.20.6",
     "typescript": "^6.0.3"
   }
