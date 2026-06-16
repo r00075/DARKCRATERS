@@ -24,6 +24,8 @@ const screens = [
   { name: "03-class-selection.png", label: "Class Selection", actions: ["class-assignment"], selector: ".class-selection-screen" },
   { name: "04-loadout.png", label: "Loadout", actions: ["hq-loadout", "loadout"], selector: ".loadout-locker-screen, .cosmetics-loadout-screen" },
   { name: "05-arsenal.png", label: "Arsenal", actions: ["arsenal"], selector: ".arsenal-workbench-screen" },
+  { name: "05b-arsenal-sidearm.png", label: "Arsenal Sidearm Category", actions: ["arsenal"], afterActions: ["arsenal-category-sidearm"], selector: ".arsenal-workbench-screen" },
+  { name: "05c-arsenal-primary.png", label: "Arsenal Primary Category", actions: ["arsenal"], afterActions: ["arsenal-category-primary"], selector: ".arsenal-workbench-screen" },
   { name: "06-ship.png", label: "Ship", actions: ["ship-systems"], selector: ".ship-dashboard-screen" },
   { name: "07-skills.png", label: "Skills", actions: ["skill-matrix"], selector: ".skill-matrix-screen" },
   { name: "08-crater-runs.png", label: "Crater Runs", actions: ["raid-select"], selector: ".raid-select-screen" },
@@ -132,6 +134,11 @@ async function captureScreen(page, screen) {
     await ensureHome(page);
     if (screen.actions.length > 0) {
       entry.actionUsed = await clickAction(page, screen.actions);
+    }
+    if (screen.afterActions?.length > 0) {
+      for (const action of screen.afterActions) {
+        await clickAction(page, action);
+      }
     }
 
     await page.locator(screen.selector).first().waitFor({ state: "visible", timeout: 12000 });

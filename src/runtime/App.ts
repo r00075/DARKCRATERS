@@ -149,6 +149,9 @@ import { WeaponDurabilitySystem } from "../weapons/WeaponDurabilitySystem";
 import { buildRuntimeWeaponDefinition } from "../weapons/WeaponStatModifiers";
 import { weaponDefinitions, weaponIdFromLootType, weaponLootTypes, type RuntimeWeaponDefinition, type WeaponId } from "../weapons/WeaponDefinitions";
 import { MultiplayerClient, type MultiplayerConnectionSnapshot } from "../multiplayer/MultiplayerClient";
+
+type ArsenalCategory = "all" | "primary" | "sidearm" | "heavy" | "attachments";
+
 import type {
   NetworkContainerClaimResult,
   NetworkContainerState,
@@ -458,6 +461,7 @@ export class App {
   private inspectedWeaponId: WeaponId | null = null;
   private lastInvalidInspectWeaponId: string | null = null;
   private inspectWeaponContext: "inspect" | "arsenal" | "habitat" = "inspect";
+  private selectedArsenalCategory: ArsenalCategory = "all";
   private selectedLoadoutSlot: EquipmentSlot = "primary";
   private loadoutStashCompatibilityOpen = false;
   private stashFilter: StashFilter = "all";
@@ -7967,7 +7971,12 @@ export class App {
     this.hqManager.open("arsenal");
     this.menuContent.classList.add("arsenal-workbench-content");
     this.loadout.clampToStash(this.persistentStash.items);
-    const weaponId = this.resolveInspectedWeaponId() ?? "pistol";
+    const selectedCategory = this.selectedArsenalCategory;
+    const categoryWeaponIds = this.getArsenalWeaponIdsForCategory(selectedCategory);
+    let weaponId = this.resolveInspectedWeaponId() ?? "pistol";
+    if (categoryWeaponIds.length > 0 && !categoryWeaponIds.includes(weaponId)) {
+      weaponId = categoryWeaponIds[0];
+    }
     this.inspectedWeaponId = weaponId;
     const weapon = this.getUpgradedWeapon(weaponId);
     const durability = this.weaponController.getDurabilityState(weaponId);
@@ -7976,6 +7985,8 @@ export class App {
     const rarityColor = colorToCss(themeConfig.rarityColors[definition.rarity]);
     const equippedSlot = this.getEquippedWeaponSlot(weaponId);
     const equippedStatus = equippedSlot ? `${this.capitalize(equippedSlot)} equipped` : this.weaponExistsForInspect(weaponId) ? "Owned in stash" : "Prototype reference";
+    const selectedRole = this.getWeaponRoleLabel(weaponId);
+    const selectedManufacturer = this.getWeaponManufacturer(weaponId);
     const compareWeaponId = weaponId === this.loadout.snapshot.sidearmWeaponId
       ? this.loadout.snapshot.primaryWeaponId
       : this.loadout.snapshot.primaryWeaponId ?? this.loadout.snapshot.sidearmWeaponId;
@@ -7991,87 +8002,97 @@ export class App {
       ["H3", this.getStashQuantity("helium-drill-core") + this.getStashQuantity("rare-core")],
     ].map(([label, value]) => `<span>${label}<strong>${Number(value).toLocaleString()}</strong></span>`).join("");
 
-    const catalogCards = this.renderArsenalWeaponCatalogCards(weaponId);
+    const categoryLabel = this.getArsenalCategoryLabel(selectedCategory);
+    const catalogCards = this.renderArsenalWeaponCatalogCards(weaponId, selectedCategory);
+    const categoryButtons = this.renderArsenalCategoryButtons(selectedCategory);
+    const equipLabel = this.getWeaponEquipActionLabel(weaponId);
+    const repairCost = this.weaponController.getFullRepairCost(weaponId);
 
-    // Phase 13.8C reference target: projected starting weapon models reference, catalog-first weapon screen.
+    // Phase 13.8I reference target: TYCHOSTAR weapon catalog with heroic bench inspection.
     this.menuContent.innerHTML = `
       <div class="arsenal-workbench-screen hq-dashboard-shell" data-scroll-view="arsenal-main" data-scroll-key="arsenal-main" style="--rarity-color: ${rarityColor}">
-        <header class="arsenal-workbench-top hq-panel-header">
-          <div>
-            <span>Weapon Workbench</span>
-            <h2>ARSENAL</h2>
-            <p>Weapon inspection / repair / upgrade bench</p>
+        <header class="arsenal-workbench-top">
+          <div class="arsenal-brand-block">
+            <span>Dark Craters / TYCHOSTAR Field Bench</span>
+            <h2>Weapon Bench</h2>
+            <p>${this.getWeaponDisplayName(weaponId)}</p>
           </div>
           <div class="hq-resource-strip arsenal-resource-strip">${resourceRows}</div>
+          <span class="arsenal-screen-state">Arsenal</span>
           <button type="button" data-action="loadout">Back to Loadout</button>
         </header>
-        <aside class="arsenal-catalog-rail hq-panel">
-          <span>Weapon Catalog</span>
-          <button type="button" class="active">All Weapons</button>
-          <button type="button">Primary</button>
-          <button type="button">Sidearm</button>
-          <button type="button">Heavy / Utility</button>
-          <button type="button">Attachments</button>
+        <aside class="arsenal-catalog-rail">
+          <div>
+            <span>Weapon Catalog</span>
+            <strong>TYCHOSTAR ARMORY</strong>
+          </div>
+          ${categoryButtons}
+          <section class="arsenal-maker-strip">
+            <span>Tychostar</span>
+            <span>MK Survey Arms</span>
+            <span>Industrial Field Tools</span>
+            <span>Salvage Recovery</span>
+          </section>
         </aside>
-        <section class="arsenal-list-panel arsenal-catalog-grid-panel hq-panel">
-          <div class="hq-panel-header compact">
+        <section class="arsenal-list-panel arsenal-catalog-grid-panel">
+          <div class="arsenal-section-heading">
             <div>
-              <span>Projected Weapon Models</span>
-              <h3>Catalog</h3>
+              <span>${categoryLabel} Index</span>
+              <h3>Weapon Catalog</h3>
             </div>
-            <small>Owned weapons and prototype references share one catalog view.</small>
+            <small>${this.getArsenalCategoryDescription(selectedCategory)}</small>
           </div>
           <div class="arsenal-weapon-catalog" data-scroll-key="arsenal-weapon-list">${catalogCards}</div>
         </section>
-        <section class="arsenal-preview-panel hq-panel hq-preview-panel">
-          <div class="hq-panel-header compact">
+        <section class="arsenal-preview-panel">
+          <div class="arsenal-section-heading">
             <div>
-              <span>${this.getWeaponManufacturer(weaponId)}</span>
+              <span>${selectedManufacturer}</span>
               <h3>${this.getWeaponDisplayName(weaponId)}</h3>
             </div>
             <small>${equippedStatus}</small>
           </div>
-          <div class="weapon-bench-preview-host" aria-label="Weapon workbench preview">
-            ${this.renderWeaponSchematicFallback(weapon)}
-          </div>
-          <div class="inspect-meta-grid">
-            <div><span>Class</span><strong>${this.getWeaponRoleLabel(weaponId)}</strong></div>
-            <div><span>Ammo</span><strong>${this.capitalize(weapon.ammoType)}</strong></div>
-            <div><span>Condition</span><strong>${Math.round(durability.durability)}%</strong></div>
-            <div><span>Preview Asset</span><strong>${getWeaponPreviewConfig(weaponId) ? "GLB / schematic fallback" : "Schematic fallback"}</strong></div>
-          </div>
-        </section>
-        <section class="arsenal-details-panel hq-panel hq-detail-panel">
-          <div class="hq-panel-header compact">
-            <div>
-              <span>Weapon Details</span>
-              <h3>${definition.rarity.toUpperCase()} FIELD TOOL</h3>
+          <div class="arsenal-hero-stage">
+            <div class="arsenal-bench-callout callout-a"><span>Frame</span><b>${selectedRole}</b></div>
+            <div class="arsenal-bench-callout callout-b"><span>Condition</span><b>${Math.round(durability.durability)}%</b></div>
+            <div class="weapon-bench-preview-host" aria-label="Weapon workbench preview">
+              ${this.renderWeaponSchematicFallback(weapon)}
             </div>
           </div>
-          <p>${definition.description}</p>
-          ${this.renderWeaponStatPanel(weapon, durability)}
-        </section>
-        <section class="arsenal-mod-panel hq-panel">
-          ${this.renderWeaponAttachmentPanel()}
-        </section>
-        <section class="arsenal-service-panel hq-panel">
-          ${this.renderWeaponUpgradePanel(weaponId)}
-          ${this.renderWeaponRepairPanel(weaponId, durability)}
-          ${this.renderWeaponComparePanel(weaponId, compareWeaponId)}
-        </section>
-        <section class="arsenal-action-rail hq-panel">
-          <div>
-            <span>Bench Actions</span>
-            <strong>${this.getWeaponDisplayName(weaponId)}</strong>
-            <p>HQ equip, repair, upgrade, and attachment actions use current systems. In-raid weapon swapping remains reserved for Phase 11.0.</p>
+          <p>${this.getWeaponBenchDescription(weaponId)}</p>
+          <div class="arsenal-hero-meta">
+            <div><span>Status</span><strong>${equippedStatus}</strong></div>
+            <div><span>Class</span><strong>${selectedRole}</strong></div>
+            <div><span>Ammo</span><strong>${this.capitalize(weapon.ammoType)}</strong></div>
+            <div><span>Asset</span><strong>${getWeaponPreviewConfig(weaponId) ? "GLB / fallback" : "Schematic"}</strong></div>
           </div>
-          <footer class="hq-action-bar">
-            <button type="button" data-action="inspect-equip-primary-${weaponId}">Equip to ${weaponId === "pistol" || weaponId === "burst-pistol" || weaponId === "revolver" || weaponId === "compact-smg" ? "Sidearm" : weaponId === "knife" ? "Tool" : "Primary"}</button>
-            <button type="button" data-action="inspect-repair-${weaponId}">Repair</button>
-            <button type="button" disabled>Compare Overlay - Bench Locked</button>
-            <button type="button" disabled>Skin / Wrap - Coming Soon</button>
-            <button type="button" data-action="loadout">Back to Loadout</button>
-          </footer>
+        </section>
+        <section class="arsenal-tech-panel">
+          <div class="arsenal-tech-title">
+            <span>Bench Technical Section</span>
+            <strong>${definition.rarity.toUpperCase()} FIELD TOOL</strong>
+            <p>${definition.description}</p>
+          </div>
+          <div class="arsenal-tech-grid">
+            <section class="arsenal-details-panel">
+              ${this.renderWeaponStatPanel(weapon, durability)}
+            </section>
+            <section class="arsenal-mod-panel">
+              ${this.renderWeaponAttachmentPanel()}
+            </section>
+            <section class="arsenal-service-panel">
+              ${this.renderWeaponUpgradePanel(weaponId)}
+              ${this.renderWeaponRepairPanel(weaponId, durability)}
+              ${this.renderWeaponComparePanel(weaponId, compareWeaponId)}
+            </section>
+          </div>
+        </section>
+        <section class="arsenal-command-strip">
+          <button type="button" data-action="loadout">Back to Loadout</button>
+          <button type="button" data-action="inspect-equip-primary-${weaponId}">${equipLabel}</button>
+          <button type="button" data-action="inspect-repair-${weaponId}" ${repairCost <= 0 ? "disabled" : ""}>Repair</button>
+          <button type="button" disabled>Compare Overlay - Bench Locked</button>
+          <button type="button" disabled>Skin / Wrap - Coming Soon</button>
         </section>
       </div>
     `;
@@ -8164,6 +8185,46 @@ export class App {
       knife: "Mining Cutter Retrofit",
     };
     return makers[weaponId] ?? "Lunar Field Pattern";
+  }
+
+  private getWeaponCatalogGroup(weaponId: WeaponId): string {
+    const groups: Partial<Record<WeaponId, string>> = {
+      pistol: "Survey Sidearms",
+      "burst-pistol": "Survey Sidearms",
+      revolver: "Heavy / Utility",
+      "compact-smg": "Pulse / Breach Weapons",
+      smg: "Pulse / Breach Weapons",
+      shotgun: "Pulse / Breach Weapons",
+      "assault-rifle": "Pulse / Breach Weapons",
+      rifle: "Pulse / Breach Weapons",
+      knife: "Field Tools",
+    };
+    return groups[weaponId] ?? "Field Weapons";
+  }
+
+  private getWeaponEquipActionLabel(weaponId: WeaponId): string {
+    if (weaponId === "pistol" || weaponId === "burst-pistol" || weaponId === "revolver" || weaponId === "compact-smg") {
+      return "Equip to Sidearm";
+    }
+    if (weaponId === "knife") {
+      return "Equip to Heavy / Tool";
+    }
+    return "Equip to Primary";
+  }
+
+  private getWeaponBenchDescription(weaponId: WeaponId): string {
+    const descriptions: Partial<Record<WeaponId, string>> = {
+      pistol: "Standard survey sidearm staged for crater navigation teams and low-noise field work.",
+      "burst-pistol": "Alternate MK3 burst frame for runners who need fast close-range correction.",
+      revolver: "Signal spike launcher configured for flare work and emergency crater marking.",
+      "compact-smg": "Compact TY-7 frame for tight industrial corridors and rapid contact breaks.",
+      smg: "Close-range TY-7 carbine pattern with heavier bench rails and field-service parts.",
+      shotgun: "Breach-12 scattergun for broken hatchways, mining rigs, and short crater interiors.",
+      "assault-rifle": "PR-4 pulse rifle tuned for reliable mid-range habitat perimeter defense.",
+      rifle: "Longline marksman platform for open crater lanes and low-light route overwatch.",
+      knife: "Industrial mining laser retrofit treated as a utility weapon in the bench catalog.",
+    };
+    return descriptions[weaponId] ?? "Tychostar field weapon staged for crater deployment.";
   }
 
   private renderWeaponSchematicFallback(weapon: RuntimeWeaponDefinition): string {
@@ -8682,22 +8743,95 @@ export class App {
     this.bindMenuButtons();
   }
 
-  private renderArsenalWeaponCatalogCards(selectedWeaponId: WeaponId): string {
+  private renderArsenalCategoryButtons(selectedCategory: ArsenalCategory): string {
+    const categories: Array<{ id: ArsenalCategory; label: string; detail: string }> = [
+      { id: "all", label: "All Weapons", detail: `${Object.keys(weaponDefinitions).length} projected frames` },
+      { id: "primary", label: "Primary", detail: "Pulse / breach / marksman" },
+      { id: "sidearm", label: "Sidearm", detail: "MK survey line" },
+      { id: "heavy", label: "Heavy / Utility", detail: "Launchers and field tools" },
+      { id: "attachments", label: "Attachments", detail: "Optic / muzzle / grip" },
+    ];
+
+    return categories.map((category) => `
+      <button
+        type="button"
+        class="${category.id === selectedCategory ? "active" : ""}"
+        data-action="arsenal-category-${category.id}"
+        aria-pressed="${category.id === selectedCategory ? "true" : "false"}"
+      >
+        <b>${category.label}</b>
+        <small>${category.detail}</small>
+      </button>
+    `).join("");
+  }
+
+  private getArsenalCategoryLabel(category: ArsenalCategory): string {
+    const labels: Record<ArsenalCategory, string> = {
+      all: "All Weapons",
+      primary: "Primary Weapons",
+      sidearm: "Sidearms",
+      heavy: "Heavy / Utility",
+      attachments: "Attachments",
+    };
+    return labels[category];
+  }
+
+  private getArsenalCategoryDescription(category: ArsenalCategory): string {
+    const descriptions: Record<ArsenalCategory, string> = {
+      all: "Owned weapons and prototype references share this bench index.",
+      primary: "Pulse, breach, and marksman frames available for primary deployment slots.",
+      sidearm: "Compact survey weapons and emergency frames staged for sidearm deployment.",
+      heavy: "Utility, launcher, and field-tool frames staged outside the standard rifle catalog.",
+      attachments: "Attachment catalog pending. Use the selected weapon attachment slots in the technical section.",
+    };
+    return descriptions[category];
+  }
+
+  private getArsenalWeaponIdsForCategory(category: ArsenalCategory): WeaponId[] {
     const weaponIds = Object.keys(weaponDefinitions) as WeaponId[];
+    if (category === "all") {
+      return weaponIds;
+    }
+    if (category === "attachments") {
+      return [];
+    }
+    return weaponIds.filter((weaponId) => this.getArsenalWeaponCategory(weaponId) === category);
+  }
+
+  private getArsenalWeaponCategory(weaponId: WeaponId): Exclude<ArsenalCategory, "all" | "attachments"> {
+    if (weaponId === "pistol" || weaponId === "burst-pistol" || weaponId === "compact-smg") {
+      return "sidearm";
+    }
+    if (weaponId === "revolver" || weaponId === "knife") {
+      return "heavy";
+    }
+    return "primary";
+  }
+
+  private renderArsenalWeaponCatalogCards(selectedWeaponId: WeaponId, category: ArsenalCategory): string {
+    const weaponIds = this.getArsenalWeaponIdsForCategory(category);
+    if (weaponIds.length === 0) {
+      return `
+        <article class="arsenal-catalog-empty">
+          <span>${this.getArsenalCategoryLabel(category)}</span>
+          <strong>Attachment catalog pending</strong>
+          <p>Use the selected weapon attachment slots in the technical section for optic, muzzle, grip, and magazine changes.</p>
+        </article>
+      `;
+    }
     return weaponIds.map((weaponId, index) => {
       const definition = getItemDefinition(weaponLootTypes[weaponId]);
       const color = colorToCss(themeConfig.rarityColors[definition.rarity]);
       const equipped = this.getEquippedWeaponSlot(weaponId);
       const owned = this.weaponExistsForInspect(weaponId);
       const durability = this.weaponController.getDurabilityState(weaponId);
-      const weapon = buildRuntimeWeaponDefinition(weaponId, this.loadout.snapshot.attachments);
+      const status = equipped ? `${this.capitalize(equipped)} equipped` : owned ? `${this.getStashQuantity(weaponLootTypes[weaponId])} in stash` : "Prototype reference";
       return `
         <button type="button" class="arsenal-catalog-card ${weaponId === selectedWeaponId ? "selected" : ""} ${owned ? "" : "prototype"}" data-action="inspect-select-${weaponId}" style="--rarity-color: ${color}">
           <span>${String(index + 1).padStart(2, "0")}</span>
           <strong>${this.getWeaponDisplayName(weaponId)}</strong>
-          <small>${this.getWeaponRoleLabel(weaponId)}</small>
-          <div class="catalog-weapon-art">${this.renderWeaponSchematicFallback(weapon)}</div>
-          <em>${equipped ? `${this.capitalize(equipped)} equipped` : owned ? `${this.getStashQuantity(weaponLootTypes[weaponId])} in stash` : "Prototype reference"} | ${Math.round(durability.durability)}%</em>
+          <small>${this.getWeaponCatalogGroup(weaponId)}</small>
+          <em><b>${this.getWeaponRoleLabel(weaponId)}</b><i>${status}</i><i>${Math.round(durability.durability)}% condition</i></em>
         </button>
       `;
     }).join("");
@@ -9153,6 +9287,7 @@ export class App {
       action === "class-confirm-assignment" ||
       action === "class-review-loadout" ||
       action?.startsWith("launch-raid-") === true ||
+      action?.startsWith("arsenal-category-") === true ||
       action?.startsWith("class-select-") === true ||
       action?.startsWith("loadout-tab-") === true ||
       action?.startsWith("cosmetic-category-") === true ||
@@ -9869,6 +10004,12 @@ export class App {
       this.applyCurrentCosmetics();
       this.combatHud.showLootNotification("Cosmetics reset");
       this.showLoadoutMenu();
+    } else if (action?.startsWith("arsenal-category-")) {
+      const category = action.replace("arsenal-category-", "") as ArsenalCategory;
+      if (category === "all" || category === "primary" || category === "sidearm" || category === "heavy" || category === "attachments") {
+        this.selectedArsenalCategory = category;
+        this.showArsenalWorkbenchMenu();
+      }
     } else if (action?.startsWith("inspect-select-")) {
       this.inspectedWeaponId = action.replace("inspect-select-", "") as WeaponId;
       this.showInspectWeaponMenu(this.inspectWeaponContext);
