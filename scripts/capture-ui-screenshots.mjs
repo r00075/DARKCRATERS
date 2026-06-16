@@ -23,6 +23,7 @@ const screens = [
   { name: "02-deployment-assignment.png", label: "Deployment Assignment", actions: ["start"], selector: ".class-deploy-screen" },
   { name: "03-class-selection.png", label: "Class Selection", actions: ["class-assignment"], selector: ".class-selection-screen" },
   { name: "04-loadout.png", label: "Loadout", actions: ["hq-loadout", "loadout"], selector: ".loadout-locker-screen, .cosmetics-loadout-screen" },
+  { name: "04b-loadout-cosmetics.png", label: "Loadout Cosmetics", actions: ["hq-loadout", "loadout"], afterActions: ["loadout-tab-cosmetics"], selector: ".cosmetics-loadout-screen" },
   { name: "05-arsenal.png", label: "Arsenal", actions: ["arsenal"], selector: ".arsenal-workbench-screen" },
   { name: "05b-arsenal-sidearm.png", label: "Arsenal Sidearm Category", actions: ["arsenal"], afterActions: ["arsenal-category-sidearm"], selector: ".arsenal-workbench-screen" },
   { name: "05c-arsenal-primary.png", label: "Arsenal Primary Category", actions: ["arsenal"], afterActions: ["arsenal-category-primary"], selector: ".arsenal-workbench-screen" },

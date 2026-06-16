@@ -7056,14 +7056,7 @@ export class App {
         ? this.renderCosmeticsLoadoutScreen()
         : this.renderGearLoadoutScreen();
 
-      this.menuContent.innerHTML = `
-        ${body}
-        <div class="main-menu-actions">
-          <button type="button" data-action="start">Review Assignment</button>
-          <button type="button" data-action="arsenal">Weapon Bench</button>
-          <button type="button" data-action="menu">Back to Habitat</button>
-        </div>
-      `;
+      this.menuContent.innerHTML = body;
     } catch (error) {
       console.warn("Loadout screen failed to render; showing safe fallback menu.", error);
       this.menuContent.innerHTML = `
@@ -7083,9 +7076,9 @@ export class App {
         framingMode: "fullBody",
         modelPaths: getClassSuitModelCandidates(this.classManager.snapshot.selectedClassId),
         classId: this.classManager.snapshot.selectedClassId,
-        targetHeight: this.loadoutTab === "cosmetics" ? 1.36 : 1.4,
+        targetHeight: this.loadoutTab === "cosmetics" ? 1.48 : 1.46,
         verticalLift: 0.02,
-        cameraRadius: this.loadoutTab === "cosmetics" ? 5.3 : 5.4,
+        cameraRadius: this.loadoutTab === "cosmetics" ? 5.12 : 5.18,
         cameraTargetY: 0.7,
       });
     }
@@ -7095,11 +7088,10 @@ export class App {
     const loadout = this.loadout.snapshot;
     const manager = this.loadoutManager.snapshot;
     const selectedSlotType = this.getLoadoutSlotLootType(this.selectedLoadoutSlot, loadout, manager);
-    const selectedType = manager.selectedType ?? selectedSlotType;
-    const selectedHeaderLabel = manager.selectedType && manager.selectedType !== selectedSlotType
-      ? "Compatibility Item"
-      : equipmentSlotLabels[this.selectedLoadoutSlot];
+    const selectedType = selectedSlotType;
+    const selectedHeaderLabel = equipmentSlotLabels[this.selectedLoadoutSlot];
     const selectedDetails = this.renderLoadoutItemDetails(selectedType, this.selectedLoadoutSlot);
+    const compatibilitySelectedType = manager.selectedType ?? selectedType;
     const gearSlots = this.renderEquippedGearSlots(loadout);
     const raidBag = this.renderRaidBag();
     const warnings = this.renderLoadoutReadinessWarnings(loadout, manager);
@@ -7113,36 +7105,29 @@ export class App {
     const stashRows = this.renderLoadoutStashRows(manager.filter);
 
     return `
-      <div class="loadout-locker-screen hq-dashboard-shell" data-scroll-view="loadout-main" data-scroll-key="loadout-main">
-        <header class="loadout-locker-top hq-panel-header">
-          <div>
-            <span>Loadout Locker</span>
-            <h2>LOADOUT</h2>
-            <p>Active EVA kit / crater deployment readiness</p>
-          </div>
-          <nav class="loadout-mode-tabs">
-            <button type="button" class="${this.loadoutTab === "gear" ? "active" : ""}" data-action="loadout-tab-gear">Gear</button>
-            <button type="button" class="${this.loadoutTab === "cosmetics" ? "active" : ""}" data-action="loadout-tab-cosmetics">Cosmetics</button>
-          </nav>
-          <div class="hq-resource-strip loadout-readiness-strip">
-            <span>Class <strong>${this.classManager.selectedClass.displayName}</strong></span>
-            <span>Gear <strong>${this.getGearScore()} / ${this.selectedRaidDefinition.recommendedGearScore}</strong></span>
-            <span>EVA <strong>${this.loadoutManager.raidBagUsedSlots}/${this.loadoutManager.raidBagCapacity}</strong></span>
-          </div>
-        </header>
-        ${this.renderLoadoutRunnerPanel()}
-        <section class="loadout-equipped-panel hq-panel">
-          <div class="hq-panel-header compact">
+      <div class="loadout-locker-screen hq-dashboard-shell runner-prep-bay-screen" data-scroll-view="loadout-main" data-scroll-key="loadout-main">
+        ${this.renderLoadoutPrepHeader(warnings, "gear")}
+        <section class="loadout-equipped-panel hq-panel runner-prep-equipment-rail">
+          <div class="prep-panel-heading">
             <div>
-              <span>Equipped Gear</span>
-              <h3>Deployment Slots</h3>
+              <span>Equipment Rail</span>
+              <h3>Deployment Kit</h3>
             </div>
-            <small>Heavy cargo is mission state, not an EVA Pack slot.</small>
+            <small>Heavy cargo remains mission state, not an EVA Pack slot.</small>
           </div>
           <div class="gear-slot-grid loadout-slot-grid">${gearSlots}</div>
+          <section class="prep-eva-card">
+            <div>
+              <span>EVA Pack / Carried Supplies</span>
+              <strong>${this.loadoutManager.raidBagUsedSlots}/${this.loadoutManager.raidBagCapacity} slots at risk</strong>
+            </div>
+            <div class="raid-bag-grid">${raidBag}</div>
+            <button type="button" class="loadout-stash-open-button" data-action="loadout-stash-compat-open">Compatibility Browser</button>
+          </section>
         </section>
-        <section class="loadout-detail-panel hq-panel hq-detail-panel">
-          <div class="hq-panel-header compact">
+        ${this.renderLoadoutRunnerPanel()}
+        <section class="loadout-detail-panel hq-panel hq-detail-panel runner-prep-detail-rail">
+          <div class="prep-panel-heading">
             <div>
               <span>Selected Slot</span>
               <h3>${selectedHeaderLabel}</h3>
@@ -7150,40 +7135,69 @@ export class App {
           </div>
           ${selectedDetails}
         </section>
-        <section class="loadout-eva-panel hq-panel">
-          <div class="hq-panel-header compact">
-            <div>
-              <span>EVA Pack</span>
-              <h3>Carried Supplies</h3>
-            </div>
-            <small>${this.loadoutManager.raidBagUsedSlots}/${this.loadoutManager.raidBagCapacity} slots at risk next run</small>
-          </div>
-          <div class="raid-bag-grid">${raidBag}</div>
-          <div class="loadout-stash-access">
-            <div>
-              <span>Habitat Stash</span>
-              <strong>Compatibility Browser</strong>
-              <p>Review compatible stash gear without changing the active deployment layout.</p>
-            </div>
-            <button type="button" class="loadout-stash-open-button" data-action="loadout-stash-compat-open">Open Compatibility Browser</button>
-          </div>
-        </section>
-        <section class="loadout-action-rail hq-panel">
+        <section class="loadout-action-rail hq-panel runner-prep-readiness">
           <div>
-            <span>Readiness</span>
+            <span>Readiness Summary</span>
             <strong>${warnings.length > 0 ? "Review Kit" : "Deployment Ready"}</strong>
-            <p>${warnings.length > 0 ? warnings.join(" | ") : "Primary kit is staged. EVA Pack field utilities and supported risk items are ready for deployment."}</p>
+            <p>${warnings.length > 0 ? warnings.join(" | ") : "Primary kit staged. EVA Pack utilities and supported risk items are ready for deployment."}</p>
           </div>
-          <footer class="hq-action-bar">
-            <button type="button" data-action="arsenal">Arsenal</button>
-            <button type="button" data-action="stash">Stash</button>
-            <button type="button" data-action="loadout-stash-compat-open">Compatibility</button>
-            <button type="button" data-action="class-assignment">Class</button>
-            <button type="button" class="class-primary-action" data-action="start">Review Assignment</button>
-          </footer>
+          ${this.renderLoadoutReadinessChips(warnings)}
         </section>
+        ${this.renderLoadoutCommandStrip()}
       </div>
-      ${this.loadoutStashCompatibilityOpen ? this.renderLoadoutStashCompatibilityPanel(filterTabs, stashRows, manager.filter, selectedType) : ""}
+      ${this.loadoutStashCompatibilityOpen ? this.renderLoadoutStashCompatibilityPanel(filterTabs, stashRows, manager.filter, compatibilitySelectedType) : ""}
+    `;
+  }
+
+  private renderLoadoutPrepHeader(warnings: readonly string[], mode: "gear" | "cosmetics"): string {
+    const gearScore = this.getGearScore();
+    const recommended = this.selectedRaidDefinition.recommendedGearScore;
+    const readiness = warnings.length > 0 ? "Review Kit" : gearScore >= recommended ? "Run Ready" : "Under Recommended";
+    return `
+      <header class="loadout-locker-top runner-prep-top">
+        <div class="runner-prep-brand">
+          <span>Dark Craters / TYCHOSTAR Runner Prep Bay</span>
+          <h2>Loadout Locker</h2>
+          <p>${this.classManager.selectedClass.displayName} / ${this.classManager.selectedClass.roleLabel}</p>
+        </div>
+        <nav class="loadout-mode-tabs">
+          <button type="button" class="${mode === "gear" ? "active" : ""}" data-action="loadout-tab-gear">Gear</button>
+          <button type="button" class="${mode === "cosmetics" ? "active" : ""}" data-action="loadout-tab-cosmetics">Cosmetics</button>
+        </nav>
+        <div class="hq-resource-strip loadout-readiness-strip">
+          <span>Class <strong>${this.classManager.selectedClass.displayName}</strong></span>
+          <span>Gear <strong>${gearScore} / ${recommended}</strong></span>
+          <span>EVA <strong>${this.loadoutManager.raidBagUsedSlots}/${this.loadoutManager.raidBagCapacity}</strong></span>
+          <span>Mission <strong>${readiness}</strong></span>
+        </div>
+        <span class="loadout-screen-state">Loadout</span>
+      </header>
+    `;
+  }
+
+  private renderLoadoutReadinessChips(warnings: readonly string[]): string {
+    const chips = [
+      ["Class", this.classManager.selectedClass.displayName],
+      ["Gear", `${this.getGearScore()} / ${this.selectedRaidDefinition.recommendedGearScore}`],
+      ["EVA Pack", `${this.loadoutManager.raidBagUsedSlots}/${this.loadoutManager.raidBagCapacity}`],
+      ["Mission", warnings.length > 0 ? warnings[0] : "Ready"],
+    ];
+    return `
+      <div class="runner-readiness-chip-grid">
+        ${chips.map(([label, value]) => `<div><span>${label}</span><strong>${value}</strong></div>`).join("")}
+      </div>
+    `;
+  }
+
+  private renderLoadoutCommandStrip(): string {
+    return `
+      <section class="loadout-command-strip">
+        <button type="button" class="class-primary-action" data-action="start">Review Assignment</button>
+        <button type="button" data-action="arsenal">Weapon Bench</button>
+        <button type="button" data-action="stash">Habitat Stash</button>
+        <button type="button" data-action="class-assignment">Class</button>
+        <button type="button" data-action="menu">Back to Habitat</button>
+      </section>
     `;
   }
 
@@ -7233,41 +7247,54 @@ export class App {
       `)
       .join("");
 
+    const warnings = this.renderLoadoutReadinessWarnings(this.loadout.snapshot, this.loadoutManager.snapshot);
+
     return `
-      <div class="loadout-screen cosmetics-loadout-screen hq-dashboard-shell">
-        ${this.renderLoadoutHero()}
-        ${this.renderCosmeticRunnerPanel()}
-        <section class="equipped-gear-panel cosmetic-equipped-panel">
-          <h3>Class Suit Cosmetics</h3>
-          <p>${activeClass.displayName} suit identity is class-bound. These are minor cosmetic overlays for the current assignment.</p>
+      <div class="loadout-locker-screen cosmetics-loadout-screen hq-dashboard-shell runner-prep-bay-screen" data-scroll-view="loadout-main" data-scroll-key="loadout-main">
+        ${this.renderLoadoutPrepHeader(warnings, "cosmetics")}
+        <section class="cosmetic-equipped-panel hq-panel runner-prep-equipment-rail">
+          <div class="prep-panel-heading">
+            <div>
+              <span>Customization Rail</span>
+              <h3>Suit Identity</h3>
+            </div>
+            <small>${activeClass.displayName} silhouette remains class-bound.</small>
+          </div>
+          <nav class="cosmetic-category-rail">${categoryTabs}</nav>
           <div class="cosmetic-equipped-list">${equippedRows}</div>
         </section>
-        <section class="stash-inventory-panel cosmetic-browser-panel">
-          <h3>${cosmeticCategoryLabels[state.selectedCategory]}</h3>
-          <nav>${categoryTabs}</nav>
+        ${this.renderCosmeticRunnerPanel()}
+        <section class="cosmetic-browser-panel hq-panel runner-prep-readiness">
+          <div class="prep-panel-heading">
+            <div>
+              <span>Style Browser</span>
+              <h3>${cosmeticCategoryLabels[state.selectedCategory]}</h3>
+            </div>
+          </div>
           <div class="cosmetic-grid">${cosmetics}</div>
         </section>
-        <section class="raid-bag-panel cosmetic-rules-panel">
-          <h3>Minor Enhancements</h3>
-          <button type="button" data-action="cosmetics-randomize">Randomize Loadout</button>
-          <button type="button" data-action="cosmetics-favorite">Favorite Placeholder</button>
-          <p>Class selection controls the major Obsidian Sentinel suit silhouette. Cosmetics are per-class finishes, trims, helmet variants, visor/mask choices, EVA pack skins, emotes, and banners.</p>
-          <p>Cosmetics never affect stats, are never lost in a Crater Run, and persist through death. Armor and gear still control protection and capacity.</p>
-        </section>
-        <section class="item-details-panel">
-          <h3>Selected Style</h3>
+        <section class="item-details-panel hq-panel runner-prep-detail-rail">
+          <div class="prep-panel-heading">
+            <div>
+              <span>Selected Style</span>
+              <h3>${cosmeticCategoryLabels[state.selectedCategory]}</h3>
+            </div>
+          </div>
           <article class="loadout-details-card" style="--rarity-color: ${colorToCss(themeConfig.rarityColors[selectedDefinition?.rarity ?? "rare"])}">
             <strong>${selectedDefinition?.name ?? `${themeConfig.brand.title} Runner`}</strong>
             <span>${(selectedDefinition?.rarity ?? "rare").toUpperCase()} | ${selectedDefinition?.source ?? "starter"}</span>
-          <p>${selectedDefinition?.description ?? "Customize the Crater Runner silhouette while keeping extraction risk tied to gear, loot, and survival."}</p>
+            <p>${selectedDefinition?.description ?? "Customize the Crater Runner silhouette while keeping extraction risk tied to gear, loot, and survival."}</p>
             <div><span>Status</span><strong>${selectedDefinition?.unlocked ? "Unlocked" : "Locked"}</strong></div>
             <div><span>Category</span><strong>${cosmeticCategoryLabels[state.selectedCategory]}</strong></div>
+            <div><span>Class Suit</span><strong>${activeClass.displayName}</strong></div>
             <footer>
               <button type="button" data-action="cosmetics-apply">Apply Preview</button>
               <button type="button" data-action="cosmetics-reset">Reset to Default</button>
+              <button type="button" data-action="cosmetics-randomize">Randomize</button>
             </footer>
           </article>
         </section>
+        ${this.renderLoadoutCommandStrip()}
       </div>
     `;
   }
@@ -7275,16 +7302,20 @@ export class App {
   private renderCosmeticRunnerPanel(): string {
     return `
       <section class="player-preview-panel cosmetic-runner-panel hq-panel hq-preview-panel">
-        <div class="hq-panel-header compact">
+        <div class="prep-panel-heading">
           <div>
-            <span>Class Suit Preview</span>
+            <span>Suit Locker Preview</span>
             <h3>${this.classManager.selectedClass.displayName}</h3>
           </div>
           <small>${this.previewModelStatus === "available" ? "Obsidian Sentinel class suit" : "Fallback preview ready"}</small>
         </div>
-        <div class="cosmetic-runner-preview-host hq-runner-preview-host" aria-label="Cosmetic class suit preview">
-          <div class="hq-runner-fallback">
-            <i></i><b></b><em></em>
+        <div class="runner-prep-stage">
+          <span class="prep-callout callout-primary">Suit Finish <b>${this.cosmeticManager.getEquippedName("outfit")}</b></span>
+          <span class="prep-callout callout-sidearm">Visor <b>${this.cosmeticManager.getEquippedName("mask")}</b></span>
+          <div class="cosmetic-runner-preview-host hq-runner-preview-host" aria-label="Cosmetic class suit preview">
+            <div class="hq-runner-fallback">
+              <i></i><b></b><em></em>
+            </div>
           </div>
         </div>
         <div class="preview-actions">
@@ -7302,40 +7333,26 @@ export class App {
     `;
   }
 
-  private renderLoadoutHero(): string {
-    const gearScore = this.getGearScore();
-    const recommended = this.selectedRaidDefinition.recommendedGearScore;
-    const weak = gearScore < recommended;
-    return `
-      <header class="loadout-hero">
-        <div>
-          <span>Between-Run Gear</span>
-          <h2>${themeConfig.brand.title} Loadout</h2>
-          <p>${this.selectedRaidDefinition.name}: gear score ${gearScore} / recommended ${recommended}</p>
-        </div>
-        <nav class="loadout-mode-tabs">
-          <button type="button" class="${this.loadoutTab === "gear" ? "active" : ""}" data-action="loadout-tab-gear">Gear</button>
-          <button type="button" class="${this.loadoutTab === "cosmetics" ? "active" : ""}" data-action="loadout-tab-cosmetics">Cosmetics</button>
-        </nav>
-        <strong class="${weak ? "loadout-warning" : ""}">${weak ? "Under-geared" : "Run ready"}</strong>
-      </header>
-    `;
-  }
-
   private renderLoadoutRunnerPanel(): string {
     const manager = this.loadoutManager.snapshot;
     return `
       <section class="loadout-runner-panel hq-panel hq-preview-panel">
-        <div class="hq-panel-header compact">
+        <div class="prep-panel-heading">
           <div>
-            <span>Runner Identity</span>
+            <span>Runner Prep Bay</span>
             <h3>${this.classManager.selectedClass.displayName}</h3>
           </div>
           <small>${this.previewModelStatus === "available" ? "Obsidian Sentinel preview" : "Fallback preview ready"}</small>
         </div>
-        <div class="loadout-runner-preview-host hq-runner-preview-host" aria-label="Loadout runner preview">
-          <div class="hq-runner-fallback">
-            <i></i><b></b><em></em>
+        <div class="runner-prep-stage">
+          <span class="prep-callout callout-primary">Primary <b>${this.loadout.primaryWeaponName}</b></span>
+          <span class="prep-callout callout-sidearm">Sidearm <b>${weaponDefinitions[this.loadout.snapshot.sidearmWeaponId].name}</b></span>
+          <span class="prep-callout callout-suit">Suit <b>${this.cosmeticManager.getEquippedName("outfit")}</b></span>
+          <span class="prep-callout callout-pack">Pack <b>${manager.backpackType ? getItemDefinition(manager.backpackType).label : "Starter Pack"}</b></span>
+          <div class="loadout-runner-preview-host hq-runner-preview-host" aria-label="Loadout runner preview">
+            <div class="hq-runner-fallback">
+              <i></i><b></b><em></em>
+            </div>
           </div>
         </div>
         <div class="preview-meta loadout-runner-meta">
@@ -7390,8 +7407,9 @@ export class App {
       const weaponId = type ? weaponIdFromLootType(type) : null;
       const durability = weaponId ? `${Math.round(this.weaponController.getDurabilityState(weaponId).durability)}% condition` : definition ? definition.rarity : "Prototype";
       return `
-        <div class="gear-slot hq-slot-card${selected}" style="--rarity-color: ${color}">
+        <div class="gear-slot hq-slot-card${selected}${type ? " ready" : " empty"}" style="--rarity-color: ${color}">
           <button type="button" data-action="loadout-slot-${slot}">
+            <i aria-hidden="true"></i>
             <span>${equipmentSlotLabels[slot]}</span>
             <strong>${label}</strong>
             ${locked ? "<small>Equipped | Free starter</small>" : `<small>${type ? `Equipped | ${durability}` : "Empty | Future compatible slot"}</small>`}

@@ -117,9 +117,24 @@ export const darkCratersScreenAudit: readonly DarkCratersScreenAuditEntry[] = [
   {
     screen: "loadout",
     label: "Loadout / Cosmetics",
-    priority: 2,
+    priority: 1,
     expectedArchetype: "inventory-rail",
-    reference: "reference-player-custom.jpg and reference-game-sequence.png panel 3",
+    reference: "public/design-reference/ui/reference-player-custom.jpg",
+    intendedComposition: [
+      "TYCHOSTAR runner prep bay and suit locker with compact top readiness chrome, left equipment rail, central player model hero, right selected slot detail rail, readiness summary, and bottom command strip.",
+      "Gear mode presents Primary, Sidearm, Melee/Tool, Armor, Backpack, Tactical Tool, Consumables, and EVA Pack / carried supplies as compact readiness slots.",
+      "Cosmetics mode uses the same prep bay shell with customization category rail, central suit preview, selected style detail rail, and compact cosmetic browser.",
+      "Review Assignment, Weapon Bench, Habitat Stash, Class, and Back to Habitat remain visible and do not directly begin descent.",
+    ],
+    forbiddenRegression: "Generic slot list around a mannequin, detached command buttons, hidden/clipped model, stale selected slot detail, whole-page scroll wall, or cosmetic mode that feels like a separate unfinished page.",
+    validationChecklist: [
+      "04-loadout.png shows a runner prep bay before reading labels.",
+      "Player model is the focal point and is not clipped or covered by text.",
+      "Equipment rail is compact, selected slot is obvious, and right detail matches the selected slot.",
+      "Gear/Cosmetics toggle is clear and 04b-loadout-cosmetics.png uses the same shell when captured.",
+      "Review Assignment, Weapon Bench, Habitat Stash, Class, and Back to Habitat actions remain visible.",
+      "No horizontal overflow or bottom command clipping at 1600x900.",
+    ],
   },
   {
     screen: "campaignCodex",

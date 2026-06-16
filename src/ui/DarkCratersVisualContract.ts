@@ -102,8 +102,14 @@ export const darkCratersVisualContract: DarkCratersVisualContract = {
       "Ready check with final Begin Descent action, not full class selection.",
     ],
     loadout: [
-      "Reference: projected loadout plus ship prep and player customization.",
-      "Left equipment/categories, dominant runner/gear preview, right selected detail/actions.",
+      "Reference: public/design-reference/ui/reference-player-custom.jpg plus projected gameplay sequence panel 3.",
+      "Must read as a TYCHOSTAR runner prep bay / suit locker, not gear slots around a mannequin.",
+      "Required zones: compact top readiness chrome, left equipment or customization rail, central player model hero in a suit locker bay, right selected slot/style detail rail, readiness summary, and bottom command strip.",
+      "Gear mode must show compact readiness slots for weapons, armor, backpack, tactical tool, consumables, and EVA Pack / carried supplies.",
+      "Cosmetics mode must reuse the same shell with customization categories, selected style detail, and existing apply/reset/randomize behavior.",
+      "Selected slot detail must match the selected rail card; no stale compatibility item detail outside the compatibility modal.",
+      "Review Assignment, Weapon Bench, Habitat Stash, Class, and Back to Habitat remain visible; Begin Descent only belongs on Deployment Assignment.",
+      "No model clipping, horizontal overflow, detached command buttons, or whole-page scroll wall at 1600x900.",
     ],
     arsenal: [
       "Reference: public/design-reference/ui/reference-arsenal.jpg.",
