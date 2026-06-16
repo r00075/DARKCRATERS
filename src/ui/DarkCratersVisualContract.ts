@@ -1,0 +1,144 @@
+export type DarkCratersScreenTarget =
+  | "habitatHub"
+  | "deploymentAssignment"
+  | "loadout"
+  | "arsenal"
+  | "shipSystems"
+  | "classSelection"
+  | "skillMatrix"
+  | "campaignCodex"
+  | "stashVendors"
+  | "raidResult";
+
+export type DarkCratersLayoutArchetype =
+  | "hub-stage"
+  | "assignment-review"
+  | "four-card-selection"
+  | "catalog-grid"
+  | "ship-overview"
+  | "lane-matrix"
+  | "dossier"
+  | "inventory-rail"
+  | "result-summary";
+
+export type DarkCratersVisualContract = Readonly<{
+  screenChrome: readonly string[];
+  navigation: readonly string[];
+  panelHierarchy: readonly string[];
+  colorRoles: Readonly<Record<"cyan" | "amber" | "green" | "purple" | "red", string>>;
+  typographyScale: readonly string[];
+  layoutArchetypes: Readonly<Record<DarkCratersLayoutArchetype, string>>;
+  actionLanguage: readonly string[];
+  density: readonly string[];
+  scrollbars: readonly string[];
+  screenTargets: Readonly<Record<DarkCratersScreenTarget, readonly string[]>>;
+}>;
+
+export const darkCratersVisualContract: DarkCratersVisualContract = {
+  screenChrome: [
+    "Compact top navigation and status strip remains visible on primary HQ screens.",
+    "Left rail carries navigation, category, or context. Center carries the dominant visual or dossier. Right rail carries selected detail and actions.",
+    "Bottom command strip is consistent, compact, and does not compete with the primary mission action.",
+  ],
+  navigation: [
+    "Use one nav family: Crater Runs, Loadout, Arsenal, Ship, Class, Skills, Stash, Vendors, Style, Contracts.",
+    "Review Assignment opens the assignment review path. Begin Descent starts deployment. Change Operation opens operation selection.",
+    "Back buttons are for sub-screens and should not replace primary HQ navigation.",
+  ],
+  panelHierarchy: [
+    "Panels are dark industrial surfaces with thin borders, low glow, and low-radius corners.",
+    "Selected cards are bordered or accented, not filled with bright solid cyan.",
+    "Avoid nested card stacks, giant empty panels, and equal-weight card walls.",
+  ],
+  colorRoles: {
+    cyan: "Technical UI lines, labels, nav outlines, and quiet selection structure.",
+    amber: "Selected state, primary confirmation, mission action, and industrial warning.",
+    green: "Ready, safe, success, completed, and serviceable states only.",
+    purple: "Lumen, resonance, anomaly, and evidence/codex signals only.",
+    red: "Danger, failure, infection, and destructive warnings only.",
+  },
+  typographyScale: [
+    "Screen titles are compact and uppercase, not hero-sized inside tool panels.",
+    "Eyebrows are small uppercase labels with restrained tracking.",
+    "Main screen paragraphs are clamped to two short lines; long lore belongs in detail panels.",
+  ],
+  layoutArchetypes: {
+    "hub-stage": "Atmospheric habitat bay with command rail, dominant runner/stage, and field-order rail.",
+    "assignment-review": "Mission confirmation with mission summary, runner readiness, loadout readiness, and one final descent action.",
+    "four-card-selection": "Four large class cards with bottom overview, stat bars, loadout hints, confirm/back actions.",
+    "catalog-grid": "Left category rail, central grid of large weapon cards, selected detail/action rail.",
+    "ship-overview": "Kestrel-9 hangar hero with large active ship preview, left identity rail, right systems rail, module/cargo strip, and bottom mission readiness command strip.",
+    "lane-matrix": "Five-discipline skill tree console with top progress chrome, left discipline rail, dominant tiered node matrix, connector lines, selected node detail rail, and bottom command strip.",
+    dossier: "Left operation/filter rail, center evidence or operation dossier, right progress/action rail.",
+    "inventory-rail": "Left categories, center item/wares grid, right selected item or vendor detail.",
+    "result-summary": "Compact summary, rewards/losses, ship/campaign status, and one return action.",
+  },
+  actionLanguage: [
+    "One primary action per screen region.",
+    "Begin Descent is reserved for the actual deployment start.",
+    "Review Assignment is the mission-ready path, not a direct launch label.",
+    "Deploy Multiplayer stays secondary until multiplayer readiness is explicit.",
+  ],
+  density: [
+    "No repeated mission objective/step/risk fields on the same screen.",
+    "Main cards show identity, status, and action only.",
+    "Dedicated detail panels may scroll; primary screens should not become reports.",
+  ],
+  scrollbars: [
+    "Primary nav and primary action remain visible at desktop and constrained devtools widths.",
+    "Internal rails, catalogs, inventories, evidence lists, and detail panels may scroll.",
+    "Avoid horizontal clipping and hidden right-side action rails.",
+  ],
+  screenTargets: {
+    habitatHub: [
+      "Reference: public/design-reference/ui/reference-game-sequence.png panel 2 / Habitat Hub.",
+      "Must be a unified orbital habitat command deck, not a floating character preview with detached debug cards.",
+      "Required zones: compact top command chrome, left operator rail, dominant environmental bay with runner placed inside it, one center mission console, right field-order rail, and stable bottom nav.",
+      "Mission console has Review Assignment primary and Change Operation secondary; Begin Descent appears only on deployment assignment.",
+      "Field-order rail shows title plus concise Family, Objective, Risk, Route, Gear, Contract, and Signal rows without overlap.",
+    ],
+    deploymentAssignment: [
+      "Reference: projected gameplay sequence panels 4 and 5 bridge.",
+      "Ready check with final Begin Descent action, not full class selection.",
+    ],
+    loadout: [
+      "Reference: projected loadout plus ship prep and player customization.",
+      "Left equipment/categories, dominant runner/gear preview, right selected detail/actions.",
+    ],
+    arsenal: [
+      "Reference: projected starting weapon models.",
+      "Catalog-first weapon grid with left category rail and optional selected detail.",
+    ],
+    shipSystems: [
+      "Reference: public/design-reference/ui/reference-ship.jpg.",
+      "Must read as a Kestrel-9 hangar management screen, not a generic stat page.",
+      "Required zones: compact top chrome, concise left identity rail, dominant center hangar hero, module/cargo strip, readable right systems rail, and bottom mission readiness command strip.",
+      "Ship preview must be visually dominant, contained, and supported by hangar depth, floor perspective, bay framing, and service-light accents.",
+      "Review Assignment remains the mission-ready path; Begin Descent remains reserved for Deployment Assignment.",
+    ],
+    classSelection: [
+      "Reference: class selection screen.",
+      "Four large class cards plus bottom overview and confirm strip.",
+    ],
+    skillMatrix: [
+      "Reference: public/design-reference/ui/reference-skills.jpg plus Lumen tone from public/design-reference/ui/reference-Lumen.jpg.",
+      "Must read as a Lumen progression matrix, not a generic card wall or empty grid.",
+      "Required zones: compact top progress header, five-discipline left rail, dominant center tier matrix with connectors and lane separation, right selected calibration rail, and bottom command strip.",
+      "Required states: acquired, available, locked, and selected/focused nodes are visually distinct without mutating existing skill IDs, effects, save keys, or prerequisites.",
+      "Skill language stays lunar, field-calibration, survey, suit, containment, and Lumen analysis oriented rather than fantasy upgrade terminology.",
+      "No horizontal scrollbar or nested double-scroll at 1600x900; command actions remain visible.",
+    ],
+    campaignCodex: [
+      "Reference: projected map and Lumen dossier.",
+      "Dossier zones with compact list entries and long text only in selected details.",
+    ],
+    stashVendors: [
+      "Reference: shared HQ tool chrome.",
+      "Inventory/vendor screens use the same left rail, center grid, right detail contract.",
+    ],
+    raidResult: [
+      "Reference: projected gameplay sequence panel 9.",
+      "Compact result summary with rewards, status, and one return path.",
+    ],
+  },
+} as const;

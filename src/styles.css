@@ -13369,3 +13369,1401 @@ button:disabled {
   min-height: 48px;
   padding: 7px;
 }
+
+/* Phase 13.8H: Skills true replacement / Lumen progression matrix. */
+.main-menu-content:has(.skills-matrix-screen) {
+  width: 100vw;
+  height: 100vh;
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  overflow: hidden;
+  place-items: stretch;
+}
+
+.skills-matrix-screen.skill-matrix-screen {
+  --skills-line: rgba(103, 232, 249, 0.16);
+  --skills-strong-line: rgba(103, 232, 249, 0.38);
+  --skills-panel: rgba(2, 8, 14, 0.78);
+  --skills-panel-2: rgba(4, 14, 22, 0.88);
+  --skills-amber: #ffb02e;
+  width: min(1580px, calc(100vw - 14px)) !important;
+  max-width: calc(100vw - 14px) !important;
+  height: min(890px, calc(100vh - 12px)) !important;
+  max-height: calc(100vh - 12px) !important;
+  margin: auto;
+  display: grid !important;
+  grid-template:
+    "header header header" 74px
+    "rail matrix detail" minmax(0, 1fr)
+    "commands commands commands" 70px / 248px minmax(660px, 1fr) 334px !important;
+  gap: 10px;
+  padding: 10px 12px;
+  overflow: hidden !important;
+  border: 1px solid var(--skills-line);
+  border-radius: 8px;
+  color: #e6edf3;
+  background:
+    radial-gradient(ellipse at 31% 39%, rgba(103, 232, 249, 0.1), transparent 36%),
+    radial-gradient(ellipse at 74% 29%, rgba(255, 176, 46, 0.09), transparent 32%),
+    linear-gradient(112deg, rgba(1, 4, 8, 0.99), rgba(5, 13, 21, 0.98) 48%, rgba(1, 4, 8, 0.99));
+  box-shadow: inset 0 0 0 1px rgba(230, 237, 243, 0.025), 0 28px 90px rgba(0, 0, 0, 0.56);
+}
+
+.skills-matrix-screen *,
+.skills-matrix-screen *::before,
+.skills-matrix-screen *::after {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.skills-matrix-header {
+  grid-area: header;
+  display: grid;
+  grid-template-columns: minmax(330px, 0.9fr) minmax(560px, 1.5fr) auto;
+  align-items: center;
+  gap: 14px;
+  min-height: 0;
+  padding: 10px 12px;
+  overflow: hidden;
+  border: 1px solid var(--skills-line);
+  border-radius: 6px;
+  background:
+    linear-gradient(90deg, rgba(103, 232, 249, 0.08), transparent 45%, rgba(255, 176, 46, 0.06)),
+    rgba(2, 8, 14, 0.86);
+}
+
+.skills-title-block,
+.skills-detail-heading,
+.skills-effect-card,
+.skills-lumen-note {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.skills-title-block span,
+.skills-discipline-rail > span,
+.skills-detail-heading span,
+.skills-effect-card span,
+.skills-lumen-note span,
+.skills-progress-header span,
+.skills-tier-header span,
+.skills-detail-grid dt {
+  color: #67e8f9;
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.skills-title-block h2 {
+  margin: 0;
+  color: #f8fafc;
+  font-size: 30px;
+  line-height: 0.92;
+  text-transform: uppercase;
+}
+
+.skills-title-block p,
+.skills-detail-heading p,
+.skills-effect-card p,
+.skills-lumen-note p,
+.skills-lane-label span,
+.skills-node p,
+.skills-discipline-item span,
+.skills-discipline-item small {
+  margin: 0;
+  color: rgba(226, 232, 240, 0.74);
+  line-height: 1.35;
+}
+
+.skills-title-block p,
+.skills-lane-label span,
+.skills-node p,
+.skills-effect-card p,
+.skills-lumen-note p {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+}
+
+.skills-title-block p,
+.skills-node p {
+  -webkit-line-clamp: 2;
+}
+
+.skills-title-block p {
+  display: none;
+}
+
+.skills-progress-header {
+  display: grid;
+  grid-template-columns: repeat(4, auto minmax(44px, 1fr));
+  align-items: center;
+  gap: 7px 8px;
+  justify-content: end;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.skills-progress-header strong {
+  color: #f8fafc;
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skills-matrix-header > button,
+.skills-command-strip button,
+.skills-detail-rail > button {
+  min-height: 34px;
+  border: 1px solid rgba(103, 232, 249, 0.26);
+  border-radius: 4px;
+  color: #e6edf3;
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: rgba(2, 8, 14, 0.84);
+}
+
+.skills-matrix-header > button {
+  min-width: 86px;
+}
+
+.skills-discipline-rail,
+.skills-node-matrix,
+.skills-detail-rail,
+.skills-command-strip {
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--skills-line);
+  border-radius: 6px;
+  background: var(--skills-panel);
+}
+
+.skills-discipline-rail {
+  grid-area: rail;
+  display: grid;
+  grid-template-rows: auto repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+}
+
+.skills-discipline-item {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 4px 8px;
+  min-height: 0;
+  padding: 9px;
+  overflow: hidden;
+  border: 1px solid rgba(103, 232, 249, 0.13);
+  border-left-color: color-mix(in srgb, var(--discipline-accent, #67e8f9), transparent 12%);
+  border-radius: 5px;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--discipline-accent, #67e8f9), transparent 90%), transparent),
+    rgba(1, 6, 11, 0.82);
+}
+
+.skills-discipline-item[data-accent="cyan"],
+.skills-node[data-accent="cyan"],
+.skills-matrix-lane[data-accent="cyan"],
+.skills-selected-orb[data-accent="cyan"] {
+  --discipline-accent: #67e8f9;
+}
+
+.skills-discipline-item[data-accent="purple"],
+.skills-node[data-accent="purple"],
+.skills-matrix-lane[data-accent="purple"],
+.skills-selected-orb[data-accent="purple"] {
+  --discipline-accent: #c084fc;
+}
+
+.skills-discipline-item[data-accent="green"],
+.skills-node[data-accent="green"],
+.skills-matrix-lane[data-accent="green"],
+.skills-selected-orb[data-accent="green"] {
+  --discipline-accent: #86efac;
+}
+
+.skills-discipline-item[data-accent="orange"],
+.skills-node[data-accent="orange"],
+.skills-matrix-lane[data-accent="orange"],
+.skills-selected-orb[data-accent="orange"] {
+  --discipline-accent: #ffb02e;
+}
+
+.skills-discipline-item[data-accent="red"],
+.skills-node[data-accent="red"],
+.skills-matrix-lane[data-accent="red"],
+.skills-selected-orb[data-accent="red"] {
+  --discipline-accent: #fb7185;
+}
+
+.skills-discipline-item i,
+.skills-node i,
+.skills-selected-orb i {
+  display: grid;
+  place-items: center;
+  color: #f8fafc;
+  font-style: normal;
+  font-weight: 950;
+  border: 1px solid color-mix(in srgb, var(--discipline-accent, #67e8f9), transparent 30%);
+  background: rgba(2, 8, 14, 0.92);
+  clip-path: polygon(50% 0, 92% 24%, 92% 76%, 50% 100%, 8% 76%, 8% 24%);
+}
+
+.skills-discipline-item i {
+  width: 36px;
+  height: 40px;
+  font-size: 11px;
+}
+
+.skills-discipline-item strong,
+.skills-discipline-item b,
+.skills-node strong,
+.skills-empty-node b,
+.skills-lane-label strong,
+.skills-detail-heading strong,
+.skills-detail-grid dd {
+  color: #f8fafc;
+  font-weight: 950;
+}
+
+.skills-discipline-item strong,
+.skills-node strong,
+.skills-lane-label strong {
+  display: block;
+  overflow: hidden;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+}
+
+.skills-discipline-item b {
+  grid-column: 3;
+  grid-row: 1;
+  color: #ffcf6d;
+}
+
+.skills-discipline-item small {
+  grid-column: 2 / 4;
+  grid-row: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skills-discipline-item.is-affinity {
+  border-color: rgba(255, 176, 46, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(255, 176, 46, 0.12), 0 0 22px rgba(255, 176, 46, 0.08);
+}
+
+.skills-node-matrix {
+  grid-area: matrix;
+  display: grid;
+  grid-template-rows: 36px repeat(5, minmax(0, 1fr));
+  background:
+    repeating-linear-gradient(90deg, rgba(103, 232, 249, 0.045) 0 1px, transparent 1px 116px),
+    repeating-linear-gradient(0deg, rgba(103, 232, 249, 0.04) 0 1px, transparent 1px 58px),
+    rgba(1, 6, 11, 0.82);
+}
+
+.skills-tier-header,
+.skills-matrix-lane {
+  display: grid;
+  grid-template-columns: 164px repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.skills-tier-header {
+  align-items: center;
+  padding: 0 12px;
+  border-bottom: 1px solid rgba(103, 232, 249, 0.12);
+}
+
+.skills-tier-header b {
+  color: rgba(248, 250, 252, 0.86);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.skills-matrix-lane {
+  position: relative;
+  align-items: stretch;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(103, 232, 249, 0.08);
+}
+
+.skills-matrix-lane::before {
+  content: "";
+  position: absolute;
+  left: 196px;
+  right: 40px;
+  top: 50%;
+  height: 1px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--discipline-accent, #67e8f9), transparent 28%), rgba(103, 232, 249, 0.08));
+  opacity: 0.76;
+}
+
+.skills-lane-label {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  min-height: 0;
+  padding: 8px;
+  overflow: hidden;
+  border-right: 1px solid rgba(103, 232, 249, 0.12);
+}
+
+.skills-lane-label i {
+  width: 34px;
+  height: 38px;
+  color: var(--discipline-accent, #67e8f9);
+  font-style: normal;
+  font-weight: 950;
+}
+
+.skills-lane-label span {
+  -webkit-line-clamp: 2;
+  font-size: 11px;
+}
+
+.skills-node,
+.skills-empty-node {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  align-content: start;
+  justify-items: stretch;
+  gap: 5px;
+  min-height: 0;
+  padding: 8px 9px;
+  overflow: hidden;
+  border: 1px solid rgba(103, 232, 249, 0.12);
+  border-radius: 5px;
+  background: var(--skills-panel-2);
+}
+
+.skills-node::before {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  pointer-events: none;
+  border: 1px solid color-mix(in srgb, var(--discipline-accent, #67e8f9), transparent 68%);
+  opacity: 0.58;
+  clip-path: polygon(50% 0, 96% 22%, 96% 78%, 50% 100%, 4% 78%, 4% 22%);
+}
+
+.skills-node span,
+.skills-empty-node span {
+  color: #67e8f9;
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.skills-node i {
+  justify-self: center;
+  width: 38px;
+  height: 42px;
+  color: var(--discipline-accent, #67e8f9);
+  font-size: 11px;
+}
+
+.skills-node strong {
+  min-height: 26px;
+  font-size: 12px;
+  text-align: center;
+}
+
+.skills-node em {
+  display: block;
+  align-self: end;
+  justify-self: center;
+  max-width: 100%;
+  margin-top: auto;
+  overflow: hidden;
+  color: rgba(226, 232, 240, 0.72);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 950;
+  letter-spacing: 0.03em;
+  text-align: center;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.skills-node--available {
+  border-color: rgba(255, 176, 46, 0.78);
+  box-shadow: inset 0 0 0 1px rgba(255, 176, 46, 0.12), 0 0 24px rgba(255, 176, 46, 0.1);
+}
+
+.skills-detail-rail > button:not(:disabled),
+.skills-command-strip button:nth-child(4) {
+  border-color: rgba(255, 176, 46, 0.88);
+  color: #02060b;
+  background: linear-gradient(180deg, #ffd166, #ffb02e);
+}
+
+.skills-node--acquired {
+  border-color: rgba(134, 239, 172, 0.62);
+  background:
+    linear-gradient(180deg, rgba(134, 239, 172, 0.11), transparent),
+    var(--skills-panel-2);
+}
+
+.skills-node--locked,
+.skills-empty-node {
+  opacity: 0.55;
+  filter: grayscale(0.22);
+}
+
+.skills-node--selected {
+  border-color: rgba(248, 250, 252, 0.84);
+  box-shadow: 0 0 0 2px rgba(103, 232, 249, 0.12), 0 0 30px color-mix(in srgb, var(--discipline-accent, #67e8f9), transparent 86%);
+}
+
+.skills-empty-node {
+  align-content: center;
+  justify-items: center;
+  text-align: center;
+}
+
+.skills-empty-node b {
+  color: rgba(226, 232, 240, 0.48);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.skills-detail-rail {
+  grid-area: detail;
+  display: grid;
+  grid-template-rows: auto 112px auto auto auto 40px;
+  gap: 10px;
+  padding: 12px;
+}
+
+.skills-detail-heading strong {
+  font-size: 24px;
+  line-height: 1.02;
+  text-transform: uppercase;
+}
+
+.skills-selected-orb {
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  border: 1px solid rgba(103, 232, 249, 0.14);
+  border-radius: 6px;
+  background:
+    radial-gradient(circle, color-mix(in srgb, var(--discipline-accent, #67e8f9), transparent 72%), transparent 46%),
+    repeating-radial-gradient(circle, rgba(103, 232, 249, 0.15) 0 1px, transparent 1px 12px),
+    rgba(1, 6, 11, 0.84);
+}
+
+.skills-selected-orb i {
+  width: 72px;
+  height: 80px;
+  color: var(--discipline-accent, #67e8f9);
+  font-size: 18px;
+  box-shadow: 0 0 28px color-mix(in srgb, var(--discipline-accent, #67e8f9), transparent 72%);
+}
+
+.skills-detail-grid {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.skills-detail-grid div {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-height: 28px;
+  border-bottom: 1px solid rgba(103, 232, 249, 0.1);
+}
+
+.skills-detail-grid dt,
+.skills-detail-grid dd {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skills-detail-grid dd {
+  font-size: 13px;
+  text-align: right;
+}
+
+.skills-effect-card,
+.skills-lumen-note {
+  min-height: 0;
+  padding: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(103, 232, 249, 0.12);
+  border-radius: 5px;
+  background: rgba(1, 6, 11, 0.7);
+}
+
+.skills-effect-card p,
+.skills-lumen-note p {
+  -webkit-line-clamp: 3;
+}
+
+.skills-command-strip {
+  grid-area: commands;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+}
+
+.skills-command-strip button {
+  height: 42px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1220px), (max-height: 760px) {
+  .skills-matrix-screen.skill-matrix-screen {
+    grid-template:
+      "header header" auto
+      "matrix detail" minmax(0, 1fr)
+      "commands commands" auto / minmax(620px, 1fr) minmax(286px, 0.42fr) !important;
+  }
+
+  .skills-discipline-rail {
+    display: none;
+  }
+
+  .skills-matrix-header {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .skills-progress-header {
+    display: none;
+  }
+
+  .skills-node p,
+  .skills-lane-label span,
+  .skills-lumen-note {
+    display: none;
+  }
+
+  .skills-detail-rail {
+    grid-template-rows: auto 92px auto auto 40px;
+  }
+}
+
+/* Phase 13.8G: Kestrel-9 true hangar replacement. */
+.main-menu-content.ship-dashboard-content,
+.main-menu-content:has(.ship-dashboard-screen) {
+  width: 100vw;
+  height: 100vh;
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  overflow: hidden;
+  place-items: stretch;
+}
+
+.ship-dashboard-screen {
+  --ship-line: rgba(103, 232, 249, 0.16);
+  --ship-panel: rgba(3, 9, 16, 0.7);
+  --ship-amber: #d8953f;
+  width: min(1580px, calc(100vw - 14px)) !important;
+  max-width: calc(100vw - 14px) !important;
+  height: min(890px, calc(100vh - 12px)) !important;
+  max-height: calc(100vh - 12px) !important;
+  margin: auto;
+  display: grid !important;
+  grid-template:
+    "top top top" 62px
+    "identity overview stats" minmax(0, 1fr)
+    "command command command" 120px / minmax(282px, 0.68fr) minmax(650px, 1.7fr) minmax(310px, 0.72fr) !important;
+  gap: 10px;
+  padding: 10px 12px;
+  overflow: hidden !important;
+  border: 1px solid var(--ship-line);
+  border-radius: 8px;
+  color: #e6edf3;
+  background:
+    radial-gradient(ellipse at 49% 43%, rgba(216, 149, 63, 0.12), transparent 38%),
+    radial-gradient(ellipse at 54% 18%, rgba(103, 232, 249, 0.11), transparent 36%),
+    linear-gradient(110deg, rgba(1, 4, 8, 0.99), rgba(6, 13, 22, 0.96) 45%, rgba(1, 4, 8, 0.99));
+  box-shadow: inset 0 0 0 1px rgba(230, 237, 243, 0.025), 0 28px 90px rgba(0, 0, 0, 0.56);
+}
+
+.ship-dashboard-screen *,
+.ship-dashboard-screen *::before,
+.ship-dashboard-screen *::after {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.ship-dashboard-topbar {
+  grid-area: top;
+  display: grid;
+  grid-template-columns: minmax(180px, 0.46fr) minmax(0, 1fr) minmax(250px, 0.62fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--ship-line);
+  border-radius: 6px;
+  background:
+    linear-gradient(90deg, rgba(2, 6, 12, 0.9), rgba(8, 16, 26, 0.54), rgba(2, 6, 12, 0.9)),
+    linear-gradient(0deg, rgba(103, 232, 249, 0.035), transparent);
+}
+
+.ship-dashboard-brand {
+  display: grid;
+  gap: 2px;
+}
+
+.ship-dashboard-brand span,
+.ship-identity-panel > span,
+.ship-condition-meter span,
+.ship-live-state span,
+.ship-module-summary span,
+.ship-overview-panel header span,
+.ship-hero-status span,
+.ship-dashboard-module span,
+.ship-heavy-cargo-card span,
+.ship-stat-panel section > span,
+.ship-stat-panel div span,
+.ship-alert-rail > span,
+.ship-next-mission-copy span,
+.ship-refit-panel span {
+  color: rgba(103, 232, 249, 0.88);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.ship-dashboard-brand strong {
+  color: #f8fafc;
+  font-size: 18px;
+  letter-spacing: 0.03em;
+}
+
+.ship-dashboard-topbar nav {
+  justify-content: center;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.ship-dashboard-topbar nav button,
+.ship-dashboard-resources button {
+  min-height: 34px;
+  padding: 6px 9px;
+  border-radius: 4px;
+  font-size: 10px;
+}
+
+.ship-dashboard-topbar nav button.active {
+  border-color: rgba(103, 232, 249, 0.72);
+  color: #06131c;
+  background: #67e8f9;
+}
+
+.ship-dashboard-resources {
+  justify-content: end;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.ship-dashboard-resources span {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(103, 232, 249, 0.14);
+  border-radius: 4px;
+  padding: 4px 7px;
+  color: #dffbff;
+  background: rgba(2, 6, 12, 0.5);
+  font-size: 11px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.ship-identity-panel,
+.ship-overview-panel,
+.ship-stat-panel,
+.ship-command-strip {
+  min-height: 0;
+  border: 1px solid var(--ship-line);
+  border-radius: 7px;
+  background:
+    linear-gradient(145deg, rgba(10, 18, 30, 0.55), rgba(2, 6, 12, 0.42)),
+    var(--ship-panel);
+  box-shadow: inset 0 0 32px rgba(65, 217, 255, 0.035);
+}
+
+.ship-identity-panel {
+  grid-area: identity;
+  display: grid;
+  grid-template-rows: auto auto auto auto auto minmax(0, 1fr);
+  align-content: start;
+  gap: 10px;
+  padding: 14px;
+  overflow: hidden;
+}
+
+.ship-identity-panel > strong {
+  color: #f8fafc;
+  font-size: clamp(34px, 3.7vw, 56px);
+  line-height: 0.88;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.ship-identity-panel > b {
+  color: #ffcf6d;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.ship-identity-panel p,
+.ship-dashboard-module p,
+.ship-heavy-cargo-card p,
+.ship-next-mission-copy p,
+.ship-next-mission-copy small,
+.ship-module-summary small {
+  margin: 0;
+  color: rgba(226, 232, 240, 0.76);
+  line-height: 1.35;
+}
+
+.ship-identity-panel > p {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+
+.ship-condition-meter {
+  display: grid;
+  gap: 7px;
+  padding: 12px 0;
+  border-top: 1px solid rgba(103, 232, 249, 0.12);
+  border-bottom: 1px solid rgba(103, 232, 249, 0.12);
+}
+
+.ship-condition-meter strong {
+  color: #f8fafc;
+  font-size: 38px;
+  line-height: 0.9;
+}
+
+.ship-condition-meter i {
+  display: block;
+  height: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(103, 232, 249, 0.18);
+  border-radius: 999px;
+  background: rgba(2, 6, 12, 0.8);
+}
+
+.ship-condition-meter em {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #86efac, #67e8f9);
+}
+
+.ship-condition-meter b {
+  color: #86efac;
+}
+
+.ship-live-state,
+.ship-module-summary {
+  display: grid;
+  grid-template-columns: minmax(90px, 0.46fr) minmax(0, 1fr);
+  gap: 7px 9px;
+  padding: 10px;
+  border: 1px solid rgba(103, 232, 249, 0.12);
+  border-radius: 5px;
+  background: rgba(2, 6, 12, 0.38);
+}
+
+.ship-live-state strong,
+.ship-module-summary strong {
+  display: block;
+  overflow: hidden;
+  color: #f8fafc;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ship-module-summary {
+  grid-template-columns: 1fr;
+  align-self: end;
+}
+
+.ship-overview-panel {
+  grid-area: overview;
+  display: grid;
+  grid-template-rows: 38px minmax(0, 1fr) 134px;
+  gap: 10px;
+  padding: 12px;
+  overflow: hidden;
+}
+
+.ship-overview-panel header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 0;
+}
+
+.ship-overview-panel header strong {
+  overflow: hidden;
+  color: #f8fafc;
+  font-size: clamp(18px, 1.45vw, 26px);
+  line-height: 1;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ship-preview-stage {
+  position: relative;
+  display: grid;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid rgba(103, 232, 249, 0.12);
+  border-radius: 7px;
+  padding: 0;
+  background:
+    radial-gradient(ellipse at 50% 58%, rgba(216, 149, 63, 0.11), transparent 44%),
+    linear-gradient(180deg, rgba(9, 17, 27, 0.9), rgba(2, 6, 12, 0.72));
+}
+
+.ship-hangar-depth,
+.ship-hangar-depth i,
+.ship-hangar-depth b,
+.ship-hangar-depth em {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ship-hangar-depth {
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 50% 64%, rgba(255, 176, 46, 0.15), transparent 44%),
+    radial-gradient(ellipse at 50% 14%, rgba(103, 232, 249, 0.13), transparent 28%),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.68), transparent 18%, transparent 82%, rgba(0, 0, 0, 0.68));
+}
+
+.ship-hangar-depth::before,
+.ship-hangar-depth::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+.ship-hangar-depth::before {
+  background:
+    linear-gradient(105deg, rgba(0, 0, 0, 0.64) 0 14%, transparent 14% 32%, rgba(103, 232, 249, 0.06) 32% 32.4%, transparent 32.4% 67.6%, rgba(103, 232, 249, 0.06) 67.6% 68%, transparent 68% 86%, rgba(0, 0, 0, 0.64) 86%),
+    repeating-linear-gradient(90deg, transparent 0 54px, rgba(148, 163, 184, 0.055) 54px 55px);
+}
+
+.ship-hangar-depth::after {
+  top: 52%;
+  bottom: -18%;
+  background:
+    linear-gradient(rgba(103, 232, 249, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(103, 232, 249, 0.08) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(255, 176, 46, 0.1), rgba(2, 6, 12, 0.9));
+  background-size: 100% 34px, 58px 100%, auto;
+  transform: perspective(600px) rotateX(62deg) scaleX(1.42);
+  transform-origin: 50% 0;
+}
+
+.ship-hangar-depth i {
+  top: 13%;
+  left: 12%;
+  right: 12%;
+  bottom: 54%;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: rgba(3, 9, 16, 0.44);
+}
+
+.ship-hangar-depth b {
+  top: 31%;
+  left: 8%;
+  right: 8%;
+  bottom: 50%;
+  border-top: 1px solid rgba(255, 176, 46, 0.22);
+  border-bottom: 1px solid rgba(103, 232, 249, 0.1);
+}
+
+.ship-hangar-depth em {
+  left: 17%;
+  right: 17%;
+  top: -6%;
+  bottom: 16%;
+  clip-path: polygon(40% 0, 60% 0, 100% 100%, 0 100%);
+  background: linear-gradient(180deg, rgba(255, 245, 215, 0.14), rgba(255, 176, 46, 0.04) 48%, transparent);
+  mix-blend-mode: screen;
+}
+
+.kestrel-silhouette.ship-dashboard-preview-host {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  filter: drop-shadow(0 30px 44px rgba(0, 0, 0, 0.48)) drop-shadow(0 0 32px rgba(103, 232, 249, 0.13));
+}
+
+.ship-dashboard-preview-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  width: 100%;
+  height: 100%;
+  outline: none;
+}
+
+.ship-dashboard-preview-host.model-loaded .ship-schematic-label {
+  opacity: 0;
+}
+
+.kestrel-silhouette::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 58%;
+  z-index: 1;
+  width: min(720px, 74%);
+  height: 126px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 50%, rgba(103, 232, 249, 0.12), transparent 68%);
+  filter: blur(1px);
+}
+
+.ship-schematic-label {
+  position: absolute;
+  z-index: 5;
+  padding: 4px 6px;
+  border: 1px solid rgba(103, 232, 249, 0.28);
+  border-radius: 4px;
+  color: rgba(223, 251, 255, 0.9);
+  background: rgba(2, 6, 12, 0.72);
+  font-size: 10px;
+  font-weight: 950;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.ship-schematic-name {
+  left: 50%;
+  top: 14%;
+  transform: translateX(-50%);
+}
+
+.ship-schematic-cargo {
+  left: 50%;
+  bottom: 18%;
+  transform: translateX(-50%);
+}
+
+.ship-schematic-engine {
+  left: 9%;
+  top: 52%;
+  transform: translateY(-50%);
+}
+
+.ship-schematic-nose {
+  right: 9%;
+  top: 52%;
+  transform: translateY(-50%);
+}
+
+.ship-hero-status {
+  position: absolute;
+  left: 18px;
+  bottom: 16px;
+  z-index: 5;
+  width: min(360px, 48%);
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid rgba(103, 232, 249, 0.13);
+  border-radius: 5px;
+  background: rgba(2, 6, 12, 0.68);
+  backdrop-filter: blur(4px);
+}
+
+.ship-hero-status strong {
+  color: #f8fafc;
+  font-size: 19px;
+  text-transform: uppercase;
+}
+
+.ship-hero-status p {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: rgba(226, 232, 240, 0.76);
+  line-height: 1.25;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.ship-dashboard-modules {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  min-height: 0;
+}
+
+.ship-dashboard-module,
+.ship-heavy-cargo-card {
+  display: grid;
+  grid-template:
+    "icon level" auto
+    "icon name" auto
+    "effect effect" minmax(0, 1fr) / 42px minmax(0, 1fr);
+  gap: 5px 8px;
+  min-height: 0;
+  padding: 9px;
+  overflow: hidden;
+  border: 1px solid rgba(103, 232, 249, 0.14);
+  border-radius: 5px;
+  background:
+    linear-gradient(145deg, rgba(12, 20, 32, 0.64), rgba(2, 6, 12, 0.54)),
+    rgba(2, 6, 12, 0.54);
+}
+
+.ship-dashboard-module.empty {
+  border-style: dashed;
+  opacity: 0.72;
+}
+
+.ship-dashboard-module i {
+  grid-area: icon;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid rgba(103, 232, 249, 0.22);
+  border-radius: 4px;
+  color: #ffcf6d;
+  background: rgba(255, 176, 46, 0.07);
+  font-style: normal;
+  font-weight: 950;
+}
+
+.ship-dashboard-module span,
+.ship-heavy-cargo-card span {
+  grid-area: level;
+}
+
+.ship-dashboard-module strong,
+.ship-heavy-cargo-card strong {
+  grid-area: name;
+  display: -webkit-box;
+  overflow: hidden;
+  color: #f8fafc;
+  font-size: 12px;
+  line-height: 1.1;
+  text-transform: uppercase;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.ship-dashboard-module p,
+.ship-heavy-cargo-card p {
+  grid-area: effect;
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 11px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.ship-heavy-cargo-card {
+  border-color: rgba(255, 176, 46, 0.22);
+}
+
+.ship-heavy-cargo-card.ready strong {
+  color: #86efac;
+}
+
+.ship-stat-panel {
+  grid-area: stats;
+  display: grid;
+  grid-template-rows: minmax(0, 1.06fr) minmax(0, 0.86fr) minmax(96px, auto);
+  gap: 9px;
+  padding: 12px;
+  overflow: hidden;
+}
+
+.ship-stat-panel section {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ship-stat-panel section + section {
+  border-top: 1px solid rgba(103, 232, 249, 0.12);
+  padding-top: 9px;
+}
+
+.ship-stat-panel div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+}
+
+.ship-stat-panel div strong {
+  color: #f8fafc;
+  text-align: right;
+}
+
+.ship-command-strip {
+  grid-area: command;
+  display: grid;
+  grid-template-columns: minmax(260px, 0.7fr) minmax(0, 1fr) minmax(220px, 0.55fr) minmax(190px, auto);
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  overflow: hidden;
+  background:
+    linear-gradient(90deg, rgba(2, 6, 12, 0.82), rgba(10, 18, 30, 0.54), rgba(2, 6, 12, 0.82)),
+    radial-gradient(ellipse at 78% 50%, rgba(255, 176, 46, 0.08), transparent 42%);
+}
+
+.ship-alert-rail {
+  grid-area: auto !important;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 6px 10px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.ship-command-strip .ship-next-mission-copy,
+.ship-command-strip .ship-refit-panel,
+.ship-command-strip > button {
+  grid-area: auto !important;
+}
+
+.ship-alert-rail > span {
+  grid-row: 1 / span 2;
+}
+
+.ship-alert-rail b {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  color: #ffcf6d;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ship-alert-rail b::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: #ffb02e;
+  box-shadow: 0 0 14px rgba(255, 176, 46, 0.44);
+}
+
+.ship-next-mission-copy {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.ship-next-mission-copy strong,
+.ship-next-mission-copy p,
+.ship-next-mission-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ship-next-mission-copy strong {
+  color: #f8fafc;
+  font-size: clamp(19px, 1.6vw, 26px);
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.ship-refit-panel {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.ship-refit-panel button,
+.ship-command-strip > button {
+  min-height: 44px;
+  border-radius: 4px;
+  padding: 8px 12px;
+}
+
+.ship-command-strip > button {
+  border-color: rgba(255, 176, 46, 0.8);
+  color: #120a02;
+  background: linear-gradient(180deg, #ffc857, var(--dc-ui-amber));
+  box-shadow: 0 0 22px rgba(255, 176, 46, 0.18);
+}
+
+@media (min-width: 1700px) {
+  .ship-dashboard-screen {
+    width: min(1680px, calc(100vw - 28px)) !important;
+    height: min(960px, calc(100vh - 28px)) !important;
+    grid-template:
+      "top top top" 66px
+      "identity overview stats" minmax(0, 1fr)
+      "command command command" 126px / minmax(310px, 0.7fr) minmax(760px, 1.8fr) minmax(340px, 0.72fr) !important;
+  }
+}
+
+@media (max-width: 1400px), (max-height: 800px) {
+  .ship-dashboard-screen {
+    grid-template:
+      "top top top" 54px
+      "identity overview stats" minmax(0, 1fr)
+      "command command command" 104px / minmax(238px, 0.62fr) minmax(520px, 1.54fr) minmax(268px, 0.68fr) !important;
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  .ship-dashboard-topbar {
+    padding: 6px 8px;
+  }
+
+  .ship-dashboard-topbar nav button,
+  .ship-dashboard-resources button {
+    min-height: 30px;
+    padding: 5px 7px;
+    font-size: 9px;
+  }
+
+  .ship-dashboard-resources span {
+    min-height: 24px;
+    padding: 3px 6px;
+    font-size: 10px;
+  }
+
+  .ship-identity-panel,
+  .ship-overview-panel,
+  .ship-stat-panel,
+  .ship-command-strip {
+    padding: 9px;
+  }
+
+  .ship-identity-panel {
+    gap: 8px;
+  }
+
+  .ship-identity-panel > strong {
+    font-size: clamp(28px, 3vw, 42px);
+  }
+
+  .ship-overview-panel {
+    grid-template-rows: 32px minmax(0, 1fr) 112px;
+    gap: 8px;
+  }
+
+  .ship-dashboard-modules {
+    gap: 6px;
+  }
+
+  .ship-dashboard-module,
+  .ship-heavy-cargo-card {
+    padding: 7px;
+    grid-template-columns: 32px minmax(0, 1fr);
+  }
+
+  .ship-dashboard-module i {
+    width: 30px;
+    height: 30px;
+  }
+
+  .ship-dashboard-module p,
+  .ship-heavy-cargo-card p,
+  .ship-hero-status p {
+    font-size: 10px;
+  }
+
+  .ship-hero-status {
+    width: min(300px, 48%);
+    padding: 9px;
+  }
+
+  .ship-command-strip {
+    grid-template-columns: minmax(210px, 0.68fr) minmax(0, 1fr) minmax(190px, 0.5fr) minmax(170px, auto);
+  }
+}
+
+@media (max-width: 1100px) {
+  .main-menu-content.ship-dashboard-content,
+  .main-menu-content:has(.ship-dashboard-screen) {
+    overflow: auto;
+  }
+
+  .ship-dashboard-screen {
+    height: auto !important;
+    max-height: none !important;
+    grid-template:
+      "top" auto
+      "overview" minmax(520px, 70vh)
+      "identity" auto
+      "stats" auto
+      "command" auto / minmax(0, 1fr) !important;
+    overflow: visible !important;
+  }
+
+  .ship-dashboard-topbar,
+  .ship-command-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .ship-dashboard-modules {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

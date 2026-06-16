@@ -5633,8 +5633,9 @@ export class App {
       { label: "Standard Extraction Beacon", level: "Level 1", effect: "Extraction Speed +5%", state: "installed" },
       { label: "Empty Slot", level: "Available", effect: "Available for installation", state: "empty" },
       { label: "Empty Slot", level: "Available", effect: "Available for installation", state: "empty" },
-    ].map((module) => `
+    ].map((module, index) => `
       <article class="ship-dashboard-module ${module.state}">
+        <i>${module.state === "empty" ? "+" : index === 0 ? "C" : "B"}</i>
         <span>${module.level}</span>
         <strong>${module.label}</strong>
         <p>${module.effect}</p>
@@ -5665,7 +5666,8 @@ export class App {
       ["Extraction Speed", "+5%"],
       ["Fuel Efficiency", "+5%"],
     ].map(([label, value]) => `<div><span>${label}</span><strong>${value}</strong></div>`).join("");
-    // Phase 13.8C reference target: Kestrel-9 ship reference, left identity rail plus dominant ship overview.
+    const heavyCargoStatus = this.shipManager.canStoreSpecialCargo() ? "Cargo frame eligible" : "Cargo frame unavailable";
+    // Phase 13.8G reference target: Kestrel-9 hangar hero, compact side rails, module strip, and mission readiness command bar.
     this.menuContent.innerHTML = `
       <div class="ship-dashboard-screen">
         <header class="ship-dashboard-topbar">
@@ -5697,28 +5699,41 @@ export class App {
             <span>Readiness</span><strong>${this.capitalize(this.shipState.readiness)}</strong>
             <span>Heavy Cargo</span><strong>${this.shipManager.canStoreSpecialCargo() ? "Eligible" : "Unavailable"}</strong>
           </div>
+          <div class="ship-module-summary">
+            <span>Current Frame</span>
+            <strong>${cargo.name}</strong>
+            <small>${heavyCargoStatus}</small>
+          </div>
         </aside>
         <main class="ship-overview-panel">
           <header>
-            <span>Ship Overview</span>
-            <strong>KESTREL-9 // EXTRACTION READY</strong>
+            <span>Hangar Overview</span>
+            <strong>KESTREL-9 // PROSPECTOR EXTRACTION CRAFT</strong>
           </header>
           <div class="ship-preview-stage">
-            <div class="kestrel-silhouette ship-dashboard-preview-host">
+            <div class="ship-hangar-depth" aria-hidden="true">
               <i></i><b></b><em></em>
+            </div>
+            <div class="kestrel-silhouette ship-dashboard-preview-host" aria-label="Kestrel-9 hangar preview">
               <span class="ship-schematic-label ship-schematic-name">KESTREL-9</span>
               <span class="ship-schematic-label ship-schematic-cargo">CARGO SPINE</span>
               <span class="ship-schematic-label ship-schematic-engine">TWIN BURN</span>
               <span class="ship-schematic-label ship-schematic-nose">SURVEY NOSE</span>
             </div>
-            <div>
+            <div class="ship-hero-status">
               <span>Kestrel-9</span>
               <strong>Prospector Extraction Craft</strong>
               <p>${this.shipState.statusLabel}. Cargo risk ${this.capitalize(this.shipState.cargoRisk)}. Heavy recovery ${this.shipModuleManager.heavyCargoEnabled ? "frame online" : "frame pending"}.</p>
             </div>
           </div>
-          <section class="ship-dashboard-modules">${moduleRows}</section>
-          ${next ? `<button type="button" class="ship-upgrade-button" data-action="ship-upgrade-cargo">Upgrade Cargo: ${next.name} (${nextCost})</button>` : `<button type="button" class="ship-upgrade-button" disabled>Cargo Module Max Tier</button>`}
+          <section class="ship-dashboard-modules">
+            ${moduleRows}
+            <article class="ship-heavy-cargo-card ${this.shipManager.canStoreSpecialCargo() ? "ready" : "offline"}">
+              <span>Heavy Cargo</span>
+              <strong>${this.shipManager.canStoreSpecialCargo() ? "Eligible" : "Unavailable"}</strong>
+              <p>${this.shipModuleManager.heavyCargoEnabled ? "Recovery frame online." : "Recovery frame pending."}</p>
+            </article>
+          </section>
         </main>
         <aside class="ship-stat-panel">
           <section>
@@ -5734,17 +5749,21 @@ export class App {
             ${activeEffects}
           </section>
         </aside>
-        <section class="ship-alert-rail">
-          <span>System Alerts</span>
-          <b>Minor Hull Damage Detected</b>
-          <b>Signal Interference Increases Extraction Risk</b>
-        </section>
-        <section class="ship-mission-panel">
+        <section class="ship-command-strip">
+          <div class="ship-alert-rail">
+            <span>System Alerts</span>
+            <b>Minor Hull Damage Detected</b>
+            <b>Signal Interference Increases Extraction Risk</b>
+          </div>
           <div class="ship-next-mission-copy">
             <span>Next Mission</span>
             <strong>${mission.title}</strong>
             <p>${mission.familyName} / ${mission.objectiveFlavor}</p>
             <small>${mission.risk}</small>
+          </div>
+          <div class="ship-refit-panel">
+            <span>Refit Bay</span>
+            ${next ? `<button type="button" data-action="ship-upgrade-cargo">Upgrade Cargo: ${next.name} (${nextCost})</button>` : `<button type="button" disabled>Cargo Module Max Tier</button>`}
           </div>
           <button type="button" data-action="start">Review Assignment</button>
         </section>
@@ -5954,79 +5973,227 @@ export class App {
   private showSkillMatrixMenu(): void {
     this.raidScreen = "skill-matrix";
     const selectedClassId = this.classManager.snapshot.selectedClassId;
-    const branchCards = skillBranches.map((branch) => this.renderSkillBranch(branch.id, selectedClassId)).join("");
+    const selectedNode =
+      skillNodes.find((node) => this.skillManager.canAcquire(node.id) && node.classAffinity === selectedClassId) ??
+      skillNodes.find((node) => this.skillManager.canAcquire(node.id)) ??
+      skillNodes.find((node) => node.classAffinity === selectedClassId) ??
+      skillNodes[0];
+    if (!selectedNode) {
+      this.menuContent.innerHTML = `<div class="inspect-screen progression-screen skill-matrix-screen skills-matrix-screen"><p>No skill calibrations are registered.</p></div>`;
+      this.bindMenuButtons();
+      return;
+    }
+    const selectedBranch = skillBranches.find((branch) => branch.id === selectedNode.branchId) ?? skillBranches[0];
+    const disciplineRail = skillBranches.map((branch) => this.renderSkillDisciplineRailItem(branch.id, selectedClassId)).join("");
+    const matrixLanes = skillBranches.map((branch) => this.renderSkillMatrixLane(branch.id, selectedClassId, selectedNode.id)).join("");
+    const acquiredCount = this.skillManager.acquiredCount;
+    const availablePoints = this.skillManager.snapshot.availableSkillPoints;
+    const availableCount = skillNodes.filter((node) => this.skillManager.canAcquire(node.id)).length;
+    const totalCount = skillNodes.length;
+    const selectedState = this.getSkillNodeState(selectedNode.id);
+    const selectedPresentation = this.getSkillBranchPresentation(selectedNode.branchId);
+    const selectedAffinity = selectedNode.classAffinity === selectedClassId;
 
-    // Phase 13.8C reference target: skill tree reference, lane-based matrix with selected detail rail.
+    // Phase 13.8H reference target: skill tree console with discipline rail, node matrix, and detail rail.
     this.menuContent.innerHTML = `
-      <div class="inspect-screen progression-screen skill-matrix-screen">
-        <header class="inspect-header">
-          <div>
-            <span>Progression Matrix</span>
-            <h2>Skill Matrix</h2>
-            <p>Prototype calibration only. Acquired nodes do not alter combat, oxygen, ship values, loot, or multiplayer yet.</p>
+      <div class="inspect-screen progression-screen skill-matrix-screen skills-matrix-screen">
+        <header class="skills-matrix-header">
+          <div class="skills-title-block">
+            <span>Lumen Progression Matrix</span>
+            <h2>Skills</h2>
+            <p>Field calibration only. Existing skill IDs and effects remain unchanged.</p>
           </div>
-          <div class="inspect-currency">
+          <div class="skills-progress-header" aria-label="Skill progression status">
             <span>Assignment</span><strong>${this.classManager.selectedClass.displayName}</strong>
-            <span>Points</span><strong>${this.skillManager.snapshot.availableSkillPoints}</strong>
-            <span>Acquired</span><strong>${this.skillManager.acquiredCount}</strong>
+            <span>Points</span><strong>${availablePoints}</strong>
+            <span>Available</span><strong>${availableCount}</strong>
+            <span>Calibrated</span><strong>${acquiredCount}/${totalCount}</strong>
           </div>
           <button type="button" data-action="menu">Back</button>
         </header>
-        <section class="skill-branch-grid">${branchCards}</section>
-        <aside class="skill-detail-rail">
-          <span>Selected Calibration</span>
-          <strong>${this.classManager.selectedClass.displayName}</strong>
-          <p>${this.classManager.selectedClass.startingTendency}</p>
-          <div>
-            <span>Points</span><b>${this.skillManager.snapshot.availableSkillPoints}</b>
-            <span>Acquired</span><b>${this.skillManager.acquiredCount}</b>
-            <span>Prototype</span><b>No stat mutation</b>
-          </div>
+        <aside class="skills-discipline-rail" aria-label="Skill disciplines">
+          <span>Disciplines</span>
+          ${disciplineRail}
         </aside>
-      </div>
-      <div class="main-menu-actions">
-        <button type="button" data-action="class-assignment">Class Assignment</button>
-        <button type="button" data-action="ship-systems">Ship Systems</button>
-        <button type="button" data-action="menu">Back to Habitat</button>
+        <section class="skills-node-matrix" aria-label="Lumen progression node matrix">
+          <div class="skills-tier-header">
+            <span>Discipline</span>
+            <b>Tier 1</b>
+            <b>Tier 2</b>
+            <b>Tier 3</b>
+          </div>
+          ${matrixLanes}
+        </section>
+        <aside class="skills-detail-rail" aria-label="Selected skill calibration">
+          <div class="skills-detail-heading">
+            <span>Selected Calibration</span>
+            <strong>${selectedNode.label}</strong>
+            <p>${selectedBranch?.label ?? "Unassigned Discipline"} / ${selectedPresentation.role}</p>
+          </div>
+          <div class="skills-selected-orb" data-state="${selectedState}" data-accent="${selectedPresentation.accent}">
+            <i>${selectedPresentation.code}</i>
+          </div>
+          <dl class="skills-detail-grid">
+            <div><dt>State</dt><dd>${this.getSkillNodeStateLabel(selectedState)}</dd></div>
+            <div><dt>Tier</dt><dd>${selectedNode.tier}</dd></div>
+            <div><dt>Affinity</dt><dd>${selectedAffinity ? this.classManager.selectedClass.displayName : "Cross discipline"}</dd></div>
+            <div><dt>Requirement</dt><dd>${this.getSkillNodeRequirement(selectedNode.id)}</dd></div>
+          </dl>
+          <section class="skills-effect-card">
+            <span>Field Effect</span>
+            <p>${selectedNode.description}</p>
+          </section>
+          <section class="skills-lumen-note">
+            <span>Lumen Read</span>
+            <p>${this.getSkillNodeFieldNote(selectedNode.id)}</p>
+          </section>
+          <button type="button" data-action="skill-acquire-${selectedNode.id}" ${this.skillManager.canAcquire(selectedNode.id) ? "" : "disabled"}>
+            ${selectedState === "acquired" ? "Calibrated" : selectedState === "available" ? "Calibrate Node" : "Locked"}
+          </button>
+        </aside>
+        <footer class="skills-command-strip">
+          <button type="button" data-action="class-assignment">Class Assignment</button>
+          <button type="button" data-action="hq-loadout">Loadout</button>
+          <button type="button" data-action="raid-select">Crater Runs</button>
+          <button type="button" data-action="class-review-loadout">Review Assignment</button>
+          <button type="button" data-action="menu">Back to Habitat</button>
+        </footer>
       </div>
     `;
     this.bindMenuButtons();
   }
 
-  private renderSkillBranch(branchId: SkillBranchId, selectedClassId: ClassId): string {
+  private renderSkillDisciplineRailItem(branchId: SkillBranchId, selectedClassId: ClassId): string {
     const branch = skillBranches.find((candidate) => candidate.id === branchId);
     if (!branch) {
       return "";
     }
 
-    const nodes = skillNodes
-      .filter((node) => node.branchId === branchId)
-      .sort((left, right) => left.tier - right.tier)
-      .slice(0, 3)
-      .map((node) => {
-        const acquired = this.skillManager.isAcquired(node.id);
-        const available = this.skillManager.canAcquire(node.id);
-        const affinity = node.classAffinity === selectedClassId;
-        return `
-          <article class="skill-node ${acquired ? "acquired" : available ? "available" : "locked"} ${affinity ? "affinity" : ""}">
-            <i>${node.label.slice(0, 2).toUpperCase()}</i>
-            <span>Tier ${node.tier}${affinity ? " | assignment affinity" : ""}</span>
-            <strong>${node.label}</strong>
-            <p>${node.description}</p>
-            <button type="button" data-action="skill-acquire-${node.id}" ${available ? "" : "disabled"}>
-              ${acquired ? "Calibrated" : available ? "Calibrate" : "Locked"}
-            </button>
-          </article>
-        `;
-      }).join("");
+    const presentation = this.getSkillBranchPresentation(branchId);
+    const branchNodes = skillNodes.filter((node) => node.branchId === branchId);
+    const acquiredCount = branchNodes.filter((node) => this.skillManager.isAcquired(node.id)).length;
+    const availableCount = branchNodes.filter((node) => this.skillManager.canAcquire(node.id)).length;
+    const hasAffinity = branchNodes.some((node) => node.classAffinity === selectedClassId);
 
     return `
-      <article class="skill-branch-card" data-accent="${branch.accent}">
-        <span>${branch.label}</span>
-        <p>${branch.description}</p>
-        <div class="skill-node-list">${nodes}</div>
+      <article class="skills-discipline-item ${hasAffinity ? "is-affinity" : ""}" data-accent="${presentation.accent}">
+        <i>${presentation.code}</i>
+        <div>
+          <strong>${branch.label}</strong>
+          <span>${presentation.role}</span>
+        </div>
+        <b>${acquiredCount}/${branchNodes.length}</b>
+        <small>${availableCount > 0 ? `${availableCount} ready` : hasAffinity ? "assignment affinity" : "locked chain"}</small>
       </article>
     `;
+  }
+
+  private renderSkillMatrixLane(branchId: SkillBranchId, selectedClassId: ClassId, selectedNodeId: SkillNodeId): string {
+    const branch = skillBranches.find((candidate) => candidate.id === branchId);
+    if (!branch) {
+      return "";
+    }
+
+    const presentation = this.getSkillBranchPresentation(branchId);
+    const nodes = skillNodes
+      .filter((node) => node.branchId === branchId)
+      .sort((left, right) => left.tier - right.tier);
+    const nodeCells = [1, 2, 3].map((tier) => {
+      const node = nodes.find((candidate) => candidate.tier === tier);
+      if (!node) {
+        return `
+          <div class="skills-empty-node">
+            <span>Tier ${tier}</span>
+            <b>Awaiting field data</b>
+          </div>
+        `;
+      }
+
+      const state = this.getSkillNodeState(node.id);
+      const affinity = node.classAffinity === selectedClassId;
+      return `
+        <article class="skills-node skills-node--${state} ${affinity ? "skills-node--affinity" : ""} ${node.id === selectedNodeId ? "skills-node--selected" : ""}" data-accent="${presentation.accent}">
+          <span>Tier ${node.tier}${affinity ? " / affinity" : ""}</span>
+          <i>${node.label.split(" ").map((word) => word[0]).join("").slice(0, 2).toUpperCase()}</i>
+          <strong>${node.label}</strong>
+          <em>${this.getSkillNodeStateLabel(state)}</em>
+        </article>
+      `;
+    }).join("");
+
+    return `
+      <article class="skills-matrix-lane" data-accent="${presentation.accent}">
+        <div class="skills-lane-label">
+          <i>${presentation.code}</i>
+          <strong>${branch.label}</strong>
+          <span>${branch.description}</span>
+        </div>
+        ${nodeCells}
+      </article>
+    `;
+  }
+
+  private getSkillNodeState(nodeId: SkillNodeId): "acquired" | "available" | "locked" {
+    if (this.skillManager.isAcquired(nodeId)) {
+      return "acquired";
+    }
+    return this.skillManager.canAcquire(nodeId) ? "available" : "locked";
+  }
+
+  private getSkillNodeStateLabel(state: "acquired" | "available" | "locked"): string {
+    if (state === "acquired") {
+      return "Calibrated";
+    }
+    if (state === "available") {
+      return "Ready to calibrate";
+    }
+    return "Locked by prerequisite";
+  }
+
+  private getSkillNodeRequirement(nodeId: SkillNodeId): string {
+    const node = skillNodes.find((candidate) => candidate.id === nodeId);
+    if (!node) {
+      return "Unknown";
+    }
+    if (this.skillManager.isAcquired(nodeId)) {
+      return "Already calibrated";
+    }
+    if (this.skillManager.canAcquire(nodeId)) {
+      return "Skill point and field approval available";
+    }
+    if (node.prerequisites.length === 0) {
+      return "Skill point required";
+    }
+    return node.prerequisites
+      .map((prerequisiteId) => skillNodes.find((candidate) => candidate.id === prerequisiteId)?.label ?? prerequisiteId)
+      .join(", ");
+  }
+
+  private getSkillBranchPresentation(branchId: SkillBranchId): { code: string; role: string; accent: string } {
+    const presentations: Record<SkillBranchId, { code: string; role: string; accent: string }> = {
+      "crater-navigation": { code: "CN", role: "Route sensing", accent: "cyan" },
+      "lumen-signatures": { code: "LS", role: "Lumen trace study", accent: "purple" },
+      "field-recovery": { code: "FR", role: "Containment handling", accent: "green" },
+      "suit-stability": { code: "SS", role: "Suit survival loop", accent: "orange" },
+      "response-discipline": { code: "RD", role: "Contact control", accent: "red" },
+    };
+    return presentations[branchId];
+  }
+
+  private getSkillNodeFieldNote(nodeId: SkillNodeId): string {
+    const notes: Record<SkillNodeId, string> = {
+      "shadow-route-reading": "Maps crater shade and ridge breaks before the Lumen field shifts.",
+      "beacon-triangulation": "Cross-checks weak ship pings against return marker drift.",
+      "essence-trace": "Reads faint Essence wake patterns without treating them as magic.",
+      "low-light-confirmation": "Confirms scans in shadow where reflective Lumen tissue is quieter.",
+      "sealed-recovery": "Stabilizes volatile samples before cargo handling begins.",
+      "containment-habit": "Treats fabrication drift as contamination until field tools prove otherwise.",
+      "emergency-seal": "Runs fast patch discipline when grit and pressure attack the suit.",
+      "cognitive-check": "Resets the operator loop when signal data contradicts memory.",
+      "breach-ready": "Keeps contact decisions clean until a threat path is confirmed.",
+      "controlled-burst": "Paces return fire around moving targets and broken industrial frames.",
+    };
+    return notes[nodeId];
   }
 
   private renderMultiplayerStatusLine(): string {
