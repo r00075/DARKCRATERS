@@ -162,8 +162,13 @@ export const darkCratersVisualContract: DarkCratersVisualContract = {
       "No overlapping rows, hidden metrics, bottom command clipping, or repeated long evidence text outside the selected detail.",
     ],
     stashVendors: [
-      "Reference: shared HQ tool chrome.",
-      "Inventory/vendor screens use the same left rail, center grid, right detail contract.",
+      "Reference: public/design-reference/ui/reference-player-custom.jpg, public/design-reference/ui/reference-arsenal.jpg, and public/design-reference/ui/reference-game-sequence.png.",
+      "Stash must read as a Habitat storage terminal with top chrome, category rail, center cargo grid, selected cargo detail, and bottom command strip.",
+      "Vendors must read as a Habitat requisition terminal with top chrome, vendor/faction rail, goods/services catalog, supplier detail rail, and bottom command strip.",
+      "Utility screens share resource chips, selected states, compact cards, contained internal scrolling, and stable command strips without becoming identical copies.",
+      "Utility item grids must keep item and vendor names readable at 1600x900, preferring fewer columns over clipped fragments.",
+      "Preserve stash item IDs, vendor IDs, prices, persistence, equipment behavior, buy/sell/repair actions, and existing data-action paths.",
+      "No generic admin panels, giant empty catalogs, detached command buttons, overlapping item cards, illegible dashed/clipped names, vertical detail-value wrapping, page-length scroll walls, or broken selected states.",
     ],
     raidResult: [
       "Reference: projected gameplay sequence panel 9.",

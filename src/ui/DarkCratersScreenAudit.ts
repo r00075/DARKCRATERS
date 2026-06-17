@@ -188,9 +188,26 @@ export const darkCratersScreenAudit: readonly DarkCratersScreenAuditEntry[] = [
   {
     screen: "stashVendors",
     label: "Stash / Vendors",
-    priority: 2,
+    priority: 1,
     expectedArchetype: "inventory-rail",
-    reference: "shared HQ reference chrome",
+    reference: "reference-player-custom.jpg, reference-arsenal.jpg, and reference-game-sequence.png",
+    intendedComposition: [
+      "Stash is a Habitat storage terminal with compact DARK CRATERS top chrome, resource/readiness chips, left storage category rail, center item grid, selected item detail rail, and bottom command strip.",
+      "Vendors is a Habitat requisition terminal with selected vendor/faction top chrome, credits/reputation chips, left vendor rail, center goods/services catalog, selected supplier/detail rail, and bottom command strip.",
+      "Both screens share utility-terminal proportions, selected states, compact item rows/cards, contained rail/catalog/detail scrolling, and stable actions.",
+      "Stash and Vendors remain distinct: storage/cargo locker language for Stash, requisition/supplier network language for Vendors.",
+      "Utility catalogs prioritize readable item and vendor names over maximum grid density.",
+    ],
+    forbiddenRegression: "Generic admin panel, giant empty catalog, detached command buttons, overlapping item cards, illegible dashed/clipped item-name fragments, selected detail values wrapping vertically, page-length scroll walls, hidden selected states, clipped right detail rail, clipped bottom actions, changed stash/vendor IDs, changed prices, changed persistence, or broken buy/sell/repair/loadout navigation.",
+    validationChecklist: [
+      "10-stash.png reads as a Habitat storage terminal before reading labels.",
+      "11-vendors.png reads as a requisition terminal before reading labels.",
+      "Left rails, center grids/catalogs, right details, and bottom command strips are visible at 1600x900.",
+      "Selected stash item/category and selected vendor are obvious.",
+      "Catalog cards stay readable, show recognizable item/vendor names, and do not overlap or create a whole-page scroll wall.",
+      "Selected item/vendor detail rows keep long values readable without vertical word fragments.",
+      "Loadout, Arsenal, Vendors/Stash, Review Assignment where present, and Back to Habitat actions remain visible.",
+    ],
   },
   {
     screen: "raidResult",

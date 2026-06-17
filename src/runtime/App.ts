@@ -6329,64 +6329,121 @@ export class App {
     this.raidScreen = "stash";
     const filters: StashFilter[] = ["all", "weapons", "armor", "backpacks", "consumables", "tactical", "attachments", "materials", "contracts", "cosmetics", "junk"];
     const sorts: StashSort[] = ["rarity", "value", "type", "quantity", "newest"];
-    const rows = this.getFilteredStashItems()
+    const stashItems = this.persistentStash.items.filter((item) => item.quantity > 0);
+    const filteredItems = this.getFilteredStashItems();
+    const totalItems = stashItems.reduce((total, item) => total + item.quantity, 0);
+    const totalValue = stashItems.reduce((total, item) => total + getItemDefinition(item.type).value * item.quantity, 0);
+    const selectedItem = this.selectedStashType
+      ? this.persistentStash.items.find((candidate) => candidate.type === this.selectedStashType && candidate.quantity > 0)
+      : filteredItems[0];
+    const rows = filteredItems
       .map((item) => {
         const definition = getItemDefinition(item.type);
         const color = colorToCss(themeConfig.rarityColors[definition.rarity]);
-        const selected = this.selectedStashType === item.type ? " selected" : "";
+        const selected = selectedItem?.type === item.type ? " selected" : "";
         const equipped = this.isEquippedItemType(item.type);
         return `
           <button type="button" class="stash-card${selected}" data-action="stash-select-${item.type}" style="--rarity-color: ${color}">
+            <span>${definition.category}${equipped ? " | equipped" : ""}</span>
             <strong>${definition.label}</strong>
-            <span>${definition.rarity} | ${definition.category}${equipped ? " | equipped" : ""}</span>
-            <small>x${item.quantity} | value ${Math.round(definition.value * item.quantity)}</small>
+            <small>${definition.rarity} | x${item.quantity} | ${Math.round(definition.value * item.quantity)} value</small>
           </button>
         `;
       })
       .join("");
     const filterTabs = filters
-      .map((filter) => `<button type="button" class="${this.stashFilter === filter ? "active" : ""}" data-action="stash-filter-${filter}">${this.formatStashFilter(filter)}</button>`)
+      .map((filter) => {
+        const count = this.persistentStash.items.filter((item) => item.quantity > 0 && this.stashItemMatchesFilter(item, filter)).length;
+        return `<button type="button" class="${this.stashFilter === filter ? "active" : ""}" data-action="stash-filter-${filter}"><span>${this.formatStashFilter(filter)}</span><em>${count}</em></button>`;
+      })
       .join("");
     const sortTabs = sorts
       .map((sort) => `<button type="button" class="${this.stashSort === sort ? "active" : ""}" data-action="stash-sort-${sort}">${this.capitalize(sort)}</button>`)
       .join("");
     this.menuContent.innerHTML = `
-      <div class="stash-screen inspect-screen" data-scroll-view="stash-main" data-scroll-key="stash-main">
-        <header class="inspect-header">
-          <div>
-            <span>Persistent Habitat Vault</span>
+      <div class="stash-screen inspect-screen utility-terminal-screen stash-utility-screen" data-scroll-view="stash-main" data-scroll-key="stash-main">
+        <header class="inspect-header utility-terminal-top">
+          <div class="utility-terminal-brand">
+            <span>DARK CRATERS / Habitat Storage Terminal</span>
             <h2>HABITAT STASH</h2>
-            <p>Extracted lunar loot, fabrication materials, weapons, and faction contract items stay safe here.</p>
+            <p>Extracted cargo, fabrication materials, weapons, and contract evidence stay sealed in orbit.</p>
           </div>
-          <div class="inspect-currency">
-            <span>Credits</span><strong>${this.vendorManager.snapshot.credits}</strong>
-            <span>Regolith Scrap</span><strong>${this.getStashQuantity("scrap")}</strong>
-            <span>Reputation</span><strong>${this.reputation.value}</strong>
+          <div class="inspect-currency utility-resource-strip">
+            <span>Items <b>${totalItems}</b></span>
+            <span>Filtered <b>${filteredItems.length}</b></span>
+            <span>Value <b>${Math.round(totalValue)}</b></span>
+            <span>Credits <b>${this.vendorManager.snapshot.credits}</b></span>
+            <span>Scrap <b>${this.getStashQuantity("scrap")}</b></span>
           </div>
-          <button type="button" data-action="menu">Back</button>
+          <nav class="utility-quick-links">
+            <button type="button" data-action="loadout">Loadout</button>
+            <button type="button" data-action="inspect">Arsenal</button>
+            <button type="button" data-action="vendors">Vendors</button>
+            <button type="button" data-action="menu">Back</button>
+          </nav>
         </header>
-        <aside class="stash-tabs">${filterTabs}</aside>
-        <nav class="stash-sort-tabs">
+        <aside class="stash-tabs utility-left-rail">
+          <div class="utility-rail-heading">
+            <span>Storage Rail</span>
+            <strong>${this.formatStashFilter(this.stashFilter)}</strong>
+          </div>
+          ${filterTabs}
+        </aside>
+        <nav class="stash-sort-tabs utility-catalog-toolbar">
           <input type="search" data-stash-search placeholder="Search stash..." value="${this.escapeHtml(this.stashSearch)}" />
           ${sortTabs}
         </nav>
-        <section class="stash-card-grid">
-          ${rows || `<span class="empty-loadout-list">No stash items in this filter yet.</span>`}
+        <section class="stash-card-grid utility-catalog-grid">
+          ${rows || `<article class="utility-empty-state"><strong>No cargo in this channel</strong><p>Run crater contracts, extract safely, or switch storage filters to review other sealed inventory.</p></article>`}
         </section>
-        <section class="stash-detail-panel">
-          ${this.renderStashItemDetails()}
+        <section class="stash-detail-panel utility-detail-rail">
+          ${this.renderStashItemDetails(selectedItem)}
         </section>
-      </div>
-      <div class="main-menu-actions">
-        <button type="button" data-action="start">Crater Runs</button>
-        <button type="button" data-action="loadout">Loadout</button>
-        <button type="button" data-action="inspect">Inspect Weapon</button>
-        <button type="button" data-action="workbench">Fabrication Bench</button>
-        <button type="button" data-action="settings">Settings</button>
-        <button type="button" data-action="menu">Back</button>
+        <nav class="utility-command-strip">
+          <button type="button" data-action="loadout">Loadout</button>
+          <button type="button" data-action="inspect">Arsenal</button>
+          <button type="button" data-action="vendors">Vendors</button>
+          <button type="button" data-action="start">Review Assignment</button>
+          <button type="button" data-action="menu">Back to Habitat</button>
+        </nav>
       </div>
     `;
     this.bindMenuButtons();
+  }
+
+  private stashItemMatchesFilter(item: LootStack, filter: StashFilter): boolean {
+    const definition = getItemDefinition(item.type);
+    if (filter === "all") {
+      return item.quantity > 0;
+    }
+    if (filter === "weapons") {
+      return item.type.startsWith("weapon-");
+    }
+    if (filter === "armor") {
+      return item.type.includes("armor") && definition.category === "gear";
+    }
+    if (filter === "backpacks") {
+      return item.type.includes("backpack");
+    }
+    if (filter === "consumables") {
+      return definition.category === "consumable";
+    }
+    if (filter === "tactical") {
+      return item.type.startsWith("tool-");
+    }
+    if (filter === "materials") {
+      return definition.category === "material";
+    }
+    if (filter === "attachments") {
+      return item.type.startsWith("attachment-") || item.type === "high-tier-suppressor";
+    }
+    if (filter === "contracts") {
+      return definition.category === "objective";
+    }
+    if (filter === "cosmetics") {
+      return item.type.includes("wrap") || item.type.includes("cosmetic");
+    }
+    return definition.rarity === "common" && (definition.category === "material" || definition.category === "objective");
   }
 
   private getFilteredStashItems(): LootStack[] {
@@ -6397,37 +6454,7 @@ export class App {
       if (search && !`${definition.label} ${definition.category} ${definition.rarity} ${definition.description}`.toLowerCase().includes(search)) {
         return false;
       }
-      if (this.stashFilter === "all") {
-        return item.quantity > 0;
-      }
-      if (this.stashFilter === "weapons") {
-        return item.type.startsWith("weapon-");
-      }
-      if (this.stashFilter === "armor") {
-        return item.type.includes("armor") && definition.category === "gear";
-      }
-      if (this.stashFilter === "backpacks") {
-        return item.type.includes("backpack");
-      }
-      if (this.stashFilter === "consumables") {
-        return definition.category === "consumable";
-      }
-      if (this.stashFilter === "tactical") {
-        return item.type.startsWith("tool-");
-      }
-      if (this.stashFilter === "materials") {
-        return definition.category === "material";
-      }
-      if (this.stashFilter === "attachments") {
-        return item.type.startsWith("attachment-") || item.type === "high-tier-suppressor";
-      }
-      if (this.stashFilter === "contracts") {
-        return definition.category === "objective";
-      }
-      if (this.stashFilter === "cosmetics") {
-        return item.type.includes("wrap") || item.type.includes("cosmetic");
-      }
-      return definition.rarity === "common" && (definition.category === "material" || definition.category === "objective");
+      return this.stashItemMatchesFilter(item, this.stashFilter);
     });
 
     return [...filtered].sort((left, right) => {
@@ -6449,13 +6476,15 @@ export class App {
     });
   }
 
-  private renderStashItemDetails(): string {
-    const item = this.selectedStashType
-      ? this.persistentStash.items.find((candidate) => candidate.type === this.selectedStashType)
-      : this.getFilteredStashItems()[0];
-
+  private renderStashItemDetails(item: LootStack | undefined): string {
     if (!item) {
-      return `<article class="loadout-details-card"><strong>No item selected</strong><p>Pick an item to inspect value, slotting, and actions.</p></article>`;
+      return `
+        <article class="loadout-details-card stash-detail-card utility-empty-detail">
+          <span>Selected Cargo</span>
+          <strong>No item selected</strong>
+          <p>Pick an item to inspect value, slotting, vendor routing, and supported loadout actions.</p>
+        </article>
+      `;
     }
 
     this.selectedStashType = item.type;
@@ -6466,14 +6495,17 @@ export class App {
     const bestVendor = this.bestVendorForItem(item.type);
     return `
       <article class="loadout-details-card stash-detail-card" style="--rarity-color: ${color}">
+        <span>Selected Cargo</span>
         <strong>${definition.label}</strong>
         <span>${definition.rarity.toUpperCase()} ${definition.category}</span>
         <p>${definition.description}</p>
-        <div><span>Stack</span><strong>${item.quantity}</strong></div>
-        <div><span>Value</span><strong>${Math.round(definition.value * item.quantity)}</strong></div>
-        <div><span>Status</span><strong>${equipped ? "Equipped / loadout" : "In stash"}</strong></div>
-        <div><span>Best Vendor</span><strong>${bestVendor ? vendorDefinitions[bestVendor].name : "No preferred buyer"}</strong></div>
-        <div><span>Current Vendor</span><strong>${vendorBuys ? `${vendorDefinitions[this.vendorManager.snapshot.selectedVendorId].name} buys this` : "Switch vendor to sell"}</strong></div>
+        <div class="utility-detail-grid">
+          <div><span>Stack</span><strong>${item.quantity}</strong></div>
+          <div><span>Value</span><strong>${Math.round(definition.value * item.quantity)}</strong></div>
+          <div><span>Status</span><strong>${equipped ? "Equipped / loadout" : "In stash"}</strong></div>
+          <div><span>Best Vendor</span><strong>${bestVendor ? vendorDefinitions[bestVendor].name : "No preferred buyer"}</strong></div>
+          <div><span>Current Vendor</span><strong>${vendorBuys ? `${vendorDefinitions[this.vendorManager.snapshot.selectedVendorId].name} buys this` : "Switch vendor to sell"}</strong></div>
+        </div>
         <footer>
           <button type="button" data-action="stash-inspect-selected">Inspect</button>
           <button type="button" data-action="stash-loadout-selected">Move to Loadout</button>
@@ -6524,8 +6556,8 @@ export class App {
         <button type="button" class="vendor-select-card ${item.id === vendor.id ? "active" : ""}" data-action="vendor-select-${item.id}" style="--vendor-accent: ${item.accentPrimary}; --vendor-accent-secondary: ${item.accentSecondary}">
           <i>${this.vendorIcon(item.id)}</i>
           <strong>${item.name}</strong>
-          <span>${item.tagline}</span>
-          <small>${item.faction} | Rep ${this.vendorManager.reputationLevel(item.id)}</small>
+          <span>${item.faction} | Rep ${this.vendorManager.reputationLevel(item.id)}</span>
+          <small>${item.tagline}</small>
           <small>${item.specialty}</small>
         </button>
       `)
@@ -6538,33 +6570,53 @@ export class App {
     const progress = Math.round(this.vendorManager.reputationProgress(vendor.id) * 100);
 
     this.menuContent.innerHTML = `
-      <div class="vendor-screen inspect-screen" data-scroll-view="vendors-main" data-scroll-key="vendors-main" style="--vendor-accent: ${vendor.accentPrimary}; --vendor-accent-secondary: ${vendor.accentSecondary}">
-        <header class="inspect-header vendor-hero">
-          <div>
-            <span>Faction Vendor Economy</span>
+      <div class="vendor-screen inspect-screen utility-terminal-screen vendor-utility-screen" data-scroll-view="vendors-main" data-scroll-key="vendors-main" style="--vendor-accent: ${vendor.accentPrimary}; --vendor-accent-secondary: ${vendor.accentSecondary}">
+        <header class="inspect-header vendor-hero utility-terminal-top">
+          <div class="utility-terminal-brand">
+            <span>DARK CRATERS / Habitat Requisition Terminal</span>
             <h2>${vendor.name}</h2>
-            <strong>${vendor.tagline}</strong>
-            <p>${vendor.specialty}</p>
+            <p>${vendor.tagline} // ${vendor.specialty}</p>
           </div>
-          <div class="vendor-portrait">${this.vendorIcon(vendor.id)}</div>
-          <strong>${state.credits} Credits</strong>
+          <div class="inspect-currency utility-resource-strip">
+            <span>Selected Vendor <b>${this.vendorIcon(vendor.id)}</b></span>
+            <span>Credits <b>${state.credits}</b></span>
+            <span>Reputation <b>Level ${level}</b></span>
+            <span>Next Unlock <b>${progress}%</b></span>
+            <span>Mode <b>${this.capitalize(state.selectedTab)}</b></span>
+          </div>
+          <nav class="utility-quick-links">
+            <button type="button" data-action="stash">Stash</button>
+            <button type="button" data-action="loadout">Loadout</button>
+            <button type="button" data-action="inspect">Arsenal</button>
+            <button type="button" data-action="menu">Back</button>
+          </nav>
         </header>
-        <aside class="vendor-list">${vendorButtons}</aside>
-        <section class="vendor-panel">
+        <aside class="vendor-list utility-left-rail">
+          <div class="utility-rail-heading">
+            <span>Vendor Network</span>
+            <strong>${Object.keys(vendorDefinitions).length} suppliers</strong>
+          </div>
+          ${vendorButtons}
+        </aside>
+        <section class="vendor-panel utility-catalog-panel">
           <div class="vendor-reputation">
             <span>Reputation Level ${level}</span>
             <div><i style="width: ${progress}%"></i></div>
             <small>${progress}% to next unlock</small>
           </div>
-          <nav class="vendor-tabs">${tabButtons}</nav>
-          ${this.renderVendorTab(state.selectedTab, vendor.id)}
+          <nav class="vendor-tabs utility-catalog-toolbar">${tabButtons}</nav>
+          <div class="utility-catalog-grid">${this.renderVendorTab(state.selectedTab, vendor.id)}</div>
         </section>
-      </div>
-      <div class="main-menu-actions">
-        <button type="button" data-action="loadout">Loadout</button>
-        <button type="button" data-action="stash">Habitat Stash</button>
-        <button type="button" data-action="start">Crater Runs</button>
-        <button type="button" data-action="menu">Back</button>
+        <section class="vendor-detail-panel utility-detail-rail">
+          ${this.renderVendorUtilityDetail(vendor.id, state.selectedTab, level, progress)}
+        </section>
+        <nav class="utility-command-strip">
+          <button type="button" data-action="vendor-tab-buy">Buy / Acquire</button>
+          <button type="button" data-action="vendor-tab-sell">Sell / Stash</button>
+          <button type="button" data-action="loadout">Loadout</button>
+          <button type="button" data-action="inspect">Arsenal</button>
+          <button type="button" data-action="menu">Back to Habitat</button>
+        </nav>
       </div>
     `;
     this.bindMenuButtons();
@@ -6655,6 +6707,48 @@ export class App {
       : "";
 
     return `<div class="vendor-item-grid">${availableRows}${scrapperConvert}${lockedRows}</div>`;
+  }
+
+  private renderVendorUtilityDetail(vendorId: VendorId, tab: VendorTab, level: number, progress: number): string {
+    const vendor = vendorDefinitions[vendorId];
+    const availableCount = this.vendorManager.availableInventory(vendorId).length;
+    const lockedCount = this.vendorManager.lockedInventory(vendorId).length;
+    const sellableCount = this.persistentStash.items.filter((item) => item.quantity > 0 && vendor.buys.includes(item.type)).length;
+    const repairCount = vendorId === "mechanic"
+      ? [
+        this.loadout.snapshot.primaryWeaponId,
+        this.loadout.snapshot.sidearmWeaponId,
+      ].filter(Boolean).length
+      : 0;
+    const tabSummary = tab === "buy"
+      ? `${availableCount} available / ${lockedCount} reputation locked`
+      : tab === "sell"
+        ? `${sellableCount} stash stacks accepted`
+        : vendorId === "mechanic"
+          ? `${repairCount} equipped weapon services`
+          : "Repair service unavailable from this supplier";
+
+    return `
+      <article class="loadout-details-card vendor-detail-card">
+        <span>Selected Supplier</span>
+        <strong>${vendor.name}</strong>
+        <p>${vendor.specialty}</p>
+        <div class="utility-detail-grid">
+          <div><span>Faction</span><strong>${vendor.faction}</strong></div>
+          <div><span>Role</span><strong>${vendor.tagline}</strong></div>
+          <div><span>Credits</span><strong>${this.vendorManager.snapshot.credits}</strong></div>
+          <div><span>Reputation</span><strong>Level ${level}</strong></div>
+          <div><span>Next Unlock</span><strong>${progress}%</strong></div>
+          <div><span>${this.capitalize(tab)} Catalog</span><strong>${tabSummary}</strong></div>
+        </div>
+        <footer>
+          <button type="button" data-action="vendor-tab-buy">Buy</button>
+          <button type="button" data-action="vendor-tab-sell">Sell</button>
+          <button type="button" data-action="vendor-tab-repair" ${vendorId === "mechanic" ? "" : "disabled"}>Repair</button>
+          <button type="button" data-action="stash">Open Stash</button>
+        </footer>
+      </article>
+    `;
   }
 
   private vendorIcon(vendorId: VendorId): string {
