@@ -164,9 +164,26 @@ export const darkCratersScreenAudit: readonly DarkCratersScreenAuditEntry[] = [
   {
     screen: "campaignCodex",
     label: "Campaign / Codex",
-    priority: 2,
+    priority: 1,
     expectedArchetype: "dossier",
-    reference: "reference-map.jpg and reference-Lumen.jpg",
+    reference: "reference-game-sequence.png, reference-map.jpg, and reference-Lumen.jpg",
+    intendedComposition: [
+      "Compact top dossier chrome with act, operation, evidence, truth, suspicion, and compliance status visible.",
+      "Left operation archive rail with selectable operations and reduced filter controls.",
+      "Dominant center investigation board showing selected operation, official story, field conflict, unresolved lead, and evidence archive matrix.",
+      "Selected evidence detail presents long public/restricted/hidden text while sealed entries stay concise elsewhere.",
+      "Right rail exposes truth, suspicion, compliance, findings, next actions, and active contract summary.",
+      "Bottom command strip stays visible for Crater Runs, Review Assignment, Vendors, Refresh Contracts, and Back to Habitat.",
+    ],
+    forbiddenRegression: "Dense contract database wall, generic cards with no investigation hierarchy, hidden or clipped dossier metrics, repeated long evidence text in every row, bottom command clipping, changed campaign/evidence IDs, changed unlock/discovery/save behavior, or broken existing data-action navigation.",
+    validationChecklist: [
+      "09-campaign-contracts.png reads as a campaign dossier before reading labels.",
+      "Official story and hidden truth/field conflict are visually separated.",
+      "Evidence archive rows are compact and selected evidence detail is the only long-form evidence panel.",
+      "Truth, suspicion, and compliance metrics are visible without scrolling at 1600x900.",
+      "Crater Runs, Review Assignment, Vendors, Refresh Contracts, and Back to Habitat actions remain visible and use existing actions.",
+      "No horizontal overflow or bottom command clipping at 1600x900.",
+    ],
   },
   {
     screen: "stashVendors",

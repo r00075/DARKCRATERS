@@ -31,7 +31,6 @@ import { PlayerHealth } from "../combat/PlayerHealth";
 import { PlayerStatus } from "../combat/PlayerStatus";
 import {
   ContractManager,
-  describeContractTarget,
   type ContractDefinition,
   type ContractRewardGrant,
 } from "../contracts/ContractManager";
@@ -106,7 +105,6 @@ import { missionFamilies, missionFamilyById, missionObjectiveFlavors } from "../
 import {
   buildMissionPresentation,
   getMissionFamilyForContract,
-  getMissionObjectiveFlavorForContract,
   type MissionPresentation,
 } from "../raid/MissionPresentation";
 import { buildRaidPressureState, type RaidPressureState } from "../raid/RaidPressure";
@@ -4695,26 +4693,6 @@ export class App {
       .reduce((total, item) => total + item.quantity, 0);
   }
 
-  private formatContractReward(reward: ContractRewardGrant["reward"]): string {
-    const reputation = Object.entries(reward.vendorReputation)
-      .map(([vendorId, amount]) => `${vendorId} +${amount}`)
-      .join(", ");
-    const parts = [
-      `${reward.credits} credits`,
-      `${reward.xp} XP`,
-      reward.scrap > 0 ? `${reward.scrap} scrap` : "",
-      reward.weaponParts > 0 ? `${reward.weaponParts} weapon parts` : "",
-      reputation ? `Rep: ${reputation}` : "",
-      reward.rareCoreChance > 0 ? `${Math.round(reward.rareCoreChance * 100)}% core chance` : "",
-      reward.contractPoints ? `${reward.contractPoints} contract points` : "",
-      reward.reputationTokens ? `${reward.reputationTokens} rep token${reward.reputationTokens === 1 ? "" : "s"}` : "",
-      reward.rareCrateChance ? `${Math.round(reward.rareCrateChance * 100)}% rare crate` : "",
-      reward.recipeUnlock ? `Unlock: ${reward.recipeUnlock}` : "",
-    ].filter(Boolean);
-
-    return `Reward: ${parts.join(" | ")}`;
-  }
-
   private grantContractRewardImmediately(grant: ContractRewardGrant): void {
     const multiplier = this.selectedRaidDefinition.contractRewardMultiplier;
     const credits = Math.max(0, Math.round(grant.reward.credits * multiplier));
@@ -6687,64 +6665,6 @@ export class App {
     return "ORDER";
   }
 
-  private formatContractVendorRep(reputation: Partial<Record<VendorId, number>>): string {
-    const entries = Object.entries(reputation)
-      .filter(([, value]) => (value ?? 0) > 0)
-      .map(([vendorId, value]) => `${vendorDefinitions[vendorId as VendorId].name} +${value}`);
-
-    return entries.length > 0 ? entries.join(", ") : "None";
-  }
-
-  private getContractFactionMeta(contract: { factionId?: string; reward: { vendorReputation: Partial<Record<VendorId, number>> } }): {
-    name: string;
-    accent: string;
-    motto: string;
-  } {
-    if (contract.factionId === "lea") {
-      return {
-        name: themeConfig.factions.lea.name,
-        accent: themeConfig.factions.lea.primary,
-        motto: themeConfig.factions.lea.motto,
-      };
-    }
-    if (contract.factionId === "helios") {
-      return {
-        name: themeConfig.factions.helios.name,
-        accent: themeConfig.factions.helios.primary,
-        motto: themeConfig.factions.helios.motto,
-      };
-    }
-    if (contract.factionId === "craterRats") {
-      return {
-        name: themeConfig.factions.craterRats.name,
-        accent: themeConfig.factions.craterRats.primary,
-        motto: themeConfig.factions.craterRats.motto,
-      };
-    }
-    if (contract.factionId === "quietOrder") {
-      return {
-        name: themeConfig.factions.quietOrder.name,
-        accent: themeConfig.factions.quietOrder.primary,
-        motto: themeConfig.factions.quietOrder.motto,
-      };
-    }
-    if (contract.factionId === "freeOrbit") {
-      return {
-        name: themeConfig.factions.freeOrbit.name,
-        accent: themeConfig.factions.freeOrbit.primary,
-        motto: themeConfig.factions.freeOrbit.motto,
-      };
-    }
-
-    const [vendorId] = Object.keys(contract.reward.vendorReputation) as VendorId[];
-    const vendor = vendorId ? vendorDefinitions[vendorId] : vendorDefinitions.mechanic;
-    return {
-      name: vendor.name,
-      accent: vendor.accentPrimary,
-      motto: vendor.tagline,
-    };
-  }
-
   private isContractAlignedWithCampaign(contract: ContractDefinition): boolean {
     const operation = campaignOperationById[this.campaignProgress.snapshot.currentOperationId];
     return operation.familyIds.includes(getMissionFamilyForContract(contract));
@@ -6895,19 +6815,19 @@ export class App {
       console.info("[Codex] opened");
     }
 
-    const filters: CampaignCodexFilter[] = ["all", "discovered", "sealed", "memory", "resonance", "history", "lumen", "corporate", "signal", "crew", "restricted"];
+    const filters: CampaignCodexFilter[] = ["all", "memory", "resonance", "history", "lumen", "corporate", "signal", "discovered", "sealed"];
     const filteredEntries = campaign.evidence.codexEntries.filter((entry) => this.campaignCodexEntryMatchesFilter(entry, this.campaignCodexFilter));
     const selectedEntry =
       filteredEntries.find((entry) => entry.id === this.selectedCampaignEvidenceId) ??
-      campaign.evidence.codexEntries.find((entry) => entry.id === this.selectedCampaignEvidenceId) ??
-      campaign.evidence.codexEntries.find((entry) => entry.latestDiscovery) ??
-      campaign.evidence.codexEntries.find((entry) => entry.discovered) ??
+      filteredEntries.find((entry) => entry.latestDiscovery) ??
+      filteredEntries.find((entry) => entry.discovered) ??
+      filteredEntries[0] ??
       campaign.evidence.codexEntries[0];
     const filterButtons = filters.map((filter) => {
       const matching = campaign.evidence.codexEntries.filter((entry) => this.campaignCodexEntryMatchesFilter(entry, filter));
       const logged = matching.filter((entry) => entry.discovered).length;
       return `
-        <button type="button" class="${this.campaignCodexFilter === filter ? "active" : ""}" data-action="codex-filter-${filter}">
+        <button type="button" class="dossier-category-chip ${this.campaignCodexFilter === filter ? "active" : ""}" data-action="codex-filter-${filter}">
           <span>${this.formatCodexFilterLabel(filter)}</span>
           <em>${filter === "all" ? `${campaign.evidence.discoveredCount}/${campaign.evidence.totalCount}` : `${logged}/${matching.length}`}</em>
         </button>
@@ -6918,32 +6838,33 @@ export class App {
       ? `Latest Evidence: ${campaign.evidence.latest.title}`
       : "Latest Evidence: none logged";
     const listRows = filteredEntries.map((entry) => `
-      <button type="button" class="codex-entry ${entry.discovered ? "discovered" : "sealed"} ${entry.latestDiscovery ? "latest" : ""} ${selectedEntry?.id === entry.id ? "selected" : ""}" data-action="codex-select-${entry.id}">
+      <button type="button" class="codex-entry dossier-evidence-row ${entry.discovered ? "discovered" : "sealed"} ${entry.latestDiscovery ? "latest" : ""} ${selectedEntry?.id === entry.id ? "selected" : ""}" data-action="codex-select-${entry.id}">
         <span>${entry.latestDiscovery ? "LATEST // " : ""}${entry.discovered ? this.formatCodexEntryChainLabel(entry) : "SEALED"}</span>
         <strong>${entry.title}</strong>
-        <small>${entry.discovered ? entry.officialClassification : "CLASSIFIED BY TYCHOSTAR REVIEW"}</small>
+        <small>${entry.discovered ? entry.officialClassification : entry.discoveryHint}</small>
         <em>${entry.discovered ? entry.severity : "LOCKED"}</em>
       </button>
     `).join("");
     const detail = selectedEntry ? `
-      <section class="intel-card codex-detail-card ${selectedEntry.discovered ? "discovered" : "sealed"}">
-        <span>${selectedEntry.discovered ? "Evidence Detail" : "Sealed Evidence"}</span>
+      <section class="intel-card codex-detail-card dossier-evidence-detail ${selectedEntry.discovered ? "discovered" : "sealed"}">
+        <span>${selectedEntry.discovered ? "Selected Evidence" : "Sealed Evidence"}</span>
         <strong>${selectedEntry.title}</strong>
-        <p>${selectedEntry.discovered ? selectedEntry.publicSummary : "CLASSIFIED BY TYCHOSTAR REVIEW. Field conflict redacted pending corroboration."}</p>
+        <p>${selectedEntry.discovered ? selectedEntry.publicSummary : "Official record sealed. Field conflict and Lumen read require corroborating recovery."}</p>
         <div class="codex-detail-rows">${this.renderCodexDetailRows(selectedEntry)}</div>
       </section>
     ` : "";
 
     return `
-      <section class="intel-card codex-overview-card">
-        <span>Evidence Codex</span>
-        <strong>Investigation archive</strong>
-        <p>${campaign.evidence.discoveredCount} / ${campaign.evidence.totalCount} logged | Truth Signal: ${campaign.meters.find((meter) => meter.id === "truth")?.band ?? "none logged"} | Corporate Review: ${campaign.meters.find((meter) => meter.id === "suspicion")?.band ?? "none"}</p>
-        <small>${latestLine}. Official record and field conflict are tracked separately.</small>
+      <section class="intel-card codex-overview-card dossier-evidence-matrix">
+        <div>
+          <span>Evidence Archive Matrix</span>
+          <strong>${campaign.evidence.discoveredCount} / ${campaign.evidence.totalCount} logged</strong>
+          <p>${latestLine}. Official story and field conflict are tracked separately.</p>
+        </div>
         <div class="campaign-chain-grid">${chainRows}</div>
-        <div class="codex-filter-tabs">${filterButtons}</div>
+        <div class="codex-filter-tabs dossier-category-tabs">${filterButtons}</div>
       </section>
-      <section class="codex-panel">
+      <section class="codex-panel dossier-codex-panel">
         <div class="codex-list" aria-label="Evidence records">
           ${listRows || "<span>No records match this filter.</span>"}
         </div>
@@ -6976,56 +6897,15 @@ export class App {
         .map((entry) => `<small>${entry.title} | ${entry.tier.replace("-", " ")} | claimed</small>`)
         .join("")
       : "<small>No submitted contracts yet.</small>";
-    const contractCards = filteredContracts.map((contract) => {
-      const active = activeContract?.definition.id === contract.id;
-      const faction = this.getContractFactionMeta(contract);
-      const aligned = this.isContractAlignedWithCampaign(contract);
-      const contractFamily = missionFamilyById[getMissionFamilyForContract(contract)].name;
-      const objectiveFlavor = getMissionObjectiveFlavorForContract(contract);
-      const evidenceVariant = isEvidenceContractVariant(contract) ? contract.evidenceVariant : null;
-      return `
-        <section class="intel-card contract-card ${active ? "active" : ""} ${aligned ? "campaign-aligned" : ""} ${evidenceVariant ? "evidence-variant" : ""}" data-contract-type="${contract.type}" style="--faction-accent: ${faction.accent}">
-          <span>${faction.name}</span>
-          <strong>${contract.title}</strong>
-          <p>${contract.description}</p>
-          ${evidenceVariant ? `<small>Evidence Link: ${evidenceVariant.codexHook}</small>` : ""}
-          <small>Zone: ${contract.targetPoi} | Tier: ${contract.recommendedTier ?? "Any"} | Risk: ${contract.risk}</small>
-          <small>Objective: ${objectiveFlavor.objectiveLabel} | Marker: ${objectiveFlavor.markerLabel}</small>
-          <small>Win: ${objectiveFlavor.winCondition} | ${describeContractTarget(contract)} | ${contract.requiresExtraction ? "Extraction required" : "Field complete"}</small>
-          <small>Rep: ${this.formatContractVendorRep(contract.reward.vendorReputation)}</small>
-          <small>${aligned ? `Aligned: ${campaign.activeOperation.title}` : `Family: ${contractFamily}`}</small>
-          <button type="button" data-action="contract-activate-${contract.id}" ${active ? "disabled" : ""}>${active ? "Active" : "Activate Contract"}</button>
-        </section>
-      `;
-    }).join("");
-    const activeContractPanel = activeContract
-      ? `<section class="intel-card primary contract-active-card ${activeContract.status === "ready-to-claim" ? "ready" : ""}" style="--faction-accent: ${this.getContractFactionMeta(activeContract.definition).accent}">
-          <span>${this.getContractFactionMeta(activeContract.definition).name}</span>
-          <strong>${activeContract.definition.title}</strong>
-          <p>${activeContract.status === "failed" ? activeContract.failedReason ?? "Failed" : activeContract.definition.description}</p>
-          <small>Objective ${getMissionObjectiveFlavorForContract(activeContract.definition).objectiveLabel} | ${getMissionObjectiveFlavorForContract(activeContract.definition).winCondition}</small>
-          <small>Zone ${activeContract.definition.targetPoi} | Tier ${activeContract.definition.recommendedTier ?? "Any"} | Risk ${activeContract.definition.risk}</small>
-          <small>${activeContract.status === "ready-to-claim" ? "READY TO SUBMIT" : `Progress ${activeContract.progress}/${activeContract.goal}${activeContract.extractToClaim ? " | Extract to submit" : ""}`}</small>
-          <small>${this.formatContractReward(activeContract.definition.reward)}</small>
-          ${activeContract.status === "ready-to-claim" ? `<button type="button" data-action="contract-submit">Submit / Claim Reward</button>` : ""}
-          <button type="button" data-action="contract-abandon">Abandon Contract</button>
-        </section>`
-      : `<section class="intel-card primary contract-active-card">
-          <span>Active Contract</span>
-          <strong>No contract selected</strong>
-          <p>Pick one mission before launching a Crater Run. One active contract is supported for now.</p>
-          <small>Contracts refresh after Crater Runs or manual refresh.</small>
-        </section>`;
     const operationCards = campaign.operations.map((operation) => {
       const relatedEvidenceCount = campaign.evidence.codexEntries.filter((entry) => entry.discovered && (entry.sourceOperations.includes(operation.title) || entry.relatedOperations.includes(operation.title))).length;
       return `
-        <section class="intel-card campaign-operation-card ${operation.status}" data-operation-id="${operation.id}">
-          <span>${operation.actLabel} // ${operation.statusLabel.toUpperCase()}${operation.recommended ? " // RECOMMENDED" : ""}${operation.replayable ? " // REPLAY" : ""}</span>
+        <section class="intel-card campaign-operation-card dossier-operation-card ${operation.status}" data-operation-id="${operation.id}">
+          <span>${operation.statusLabel.toUpperCase()}${operation.recommended ? " // RECOMMENDED" : ""}${operation.replayable ? " // REPLAY" : ""}</span>
           <strong>${operation.title}</strong>
-          <p>${operation.subtitle}</p>
-          <small>Family: ${operation.families}</small>
-          <small>${operation.hiddenTruthVisible ? `Truth Signal: ${operation.hiddenTruthHint}` : "Truth Signal: restricted pending field evidence."}</small>
-          <small>Related Evidence: ${relatedEvidenceCount} logged</small>
+          <p>${operation.families}</p>
+          <small>${operation.hiddenTruthVisible ? operation.hiddenTruthHint : "Truth Signal restricted pending evidence."}</small>
+          <em>${relatedEvidenceCount} evidence logged</em>
           <button type="button" data-action="campaign-select-${operation.id}" ${operation.selectable ? "" : "disabled"}>${operation.buttonLabel}</button>
         </section>
       `;
@@ -7040,83 +6920,117 @@ export class App {
         <small>${meter.deltaReason}</small>
       </div>
     `).join("");
-    const evidenceRows = campaign.evidence.visibleEvidence.length > 0
-      ? campaign.evidence.visibleEvidence.map((evidence) => `
-          <div class="campaign-evidence-row">
-            <span>${evidence.type}</span>
-            <strong>${evidence.title}</strong>
-            <small>Official: ${evidence.officialClassification}</small>
-            ${campaign.evidence.hiddenImplicationUnlocked ? `<small>Field Conflict: ${evidence.hiddenImplication}</small>` : "<small>Field Conflict: redacted pending corroboration</small>"}
-          </div>
-        `).join("")
-      : "<small>Undiscovered evidence remains sealed by TYCHOSTAR classification.</small>";
     const codexMarkup = this.renderEvidenceCodex(campaign);
     const nextActionItems = this.renderCampaignNextActions(campaign.nextActionLines);
+    const complianceMeter = campaign.meters.find((meter) => meter.id === "compliance");
+    const truthMeter = campaign.meters.find((meter) => meter.id === "truth");
+    const suspicionMeter = campaign.meters.find((meter) => meter.id === "suspicion");
+    const latestEvidence = campaign.evidence.latest;
+    const unresolvedLine = latestEvidence
+      ? latestEvidence.hiddenImplication
+      : "No contradiction logged yet. TYCHOSTAR classification remains uncontested.";
+    const officialLine = latestEvidence
+      ? latestEvidence.officialClassification
+      : campaign.activeOperation.corporateObjective;
+    const fieldConflictLine = latestEvidence && campaign.evidence.hiddenImplicationUnlocked
+      ? latestEvidence.hiddenImplication
+      : campaign.hiddenTruthFraming;
 
     this.menuContent.innerHTML = `
-      <div class="intel-board-screen inspect-screen" data-scroll-view="contracts-campaign" data-scroll-key="contracts-campaign">
-        <header class="inspect-header">
-          <div>
-            <span>Lunar Terminal</span>
-            <h2>Campaign Operations</h2>
-            <p>${campaign.corporateFraming}</p>
+      <div class="intel-board-screen investigation-dossier-screen" data-scroll-view="contracts-campaign" data-scroll-key="contracts-campaign">
+        <header class="dossier-top-chrome">
+          <div class="dossier-brand">
+            <span>DARK CRATERS / Lunar Investigation Archive</span>
+            <h2>Campaign Dossier</h2>
+            <p>${campaign.actSubtitle} // ${campaign.corporateFraming}</p>
           </div>
-          <div class="inspect-currency">
-            <span>Act</span><strong>${campaign.actTitle}</strong>
-            <span>Extracts</span><strong>${activeExtracts}</strong>
-            <span>Contract Points</span><strong>${contractState.contractPoints}</strong>
-            <span>Rep Tokens</span><strong>${contractState.reputationTokens}</strong>
+          <div class="dossier-status-strip">
+            <span>Act <b>${campaign.actTitle}</b></span>
+            <span>Operation <b>${campaign.activeOperation.title}</b></span>
+            <span>Evidence <b>${campaign.evidence.discoveredCount}/${campaign.evidence.totalCount}</b></span>
+            <span>Truth <b>${truthMeter?.band ?? "none"}</b></span>
+            <span>Suspicion <b>${suspicionMeter?.band ?? "none"}</b></span>
+            <span>Compliance <b>${complianceMeter?.band ?? "unproven"}</b></span>
           </div>
+          <nav class="dossier-top-actions">
+            <button type="button" data-action="raid-select">Crater Runs</button>
+            <button type="button" data-action="menu">Back to Habitat</button>
+          </nav>
         </header>
-        <aside class="campaign-left-rail">
-          <nav class="contract-filter-tabs">${filterTabs}</nav>
+        <aside class="campaign-left-rail dossier-operation-rail">
+          <div class="dossier-rail-heading">
+            <span>Operation Archive</span>
+            <strong>${campaign.operations.length} files</strong>
+          </div>
+          <nav class="contract-filter-tabs dossier-mini-filters">${filterTabs}</nav>
           <section class="campaign-operation-grid">${operationCards}</section>
-          ${(this.contractUiFilter === "active" || this.contractUiFilter === "ready" || this.contractUiFilter === "all") ? activeContractPanel : ""}
-          ${this.contractUiFilter === "history" ? "" : contractCards}
         </aside>
-        <main class="campaign-center-dossier">
-          <section class="intel-card primary campaign-active-card">
-            <span>Active Operation</span>
-            <strong>${campaign.activeOperation.title}</strong>
-            <div class="campaign-status-strip">
-              <span>Status <strong>${campaign.activeOperation.statusLabel}</strong></span>
-              <span>Recommended <strong>${campaign.recommendedOperation.title}</strong></span>
-              <span>Family <strong>${campaign.activeOperation.families}</strong></span>
+        <main class="campaign-center-dossier dossier-investigation-board">
+          <section class="intel-card primary campaign-active-card dossier-active-file">
+            <div class="dossier-file-header">
+              <span>Selected Operation File</span>
+              <strong>${campaign.activeOperation.title}</strong>
+              <em>${campaign.activeOperation.statusLabel} // ${campaign.activeOperation.families}</em>
             </div>
-            <p>${campaign.activeOperation.hiddenTruthHint}</p>
-            <small>${activeContract ? this.getCampaignContractAlignmentLine(activeContract.definition) : campaign.activeOperation.readiness}</small>
+            <div class="dossier-story-grid">
+              <article class="official">
+                <span>Official Story</span>
+                <strong>Corporate Classification</strong>
+                <p>${campaign.activeOperation.corporateObjective}</p>
+              </article>
+              <article class="conflict">
+                <span>Field Conflict</span>
+                <strong>Hidden Implication</strong>
+                <p>${campaign.activeOperation.hiddenTruthVisible ? campaign.activeOperation.hiddenTruthHint : campaign.hiddenTruthFraming}</p>
+              </article>
+              <article class="next">
+                <span>Unresolved Lead</span>
+                <strong>${campaign.recommendedOperation.title}</strong>
+                <p>${activeContract ? this.getCampaignContractAlignmentLine(activeContract.definition) : campaign.activeOperation.readiness}</p>
+              </article>
+            </div>
+            <div class="dossier-route-strip">
+              <span>Source Family <b>${campaign.activeOperation.families}</b></span>
+              <span>Evidence Link <b>${campaign.evidence.discoveredCount}/${campaign.evidence.totalCount}</b></span>
+              <span>Extracts <b>${activeExtracts}</b></span>
+              <span>CP / Rep <b>${contractState.contractPoints} / ${contractState.reputationTokens}</b></span>
+            </div>
           </section>
           ${codexMarkup}
         </main>
-        <aside class="campaign-right-rail">
-          <section class="intel-card campaign-meter-card">
-            <span>Progress Signals</span>
+        <aside class="campaign-right-rail dossier-truth-rail">
+          <section class="intel-card campaign-meter-card dossier-meter-board">
+            <span>Investigation Signals</span>
             <strong>Compliance / Truth / Suspicion</strong>
             <div class="campaign-meter-stack">${meterCards}</div>
           </section>
-          <section class="intel-card campaign-evidence-card">
-            <span>Field Evidence</span>
+          <section class="intel-card campaign-evidence-card dossier-field-findings">
+            <span>Field Findings</span>
             <strong>${campaign.evidence.discoveredCount} / ${campaign.evidence.totalCount} logged</strong>
-            <p>${campaign.evidence.latest ? `Latest Evidence: ${campaign.evidence.latest.title}` : "Latest Evidence: none logged"}</p>
-            ${evidenceRows}
+            <div class="dossier-finding official"><span>Official</span><p>${officialLine}</p></div>
+            <div class="dossier-finding conflict"><span>Conflict</span><p>${fieldConflictLine}</p></div>
+            <div class="dossier-finding unresolved"><span>Unresolved</span><p>${unresolvedLine}</p></div>
           </section>
-          <section class="intel-card campaign-next-card">
+          <section class="intel-card campaign-next-card dossier-next-actions">
             <span>Next Actions</span>
             <strong>${campaign.recommendedOperation.title}</strong>
             <ul>${nextActionItems}</ul>
           </section>
-          <section class="intel-card">
+          <section class="intel-card dossier-contract-summary">
             <span>${this.contractUiFilter === "history" ? "Completed History" : "Contract Bank"}</span>
-            <strong>${contractState.contractPoints} CP | ${contractState.reputationTokens} Rep</strong>
-            ${historyRows}
+            <strong>${activeContract ? activeContract.definition.title : "No active contract"}</strong>
+            <p>${activeContract ? `${activeContract.status} // ${activeContract.progress}/${activeContract.goal}` : `${contractState.contractPoints} CP | ${contractState.reputationTokens} Rep tokens`}</p>
+            <small>${this.contractUiFilter === "history" ? "History rows available through contract filter." : `${filteredContracts.length} contracts available. ${historyRows.replace(/<[^>]+>/g, " ")}`}</small>
             <button type="button" data-action="contract-refresh">Refresh Contracts</button>
           </section>
         </aside>
-      </div>
-      <div class="main-menu-actions">
-        <button type="button" data-action="start">Crater Runs</button>
-        <button type="button" data-action="vendors">Faction Vendors</button>
-        <button type="button" data-action="menu">Back to Habitat</button>
+        <nav class="dossier-command-strip" aria-label="Campaign dossier commands">
+          <button type="button" data-action="raid-select">Crater Runs</button>
+          <button type="button" data-action="start">Review Assignment</button>
+          <button type="button" data-action="vendors">Faction Vendors</button>
+          <button type="button" data-action="contract-refresh">Refresh Contracts</button>
+          <button type="button" data-action="menu">Back to Habitat</button>
+        </nav>
       </div>
     `;
     this.bindMenuButtons();

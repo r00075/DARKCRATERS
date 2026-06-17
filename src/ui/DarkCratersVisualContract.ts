@@ -155,8 +155,11 @@ export const darkCratersVisualContract: DarkCratersVisualContract = {
       "No horizontal scrollbar or nested double-scroll at 1600x900; command actions remain visible.",
     ],
     campaignCodex: [
-      "Reference: projected map and Lumen dossier.",
-      "Dossier zones with compact list entries and long text only in selected details.",
+      "Reference: public/design-reference/ui/reference-game-sequence.png, public/design-reference/ui/reference-map.jpg, and public/design-reference/ui/reference-Lumen.jpg.",
+      "Must read as a sealed lunar investigation dossier, not a dense contract database or generic card wall.",
+      "Required zones: compact top dossier chrome, left operation archive rail, selected operation dossier with official story versus hidden truth, evidence archive matrix, selected evidence detail, truth/suspicion/compliance rail, and bottom command strip.",
+      "Preserve campaign IDs, evidence IDs, act/operation unlock logic, save keys, discovery state, and all existing data-action paths.",
+      "No overlapping rows, hidden metrics, bottom command clipping, or repeated long evidence text outside the selected detail.",
     ],
     stashVendors: [
       "Reference: shared HQ tool chrome.",
