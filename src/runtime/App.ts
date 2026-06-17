@@ -102,7 +102,7 @@ import {
 } from "../raid/RaidResultSummary";
 import { buildRaidResultPresentation, type RaidResultPresentation } from "../raid/RaidResultPresentation";
 import { RaidTimer, type RaidTimerState } from "../raid/RaidTimer";
-import { missionFamilyById } from "../raid/MissionDefinitions";
+import { missionFamilies, missionFamilyById, missionObjectiveFlavors } from "../raid/MissionDefinitions";
 import {
   buildMissionPresentation,
   getMissionFamilyForContract,
@@ -5556,53 +5556,129 @@ export class App {
     const gearScore = this.getGearScore();
     const activeContract = this.contractManager.snapshot.active?.definition;
     const mission = this.getMissionPresentation();
-    const cards = raidDefinitions.map((raid) => {
+    const campaign = this.campaignPresentation;
+    const activeContractLabel = activeContract ? activeContract.title : "None";
+    const shipReadiness = this.shipState.integrity >= 80 ? "Nominal" : this.shipState.integrity >= 55 ? "Serviceable" : "Compromised";
+    const selectedWeak = gearScore < this.selectedRaidDefinition.recommendedGearScore;
+    const selectedHazards = this.selectedRaidDefinition.environmentalHazards.slice(0, 3).join(" / ");
+    const displayedFamilies = missionFamilies.filter((family) => [
+      "evidence-lore-recovery",
+      "salvage-recovery",
+      "heavy-cargo-retrieval",
+      "signal-restore",
+      "lumen-survey",
+      "defense-holdout",
+    ].includes(family.id));
+    const familyStrip = displayedFamilies.map((family) => {
+      const sampleFlavor = missionObjectiveFlavors.find((flavor) => flavor.familyId === family.id);
+      const active = family.id === mission.familyId;
+      return `
+        <article class="operation-family-chip ${active ? "active" : ""}">
+          <span>${family.name}</span>
+          <strong>${sampleFlavor?.objectiveLabel ?? family.primaryStyle}</strong>
+          <small>${family.primaryStyle}</small>
+        </article>
+      `;
+    }).join("");
+    const tierRail = raidDefinitions.map((raid) => {
       const weak = gearScore < raid.recommendedGearScore;
       const active = raid.id === this.selectedRaidDefinition.id;
+      const previewFlavor = missionObjectiveFlavors[(raid.tier + 2) % missionObjectiveFlavors.length];
       return `
-        <article class="raid-select-card ${active ? "active" : ""} ${weak ? "weak" : ""}" style="--raid-accent: ${raid.accentColor}">
-          <span>Tier ${raid.tier} | ${raid.difficultyLabel}</span>
+        <button
+          type="button"
+          class="operation-tier-button ${active ? "active" : ""} ${weak ? "weak" : ""}"
+          style="--raid-accent: ${raid.accentColor}"
+          data-action="select-raid-${raid.id}"
+        >
+          <span>Tier ${raid.tier} / ${raid.difficultyLabel}</span>
           <strong>${raid.name}</strong>
-          <p>${raid.description}</p>
-          <div class="raid-card-metrics">
-            <small>Time</small><b>${Math.round(raid.lengthSeconds / 60)}m</b>
-            <small>Loot</small><b>${raid.lootQuality} (${raid.lootMultiplier.toFixed(2)}x)</b>
-            <small>Threat</small><b>${raid.enemyDensityLabel}</b>
-            <small>Extract</small><b>${raid.extractionRisk}</b>
+          <div class="operation-tier-metrics">
+            <span><small>Time</small><b>${Math.round(raid.lengthSeconds / 60)}m</b></span>
+            <span><small>Loot</small><b>${raid.lootQuality}</b></span>
+            <span><small>Threat</small><b>${raid.enemyDensityLabel}</b></span>
+            <span><small>Route</small><b>${raid.craterZone}</b></span>
           </div>
-          <small>Zone: ${raid.craterZone}</small>
-          <small>${activeContract ? `Active contract: ${activeContract.title}` : `Primary order: ${mission.title}`}</small>
-          ${weak ? `<small class="raid-warning">Weak loadout: gear score ${gearScore}, recommended ${raid.recommendedGearScore}</small>` : ""}
-          <button type="button" data-action="launch-raid-${raid.id}">Review Assignment</button>
-        </article>
+          <em>${previewFlavor.familyLabel}</em>
+        </button>
       `;
     }).join("");
 
     this.menuContent.innerHTML = `
-      <div class="raid-select-screen inspect-screen">
-        <header class="inspect-header">
-          <div>
-            <span>Crater Run Terminal</span>
-            <h2>Crater Runs</h2>
-            <p>Pick oxygen pressure, Lumen activity, lunar hazards, loot quality, and extraction risk before deployment.</p>
+      <div class="raid-select-screen operation-terminal-screen" aria-label="Crater Run Operation Terminal">
+        <header class="operation-terminal-header">
+          <div class="operation-terminal-brand">
+            <span>DARK CRATERS / Crater Run Terminal</span>
+            <h2>Operation Selection</h2>
+            <p>${campaign.activeOperation.title} // ${campaign.actTitle}</p>
           </div>
-          <div class="inspect-currency">
-            <span>Gear Score</span><strong>${gearScore}</strong>
-            <span>Selected</span><strong>T${this.selectedRaidDefinition.tier}</strong>
-            <span>Contract</span><strong>${activeContract ? "Active" : "None"}</strong>
-            <span>Family</span><strong>${mission.familyName}</strong>
+          <div class="operation-status-strip" aria-label="Deployment readiness">
+            <span>Selected <b>T${this.selectedRaidDefinition.tier}</b></span>
+            <span>Gear <b>${gearScore}/${this.selectedRaidDefinition.recommendedGearScore}</b></span>
+            <span>Family <b>${mission.familyName}</b></span>
+            <span>Ship <b>${shipReadiness}</b></span>
+            <span>Contract <b>${activeContractLabel}</b></span>
           </div>
-          <div class="inspect-primary-actions">
+          <div class="operation-primary-actions">
             <button type="button" class="class-primary-action" data-action="launch-raid-${this.selectedRaidDefinition.id}">Review Assignment</button>
             <button type="button" data-action="menu">Back to Habitat</button>
           </div>
         </header>
-        <section class="raid-select-grid">${cards}</section>
-      </div>
-      <div class="main-menu-actions">
-        <button type="button" data-action="loadout">Loadout</button>
-        <button type="button" data-action="intel">Faction Contracts</button>
-        <button type="button" data-action="menu">Back to Habitat</button>
+        <aside class="operation-tier-rail" aria-label="Deployment tiers">
+          <span>Route Ladder</span>
+          ${tierRail}
+        </aside>
+        <section class="operation-map-panel" aria-label="Projected lunar deployment map">
+          <div class="operation-map-chrome">
+            <span>Projected Map</span>
+            <strong>${this.selectedRaidDefinition.craterZone}</strong>
+            <b>${this.selectedRaidDefinition.name} / Tier ${this.selectedRaidDefinition.tier}</b>
+          </div>
+          <div class="operation-map-grid" style="--raid-accent: ${this.selectedRaidDefinition.accentColor}">
+            <i class="map-crater-ring ring-a"></i>
+            <i class="map-crater-ring ring-b"></i>
+            <i class="map-crater-ring ring-c"></i>
+            <i class="map-hazard-zone hazard-a"></i>
+            <i class="map-hazard-zone hazard-b"></i>
+            <i class="map-lumen-trace"></i>
+            <i class="map-route-line"></i>
+            <span class="map-marker insertion"><b>HAB</b><small>Insertion</small></span>
+            <span class="map-marker objective"><b>${mission.objectiveMarker}</b><small>${mission.objectiveFlavor}</small></span>
+            <span class="map-marker extraction"><b>K-9</b><small>Extraction</small></span>
+            <span class="map-marker signal"><b>Lumen</b><small>${this.selectedRaidDefinition.enemyDensityLabel}</small></span>
+            <div class="map-confidence">
+              <span>Route Confidence</span>
+              <strong>${selectedWeak ? "Review Gear" : "Signal Reading"}</strong>
+              <small>${mission.routeTargetLabel ?? "Track objective from tactical map"}</small>
+            </div>
+          </div>
+        </section>
+        <aside class="operation-briefing-panel" aria-label="Selected operation briefing">
+          <span>Selected Operation</span>
+          <h3>${this.selectedRaidDefinition.name}</h3>
+          <p>${this.selectedRaidDefinition.description}</p>
+          <div class="operation-briefing-rows">
+            <div><span>Family</span><b>${mission.familyName}</b></div>
+            <div><span>Objective</span><b>${mission.objectiveFlavor}</b></div>
+            <div><span>Win</span><b>${mission.winCondition}</b></div>
+            <div><span>Risk</span><b>${mission.risk}</b></div>
+            <div><span>Route</span><b>${mission.routeTargetLabel ?? this.selectedRaidDefinition.craterZone}</b></div>
+            <div><span>Gear</span><b>${gearScore} / ${this.selectedRaidDefinition.recommendedGearScore} ${selectedWeak ? "Review" : "Ready"}</b></div>
+            <div><span>Reward</span><b>${this.selectedRaidDefinition.lootQuality} (${this.selectedRaidDefinition.lootMultiplier.toFixed(2)}x)</b></div>
+            <div><span>Hazards</span><b>${selectedHazards}</b></div>
+          </div>
+          <button type="button" class="class-primary-action" data-action="launch-raid-${this.selectedRaidDefinition.id}">Review Assignment</button>
+        </aside>
+        <section class="operation-family-strip" aria-label="Objective family visibility">
+          ${familyStrip}
+        </section>
+        <nav class="operation-command-strip" aria-label="Operation terminal commands">
+          <button type="button" class="class-primary-action" data-action="launch-raid-${this.selectedRaidDefinition.id}">Review Assignment</button>
+          <button type="button" data-action="hq-loadout">Loadout</button>
+          <button type="button" data-action="ship-systems">Ship Systems</button>
+          <button type="button" data-action="intel">Campaign / Contracts</button>
+          <button type="button" data-action="menu">Habitat Hub</button>
+        </nav>
       </div>
     `;
     this.bindMenuButtons();
@@ -9624,6 +9700,10 @@ export class App {
       const raidId = action.replace("launch-raid-", "") as RaidTierId;
       this.selectedRaidDefinition = raidDefinitionById[raidId] ?? defaultRaidDefinition;
       this.showPreDeploymentClassMenu("solo");
+    } else if (action?.startsWith("select-raid-")) {
+      const raidId = action.replace("select-raid-", "") as RaidTierId;
+      this.selectedRaidDefinition = raidDefinitionById[raidId] ?? this.selectedRaidDefinition;
+      this.showRaidSelectMenu();
     } else if (action === "class-deploy-solo") {
       this.startRaid(false);
     } else if (action === "class-deploy-multiplayer") {

@@ -13,6 +13,31 @@ export type DarkCratersScreenAuditEntry = Readonly<{
 
 export const darkCratersScreenAudit: readonly DarkCratersScreenAuditEntry[] = [
   {
+    screen: "craterRuns",
+    label: "Crater Runs / Operation Selection",
+    priority: 1,
+    expectedArchetype: "operation-terminal",
+    reference: "public/design-reference/ui/reference-game-sequence.png panel 4 and public/design-reference/ui/reference-map.jpg",
+    intendedComposition: [
+      "DARK CRATERS deployment terminal with top readiness chrome, compact Tier 1-5 route rail, central projected tactical map, right selected operation briefing, objective family strip, and stable command strip.",
+      "Tier rail stays compact and shows risk level, time, loot band, threat, selected route, and selected state without paragraph-heavy mission cards.",
+      "Projected map is the visual heart: insertion marker, objective marker, extraction marker, route line, hazard zones, Lumen trace, selected crater zone, and route confidence.",
+      "Selected briefing presents operation name, mission family, objective flavor, win condition, risk, route, gear readiness, recommended gear, reward band, and hazards as concise rows.",
+      "Objective family strip exposes Evidence/Lore, Salvage/Materials, Heavy Cargo, Signal/Relay, Containment/Specimen, and Security/Threat variety from existing mission flavor language.",
+      "Review Assignment opens Deployment Assignment and Begin Descent remains only on Deployment Assignment.",
+    ],
+    forbiddenRegression: "Generic difficulty card shop, five paragraph-heavy cards, no visible tactical route map, no visible objective variety, hidden Review Assignment, or full-page scroll required to choose a run.",
+    validationChecklist: [
+      "08-crater-runs.png reads as a projected lunar deployment terminal before reading labels.",
+      "Tier selection updates selected operation and selected state while Review Assignment remains a separate bridge.",
+      "Central map is the dominant visual area and includes route, objective, extraction, hazard, and Lumen signal markers.",
+      "Selected operation briefing is readable without repeated tier-card paragraphs.",
+      "Mission family and objective flavor are visible and distinct from selected tier.",
+      "Review Assignment, Loadout, Ship Systems, Campaign/Contracts, and Habitat Hub actions remain visible at 1600x900.",
+      "No horizontal overflow, bottom command clipping, or five-card scroll wall.",
+    ],
+  },
+  {
     screen: "habitatHub",
     label: "Habitat Hub",
     priority: 1,

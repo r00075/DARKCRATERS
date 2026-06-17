@@ -1,5 +1,6 @@
 export type DarkCratersScreenTarget =
   | "habitatHub"
+  | "craterRuns"
   | "deploymentAssignment"
   | "loadout"
   | "arsenal"
@@ -12,6 +13,7 @@ export type DarkCratersScreenTarget =
 
 export type DarkCratersLayoutArchetype =
   | "hub-stage"
+  | "operation-terminal"
   | "assignment-review"
   | "four-card-selection"
   | "catalog-grid"
@@ -64,6 +66,7 @@ export const darkCratersVisualContract: DarkCratersVisualContract = {
   ],
   layoutArchetypes: {
     "hub-stage": "Atmospheric habitat bay with command rail, dominant runner/stage, and field-order rail.",
+    "operation-terminal": "Deployment terminal with compact tier rail, projected tactical route map, selected operation briefing, objective family strip, and command strip.",
     "assignment-review": "Mission confirmation with mission summary, runner readiness, loadout readiness, and one final descent action.",
     "four-card-selection": "Four large class cards with bottom overview, stat bars, loadout hints, confirm/back actions.",
     "catalog-grid": "Left category/manufacturer rail, central compact weapon index cards, selected hero inspection panel, technical bench section, and compact command strip.",
@@ -90,6 +93,17 @@ export const darkCratersVisualContract: DarkCratersVisualContract = {
     "Avoid horizontal clipping and hidden right-side action rails.",
   ],
   screenTargets: {
+    craterRuns: [
+      "Reference: public/design-reference/ui/reference-game-sequence.png panel 4 plus public/design-reference/ui/reference-map.jpg.",
+      "Must read as a lunar deployment terminal and route planning screen, not a generic difficulty card shop.",
+      "Required zones: compact top deployment chrome, left tier/route rail, central projected tactical map, right selected operation briefing, objective family strip, and bottom command strip.",
+      "Tier rail shows Tier 1-5 with risk, time, loot band, threat, route, selected state, and no paragraph-heavy cards.",
+      "Projected map shows insertion, objective, extraction, hazard zones, Lumen trace, route line, selected zone, tier label, and route confidence/signal clarity.",
+      "Selected briefing shows operation, family, objective flavor, win condition, risk, route, gear readiness, recommended gear, reward band, and hazards without repeated card copy.",
+      "Objective family strip exposes Evidence, Salvage, Heavy Cargo, Signal, Containment, and Security variety using existing mission flavor language.",
+      "Review Assignment remains the bridge to Deployment Assignment; Begin Descent remains reserved for Deployment Assignment.",
+      "No whole-page scroll wall, hidden primary action, or five tall difficulty cards at 1600x900.",
+    ],
     habitatHub: [
       "Reference: public/design-reference/ui/reference-game-sequence.png panel 2 / Habitat Hub.",
       "Must be a unified orbital habitat command deck, not a floating character preview with detached debug cards.",
