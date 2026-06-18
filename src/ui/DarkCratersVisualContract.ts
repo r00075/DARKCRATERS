@@ -1,4 +1,5 @@
 export type DarkCratersScreenTarget =
+  | "initialPlayGate"
   | "habitatHub"
   | "craterRuns"
   | "deploymentAssignment"
@@ -12,6 +13,7 @@ export type DarkCratersScreenTarget =
   | "raidResult";
 
 export type DarkCratersLayoutArchetype =
+  | "play-gate"
   | "hub-stage"
   | "operation-terminal"
   | "assignment-review"
@@ -65,6 +67,7 @@ export const darkCratersVisualContract: DarkCratersVisualContract = {
     "Main screen paragraphs are clamped to two short lines; long lore belongs in detail panels.",
   ],
   layoutArchetypes: {
+    "play-gate": "Cinematic lunar exterior title gate with Play primary, sparse secondary/status copy, and audio/init behavior preserved.",
     "hub-stage": "Atmospheric habitat bay with command rail, dominant runner/stage, and field-order rail.",
     "operation-terminal": "Deployment terminal with compact tier rail, projected tactical route map, selected operation briefing, objective family strip, and command strip.",
     "assignment-review": "Mission confirmation with mission summary, runner readiness, loadout readiness, and one final descent action.",
@@ -93,6 +96,15 @@ export const darkCratersVisualContract: DarkCratersVisualContract = {
     "Avoid horizontal clipping and hidden right-side action rails.",
   ],
   screenTargets: {
+    initialPlayGate: [
+      "Reference: public/design-reference/ui/reference-game-sequence.png panel 1 / PLAY / AUDIO GATE.",
+      "Required asset: /ui/backgrounds/start-screen-background.png.",
+      "Must read as the DARK CRATERS front door: cinematic lunar exterior, title/menu on the left negative space, obvious Play primary, sparse warning/status atmosphere.",
+      "Not accepted merely because the background is present; the title/menu panel must feel finished, balanced, and deliberately framed.",
+      "00-start-screen.png is the acceptance artifact and Play must remain the dominant action.",
+      "Preserve the existing Play/audio initialization behavior; this screen is an audio gate, not a direct raid or Habitat route.",
+      "Forbidden regressions: generic dark blank menu, missing background asset, hidden or weak Play button, unreadable title, menu covering the strongest right-side image focal point, or skipping audio gate behavior.",
+    ],
     craterRuns: [
       "Reference: public/design-reference/ui/reference-game-sequence.png panel 4 plus public/design-reference/ui/reference-map.jpg.",
       "Must read as a lunar deployment terminal and route planning screen, not a generic difficulty card shop.",
@@ -106,8 +118,15 @@ export const darkCratersVisualContract: DarkCratersVisualContract = {
     ],
     habitatHub: [
       "Reference: public/design-reference/ui/reference-game-sequence.png panel 2 / Habitat Hub.",
-      "Must be a unified orbital habitat command deck, not a floating character preview with detached debug cards.",
+      "Must be a unified orbital habitat command deck, not a floating character preview with detached debug cards or a flat grid showroom.",
+      "First-impression priority: it must be proportionally aligned with rebuilt HQ screens, not accepted only because it has no clipping.",
+      "Must fit practical browser viewports, not only the 1600x900 capture canvas; right field-order rail, resource/status strip, and bottom nav stay inside the shell.",
+      "Optional asset: /ui/backgrounds/habitat-hub-background.png may be used only as a darkened background plate behind the center bay.",
       "Required zones: compact top command chrome, left operator rail, dominant environmental bay with runner placed inside it, one center mission console, right field-order rail, and stable bottom nav.",
+      "Center bay needs visible industrial depth: ceiling rig, side service racks, rear wall/window plane, floor perspective, runner plinth, and console lighting tied to the scene.",
+      "Left operator rail and right field-order rail should read as docked command terminals attached to the habitat bay, not generic floating cards.",
+      "If image-backed, the background must not hide the runner, mission console, field order, or bottom navigation.",
+      "Forbidden regressions: dead black margin imbalance, buried background plate, mission console floating, right field-order terminal clipped in live browser, resource/status strip forcing horizontal overflow, bottom nav off-shell, or visually weak Review Assignment.",
       "Mission console has Review Assignment primary and Change Operation secondary; Begin Descent appears only on deployment assignment.",
       "Field-order rail shows title plus concise Family, Objective, Risk, Route, Gear, Contract, and Signal rows without overlap.",
     ],

@@ -90,6 +90,33 @@ async function bootHome(page) {
   await page.locator(".habitat-hub-screen, .hq-command-deck").first().waitFor({ state: "visible", timeout: 15000 });
 }
 
+async function captureStartScreen(page) {
+  const outputPath = path.join(outDir, "00-start-screen.png");
+  const entry = {
+    name: "00-start-screen.png",
+    label: "Initial Play Gate",
+    path: outputPath,
+    status: "pending",
+    actionUsed: null,
+    error: null,
+  };
+
+  try {
+    await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
+    await page.locator(".audio-start-gate").first().waitFor({ state: "visible", timeout: 12000 });
+    await settle(page);
+    await page.screenshot({ path: outputPath, fullPage: false });
+    entry.status = "captured";
+    console.log(`Captured ${entry.label}: ${outputPath}`);
+  } catch (error) {
+    entry.status = "failed";
+    entry.error = formatError(error);
+    console.error(`Failed ${entry.label}: ${entry.error}`);
+  }
+
+  report.screens.push(entry);
+}
+
 async function ensureHome(page) {
   if (await page.locator(".habitat-hub-screen, .hq-command-deck").first().isVisible().catch(() => false)) {
     return;
@@ -156,6 +183,34 @@ async function captureScreen(page, screen) {
   report.screens.push(entry);
 }
 
+async function captureHabitatSmallViewport(page) {
+  const outputPath = path.join(outDir, "01b-habitat-hub-1366.png");
+  const entry = {
+    name: "01b-habitat-hub-1366.png",
+    label: "Habitat Hub 1366 Viewport",
+    path: outputPath,
+    status: "pending",
+    actionUsed: null,
+    error: null,
+  };
+
+  try {
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await ensureHome(page);
+    await page.locator(".habitat-hub-screen, .hq-command-deck").first().waitFor({ state: "visible", timeout: 12000 });
+    await settle(page);
+    await page.screenshot({ path: outputPath, fullPage: false });
+    entry.status = "captured";
+    console.log(`Captured ${entry.label}: ${outputPath}`);
+  } catch (error) {
+    entry.status = "failed";
+    entry.error = formatError(error);
+    console.error(`Failed ${entry.label}: ${entry.error}`);
+  }
+
+  report.screens.push(entry);
+}
+
 async function settle(page) {
   await page.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => {});
   await page.waitForTimeout(1200);
@@ -192,11 +247,14 @@ try {
   });
   const page = await context.newPage();
   page.setDefaultTimeout(15000);
+  await captureStartScreen(page);
   await bootHome(page);
 
   for (const screen of screens) {
     await captureScreen(page, screen);
   }
+
+  await captureHabitatSmallViewport(page);
 
   await context.close();
 } catch (error) {

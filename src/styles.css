@@ -11238,6 +11238,7 @@ button:disabled {
   height: min(850px, calc(100vh - 72px));
   max-height: calc(100vh - 72px);
   margin: 0 auto;
+  box-sizing: border-box;
   display: grid;
   grid-template:
     "top" 58px
@@ -11878,6 +11879,8 @@ button:disabled {
     "top" 60px
     "cards" minmax(0, 1fr)
     "footer" 136px / minmax(0, 1fr);
+  height: min(776px, calc(100vh - 86px));
+  max-height: calc(100vh - 86px);
 }
 
 .class-selection-topbar {
@@ -16518,6 +16521,7 @@ button:disabled {
   width: min(1580px, calc(100vw - 18px));
   height: min(886px, calc(100vh - 14px));
   min-height: 0;
+  box-sizing: border-box;
   border: 1px solid rgba(103, 232, 249, 0.26);
   border-radius: 6px;
   padding: 12px;
@@ -18828,5 +18832,986 @@ button:disabled {
 
   .cosmetic-browser-panel .cosmetic-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Phase 13.8O Habitat Hub first-impression polish: make the opening screen read as an orbital command bay. */
+.habitat-hub-screen {
+  --habitat-panel: rgba(3, 8, 15, 0.76);
+  background:
+    radial-gradient(ellipse at 51% 58%, rgba(216, 149, 63, 0.16), transparent 37%),
+    radial-gradient(ellipse at 50% 8%, rgba(103, 232, 249, 0.12), transparent 32%),
+    linear-gradient(180deg, #03060b 0%, #07101a 50%, #020408 100%);
+}
+
+.habitat-hub-chrome {
+  border-bottom-color: rgba(103, 232, 249, 0.22);
+  background:
+    linear-gradient(90deg, rgba(2, 6, 12, 0.98), rgba(8, 15, 24, 0.86) 48%, rgba(2, 6, 12, 0.98)),
+    repeating-linear-gradient(90deg, transparent 0 92px, rgba(103, 232, 249, 0.035) 92px 93px);
+}
+
+.habitat-hub-left-rail,
+.habitat-hub-field-order {
+  position: relative;
+  border-color: rgba(103, 232, 249, 0.22);
+  background:
+    linear-gradient(180deg, rgba(7, 15, 25, 0.9), rgba(2, 6, 12, 0.78)),
+    radial-gradient(ellipse at 50% 0, rgba(103, 232, 249, 0.1), transparent 48%);
+  box-shadow:
+    inset 0 0 0 1px rgba(230, 237, 243, 0.025),
+    inset 0 0 36px rgba(65, 217, 255, 0.045),
+    0 18px 42px rgba(0, 0, 0, 0.28);
+}
+
+.habitat-hub-left-rail::before,
+.habitat-hub-field-order::before {
+  content: "";
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(103, 232, 249, 0.72), rgba(216, 149, 63, 0.28), rgba(103, 232, 249, 0.22));
+  box-shadow: 0 0 18px rgba(103, 232, 249, 0.18);
+}
+
+.habitat-hub-left-rail::before {
+  right: -2px;
+}
+
+.habitat-hub-field-order::before {
+  left: -2px;
+}
+
+.habitat-hub-operator-card,
+.habitat-hub-operator-grid,
+.habitat-hub-signal-card,
+.habitat-hub-order-rows div {
+  border-color: rgba(103, 232, 249, 0.17);
+  background:
+    linear-gradient(90deg, rgba(103, 232, 249, 0.035), transparent 38%),
+    rgba(2, 6, 12, 0.5);
+}
+
+.habitat-hub-environment {
+  border-color: rgba(103, 232, 249, 0.2);
+  background:
+    linear-gradient(90deg, rgba(0, 0, 0, 0.72), transparent 17%, transparent 83%, rgba(0, 0, 0, 0.72)),
+    #03070d;
+  box-shadow:
+    inset 0 0 0 1px rgba(230, 237, 243, 0.025),
+    inset 0 -70px 110px rgba(0, 0, 0, 0.58);
+}
+
+.habitat-hub-backdrop {
+  background:
+    radial-gradient(ellipse at 50% 26%, rgba(190, 226, 255, 0.16), transparent 22%),
+    radial-gradient(ellipse at 50% 63%, rgba(255, 176, 46, 0.22), transparent 34%),
+    linear-gradient(180deg, rgba(12, 20, 30, 0.98), rgba(3, 7, 12, 0.62) 46%, rgba(1, 3, 6, 0.98));
+}
+
+.habitat-hub-backdrop::before {
+  background:
+    linear-gradient(100deg, rgba(0, 0, 0, 0.88) 0 11%, rgba(13, 22, 34, 0.7) 11% 18%, transparent 18% 82%, rgba(13, 22, 34, 0.7) 82% 89%, rgba(0, 0, 0, 0.88) 89% 100%),
+    repeating-linear-gradient(90deg, transparent 0 54px, rgba(148, 163, 184, 0.055) 54px 55px),
+    linear-gradient(90deg, rgba(255, 176, 46, 0.06), transparent 22%, transparent 78%, rgba(255, 176, 46, 0.05));
+}
+
+.habitat-hub-bay-ceiling,
+.habitat-hub-service-rack,
+.habitat-hub-window-bank,
+.habitat-hub-runner-plinth {
+  position: absolute;
+  pointer-events: none;
+}
+
+.habitat-hub-bay-ceiling {
+  top: -3%;
+  left: 9%;
+  right: 9%;
+  height: 27%;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-top: 0;
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.035) 0 2px, transparent 2px 74px),
+    linear-gradient(180deg, rgba(18, 27, 38, 0.86), rgba(4, 9, 16, 0.22));
+  clip-path: polygon(9% 0, 91% 0, 100% 100%, 0 100%);
+  box-shadow: inset 0 -18px 36px rgba(0, 0, 0, 0.34);
+}
+
+.habitat-hub-service-rack {
+  top: 17%;
+  bottom: 16%;
+  width: 15%;
+  border: 1px solid rgba(103, 232, 249, 0.13);
+  background:
+    repeating-linear-gradient(0deg, rgba(103, 232, 249, 0.08) 0 2px, transparent 2px 36px),
+    linear-gradient(180deg, rgba(12, 20, 30, 0.72), rgba(2, 6, 12, 0.84));
+  opacity: 0.74;
+}
+
+.habitat-hub-service-rack.rack-left {
+  left: 4%;
+  transform: perspective(620px) rotateY(22deg);
+  transform-origin: left center;
+}
+
+.habitat-hub-service-rack.rack-right {
+  right: 4%;
+  transform: perspective(620px) rotateY(-22deg);
+  transform-origin: right center;
+}
+
+.habitat-hub-window-bank {
+  top: 22%;
+  left: 24%;
+  right: 24%;
+  height: 20%;
+  border: 1px solid rgba(103, 232, 249, 0.15);
+  background:
+    radial-gradient(ellipse at 50% 50%, rgba(103, 232, 249, 0.11), transparent 54%),
+    linear-gradient(90deg, rgba(2, 6, 12, 0.76), rgba(16, 25, 34, 0.48), rgba(2, 6, 12, 0.76));
+  box-shadow: inset 0 0 28px rgba(103, 232, 249, 0.06);
+}
+
+.habitat-hub-depth-layer.layer-a {
+  top: 12%;
+  left: 13%;
+  right: 13%;
+  bottom: 44%;
+  border-color: rgba(148, 163, 184, 0.16);
+  background: linear-gradient(90deg, rgba(2, 6, 12, 0.2), rgba(20, 28, 38, 0.24), rgba(2, 6, 12, 0.2));
+}
+
+.habitat-hub-depth-layer.layer-b {
+  top: 31%;
+  left: 18%;
+  right: 18%;
+  bottom: 43%;
+  border-color: rgba(255, 176, 46, 0.2);
+  background:
+    linear-gradient(90deg, transparent, rgba(255, 176, 46, 0.12), transparent),
+    rgba(2, 6, 12, 0.36);
+}
+
+.habitat-hub-depth-layer.layer-c {
+  top: 39%;
+  left: 30%;
+  right: 30%;
+  bottom: 39%;
+  opacity: 0.76;
+}
+
+.habitat-hub-light-cone {
+  top: 2%;
+  left: 34%;
+  right: 34%;
+  bottom: 24%;
+  background: linear-gradient(180deg, rgba(255, 245, 215, 0.2), rgba(255, 176, 46, 0.055) 52%, transparent);
+}
+
+.habitat-hub-floor {
+  top: 52%;
+  bottom: -10%;
+  background:
+    linear-gradient(rgba(103, 232, 249, 0.11) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(103, 232, 249, 0.1) 1px, transparent 1px),
+    radial-gradient(ellipse at 50% 42%, rgba(255, 176, 46, 0.16), transparent 42%),
+    linear-gradient(180deg, rgba(255, 176, 46, 0.08), rgba(2, 6, 12, 0.92));
+  background-size: 100% 34px, 50px 100%, auto, auto;
+  transform: perspective(520px) rotateX(64deg) scaleX(1.6);
+  opacity: 0.82;
+}
+
+.habitat-hub-runner-plinth {
+  left: 34%;
+  right: 34%;
+  bottom: 27%;
+  height: 9%;
+  border: 1px solid rgba(255, 176, 46, 0.22);
+  border-radius: 50%;
+  background:
+    radial-gradient(ellipse at 50% 50%, rgba(255, 176, 46, 0.2), transparent 58%),
+    rgba(2, 6, 12, 0.36);
+  transform: perspective(420px) rotateX(62deg);
+  box-shadow: 0 0 28px rgba(255, 176, 46, 0.09);
+}
+
+.habitat-hub-console-glow {
+  left: 18%;
+  right: 18%;
+  bottom: 0;
+  top: 62%;
+  opacity: 0.9;
+}
+
+.habitat-hub-runner {
+  bottom: 142px;
+  height: min(500px, calc(100% - 164px));
+  filter: drop-shadow(0 24px 36px rgba(0, 0, 0, 0.48));
+}
+
+.habitat-hub-console {
+  bottom: 18px;
+  border-color: rgba(255, 176, 46, 0.28);
+  background:
+    linear-gradient(180deg, rgba(18, 26, 36, 0.9), rgba(3, 8, 14, 0.88)),
+    linear-gradient(90deg, rgba(255, 176, 46, 0.1), transparent 38%, rgba(103, 232, 249, 0.06));
+  box-shadow:
+    inset 0 0 0 1px rgba(230, 237, 243, 0.03),
+    0 0 38px rgba(255, 176, 46, 0.08),
+    0 18px 38px rgba(0, 0, 0, 0.38);
+}
+
+.habitat-hub-console::before {
+  content: "";
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  top: -18px;
+  height: 18px;
+  border: 1px solid rgba(255, 176, 46, 0.18);
+  border-bottom: 0;
+  background: linear-gradient(180deg, transparent, rgba(255, 176, 46, 0.08));
+  clip-path: polygon(8% 0, 92% 0, 100% 100%, 0 100%);
+}
+
+.habitat-hub-nav {
+  border-color: rgba(103, 232, 249, 0.18);
+  background:
+    linear-gradient(90deg, rgba(2, 6, 12, 0.92), rgba(8, 15, 24, 0.76), rgba(2, 6, 12, 0.92)),
+    repeating-linear-gradient(90deg, transparent 0 84px, rgba(103, 232, 249, 0.035) 84px 85px);
+}
+
+@media (max-width: 1366px), (max-height: 820px) {
+  .habitat-hub-runner {
+    bottom: 126px;
+    height: min(410px, calc(100% - 146px));
+  }
+
+  .habitat-hub-service-rack {
+    width: 12%;
+  }
+
+  .habitat-hub-console {
+    bottom: 12px;
+  }
+}
+
+/* Phase 13.8O final Habitat acceptance tightening: stronger bay identity over the technical grid. */
+.habitat-hub-backdrop::after {
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.2), transparent 18%, transparent 64%, rgba(0, 0, 0, 0.62)),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.72), transparent 24%, transparent 76%, rgba(0, 0, 0, 0.72)),
+    radial-gradient(ellipse at 50% 52%, transparent 36%, rgba(0, 0, 0, 0.5) 100%);
+}
+
+.habitat-hub-window-bank {
+  top: 18%;
+  left: 20%;
+  right: 20%;
+  height: 24%;
+  border-color: rgba(216, 149, 63, 0.24);
+  background:
+    linear-gradient(90deg, rgba(216, 149, 63, 0.16), transparent 18%, transparent 82%, rgba(216, 149, 63, 0.14)),
+    repeating-linear-gradient(90deg, transparent 0 18%, rgba(103, 232, 249, 0.08) 18% 18.4%, transparent 18.4% 36%),
+    linear-gradient(180deg, rgba(6, 12, 20, 0.9), rgba(18, 26, 36, 0.54), rgba(3, 8, 14, 0.78));
+  box-shadow:
+    inset 0 0 34px rgba(103, 232, 249, 0.07),
+    0 0 42px rgba(255, 176, 46, 0.055);
+}
+
+.habitat-hub-window-bank::before {
+  content: "HABITAT 07";
+  position: absolute;
+  left: 50%;
+  top: 18%;
+  transform: translateX(-50%);
+  color: rgba(255, 208, 132, 0.72);
+  font-size: clamp(12px, 1.2vw, 16px);
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-shadow: 0 0 18px rgba(255, 176, 46, 0.22);
+}
+
+.habitat-hub-window-bank::after {
+  content: "";
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  bottom: 16%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(103, 232, 249, 0.42), transparent);
+  box-shadow: 0 0 16px rgba(103, 232, 249, 0.24);
+}
+
+.habitat-hub-service-rack {
+  width: 18%;
+  opacity: 0.92;
+  box-shadow:
+    inset 0 0 28px rgba(0, 0, 0, 0.42),
+    inset 0 0 0 1px rgba(230, 237, 243, 0.025);
+}
+
+.habitat-hub-service-rack::before,
+.habitat-hub-service-rack::after {
+  content: "";
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  border: 1px solid rgba(103, 232, 249, 0.14);
+  background:
+    linear-gradient(90deg, rgba(255, 176, 46, 0.1), transparent 34%),
+    rgba(2, 6, 12, 0.54);
+}
+
+.habitat-hub-service-rack::before {
+  top: 12%;
+  height: 18%;
+}
+
+.habitat-hub-service-rack::after {
+  bottom: 16%;
+  height: 24%;
+}
+
+.habitat-hub-floor {
+  top: 50%;
+  background:
+    linear-gradient(rgba(103, 232, 249, 0.075) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(103, 232, 249, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 176, 46, 0.12), transparent 16%, transparent 84%, rgba(255, 176, 46, 0.1)),
+    radial-gradient(ellipse at 50% 36%, rgba(255, 176, 46, 0.22), transparent 34%),
+    linear-gradient(180deg, rgba(10, 18, 28, 0.18), rgba(2, 6, 12, 0.94));
+  background-size: 100% 44px, 72px 100%, auto, auto, auto;
+}
+
+.habitat-hub-depth-layer.layer-b {
+  top: 36%;
+  bottom: 40%;
+  border-color: rgba(216, 149, 63, 0.26);
+  box-shadow: 0 0 34px rgba(216, 149, 63, 0.08);
+}
+
+.habitat-hub-runner-plinth {
+  bottom: 29%;
+  border-color: rgba(255, 176, 46, 0.32);
+  background:
+    radial-gradient(ellipse at 50% 50%, rgba(255, 176, 46, 0.3), transparent 60%),
+    radial-gradient(ellipse at 50% 50%, rgba(103, 232, 249, 0.1), transparent 72%),
+    rgba(2, 6, 12, 0.46);
+}
+
+.habitat-hub-console {
+  outline: 1px solid rgba(255, 176, 46, 0.08);
+  outline-offset: -6px;
+}
+
+/* Phase 13.8P initial Play Gate and contained background asset integration. */
+.audio-start-gate {
+  align-items: center;
+  justify-content: start;
+  padding: clamp(28px, 5vw, 76px);
+  overflow: hidden;
+  background:
+    linear-gradient(90deg, rgba(0, 0, 0, 0.88) 0%, rgba(2, 6, 12, 0.74) 22%, rgba(2, 6, 12, 0.24) 48%, rgba(0, 0, 0, 0.1) 72%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.12), rgba(2, 6, 12, 0.26) 52%, rgba(2, 6, 12, 0.76)),
+    url("/ui/backgrounds/start-screen-background.png") center / cover no-repeat,
+    #02060c;
+}
+
+.audio-start-gate::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 72% 18%, rgba(190, 226, 255, 0.18), transparent 22%),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.2), transparent 38%, rgba(0, 0, 0, 0.18));
+}
+
+.audio-start-gate::after {
+  content: "LUNAR QUARANTINE ZONE\a HABITAT ACCESS REQUIRED";
+  white-space: pre;
+  position: absolute;
+  right: clamp(34px, 8vw, 148px);
+  bottom: clamp(64px, 10vh, 120px);
+  width: min(310px, 28vw);
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 176, 46, 0.38);
+  border-radius: 4px;
+  color: rgba(255, 209, 132, 0.82);
+  background:
+    linear-gradient(90deg, rgba(255, 176, 46, 0.12), rgba(2, 6, 12, 0.56)),
+    rgba(2, 6, 12, 0.42);
+  font-size: clamp(10px, 0.72vw, 12px);
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  line-height: 1.45;
+  text-transform: uppercase;
+  box-shadow: 0 0 24px rgba(0, 0, 0, 0.38);
+}
+
+.audio-start-panel {
+  position: relative;
+  z-index: 1;
+  align-items: stretch;
+  width: min(440px, calc(100vw - 56px));
+  padding: clamp(20px, 3vw, 32px);
+  border: 1px solid rgba(103, 232, 249, 0.2);
+  border-radius: 6px;
+  background:
+    linear-gradient(180deg, rgba(2, 6, 12, 0.72), rgba(2, 6, 12, 0.48)),
+    rgba(2, 6, 12, 0.56);
+  box-shadow:
+    inset 0 0 0 1px rgba(230, 237, 243, 0.025),
+    0 28px 72px rgba(0, 0, 0, 0.46);
+  backdrop-filter: blur(6px);
+}
+
+.audio-start-panel::before {
+  content: "DARK\A CRATERS";
+  white-space: pre;
+  color: #f8fafc;
+  font-size: clamp(48px, 6vw, 86px);
+  font-weight: 950;
+  letter-spacing: 0.04em;
+  line-height: 0.82;
+  text-transform: uppercase;
+  text-shadow: 0 4px 34px rgba(0, 0, 0, 0.82);
+}
+
+.audio-start-panel::after {
+  content: "THE MOON REMEMBERS";
+  color: rgba(255, 208, 132, 0.82);
+  font-size: clamp(11px, 1vw, 14px);
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.audio-start-panel span {
+  order: 3;
+  align-self: stretch;
+  display: block;
+  padding-top: 4px;
+  color: rgba(223, 251, 255, 0.64);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-align: left;
+  text-indent: 0;
+}
+
+.audio-start-button {
+  order: 2;
+  width: min(300px, 100%);
+  height: 54px;
+  margin: 18px 0 2px;
+  border-color: rgba(255, 176, 46, 0.72);
+  border-radius: 3px;
+  color: #120a02;
+  background: linear-gradient(180deg, #ffc857, #e49b32);
+  font-size: 15px;
+  letter-spacing: 0.12em;
+  box-shadow:
+    0 0 0 1px rgba(2, 6, 12, 0.72),
+    0 16px 36px rgba(255, 176, 46, 0.18);
+}
+
+.audio-start-button:hover,
+.audio-start-button:focus-visible {
+  border-color: rgba(255, 226, 160, 0.94);
+  color: #080501;
+  background: linear-gradient(180deg, #ffda72, #f2aa38);
+  box-shadow:
+    0 0 0 1px rgba(255, 226, 160, 0.2),
+    0 18px 42px rgba(255, 176, 46, 0.26);
+}
+
+.habitat-hub-backdrop {
+  background:
+    linear-gradient(180deg, rgba(2, 6, 12, 0.5), rgba(2, 6, 12, 0.28) 44%, rgba(1, 3, 6, 0.72)),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0.2) 25%, rgba(0, 0, 0, 0.2) 75%, rgba(0, 0, 0, 0.72)),
+    url("/ui/backgrounds/habitat-hub-background.png") center / cover no-repeat,
+    #03070d;
+}
+
+@media (max-width: 900px), (max-height: 720px) {
+  .audio-start-gate {
+    align-items: end;
+    justify-content: center;
+    padding: 22px;
+  }
+
+  .audio-start-gate::after {
+    right: 22px;
+    bottom: auto;
+    top: 22px;
+    width: min(270px, calc(100vw - 44px));
+  }
+
+  .audio-start-panel {
+    width: min(390px, calc(100vw - 44px));
+  }
+}
+
+/* Phase 13.8P-A first-impression scale hotfix: finished start gate and proportional Habitat shell. */
+.audio-start-gate {
+  padding: clamp(34px, 5.4vw, 86px);
+  background:
+    linear-gradient(90deg, rgba(0, 0, 0, 0.9) 0%, rgba(2, 6, 12, 0.76) 21%, rgba(2, 6, 12, 0.18) 50%, rgba(0, 0, 0, 0.08) 72%),
+    radial-gradient(ellipse at 24% 50%, rgba(103, 232, 249, 0.08), transparent 32%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.1), rgba(2, 6, 12, 0.2) 50%, rgba(2, 6, 12, 0.78)),
+    url("/ui/backgrounds/start-screen-background.png") center / cover no-repeat,
+    #02060c;
+}
+
+.audio-start-gate::before {
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    radial-gradient(ellipse at 72% 18%, rgba(190, 226, 255, 0.14), transparent 22%),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.26), transparent 40%, rgba(0, 0, 0, 0.16));
+  background-size: 100% 3px, auto, auto;
+}
+
+.audio-start-gate::after {
+  right: clamp(42px, 7.2vw, 128px);
+  bottom: clamp(60px, 9vh, 104px);
+  width: min(300px, 26vw);
+  padding: 12px 14px;
+  border-color: rgba(255, 176, 46, 0.5);
+  background:
+    linear-gradient(90deg, rgba(255, 176, 46, 0.14), rgba(2, 6, 12, 0.62)),
+    rgba(2, 6, 12, 0.52);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 226, 160, 0.04),
+    0 18px 38px rgba(0, 0, 0, 0.42);
+}
+
+.audio-start-panel {
+  width: min(404px, calc(100vw - 60px));
+  padding: 24px 28px 26px;
+  border-color: rgba(103, 232, 249, 0.28);
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(2, 6, 12, 0.8), rgba(2, 6, 12, 0.54)),
+    rgba(2, 6, 12, 0.66);
+  background-size: 100% 4px, auto, auto;
+}
+
+.audio-start-panel::before {
+  font-size: clamp(44px, 5vw, 72px);
+  letter-spacing: 0.035em;
+  line-height: 0.86;
+}
+
+.audio-start-panel::after {
+  margin-top: 10px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(103, 232, 249, 0.18);
+  font-size: clamp(10px, 0.82vw, 12px);
+}
+
+.audio-start-button {
+  width: min(266px, 100%);
+  height: 50px;
+  margin-top: 20px;
+  margin-bottom: 6px;
+}
+
+.audio-start-panel span {
+  padding-top: 6px;
+  border-top: 1px solid rgba(103, 232, 249, 0.08);
+}
+
+.main-menu-content:has(.habitat-hub-screen) {
+  width: min(1580px, calc(100vw - 12px));
+  max-width: calc(100vw - 12px);
+  max-height: calc(100vh - 10px);
+}
+
+.habitat-hub-screen {
+  width: min(1570px, calc(100vw - 12px));
+  height: min(874px, calc(100vh - 14px));
+  grid-template:
+    "chrome" 56px
+    "stage" minmax(0, 1fr)
+    "nav" 56px / minmax(0, 1fr);
+  border-radius: 6px;
+}
+
+.habitat-hub-chrome {
+  grid-template-columns: minmax(210px, 0.28fr) minmax(0, auto);
+  padding: 8px 12px;
+}
+
+.habitat-hub-brand {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px 12px;
+}
+
+.habitat-hub-brand span {
+  font-size: 9px;
+}
+
+.habitat-hub-brand strong {
+  font-size: clamp(18px, 1.45vw, 24px);
+  line-height: 1;
+  letter-spacing: 0.03em;
+}
+
+.habitat-hub-stage {
+  grid-template-columns: minmax(250px, 0.46fr) minmax(660px, 1.48fr) minmax(286px, 0.52fr);
+  gap: 10px;
+  padding: 10px 12px;
+}
+
+.habitat-hub-left-rail,
+.habitat-hub-field-order {
+  border-radius: 5px;
+}
+
+.habitat-hub-left-rail {
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 8px;
+  padding: 10px;
+}
+
+.habitat-hub-operator-card {
+  padding: 10px 11px;
+}
+
+.habitat-hub-operator-card strong {
+  font-size: clamp(18px, 1.42vw, 25px);
+}
+
+.habitat-hub-operator-grid,
+.habitat-hub-signal-card div {
+  grid-template-columns: minmax(68px, 0.34fr) minmax(0, 1fr);
+  padding: 9px;
+}
+
+.habitat-hub-signal-card {
+  padding: 10px;
+}
+
+.habitat-hub-signal-card strong {
+  font-size: 14px;
+}
+
+.habitat-hub-environment {
+  border-radius: 5px;
+}
+
+.habitat-hub-backdrop {
+  background:
+    linear-gradient(180deg, rgba(2, 6, 12, 0.34), rgba(2, 6, 12, 0.12) 42%, rgba(1, 3, 6, 0.58)),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.58), rgba(0, 0, 0, 0.1) 24%, rgba(0, 0, 0, 0.1) 76%, rgba(0, 0, 0, 0.58)),
+    url("/ui/backgrounds/habitat-hub-background.png") center 46% / cover no-repeat,
+    #03070d;
+}
+
+.habitat-hub-backdrop::before {
+  opacity: 0.42;
+}
+
+.habitat-hub-backdrop::after {
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.1), transparent 22%, transparent 62%, rgba(0, 0, 0, 0.58)),
+    radial-gradient(ellipse at 50% 52%, transparent 38%, rgba(0, 0, 0, 0.46) 100%);
+}
+
+.habitat-hub-floor {
+  top: 57%;
+  background:
+    linear-gradient(rgba(103, 232, 249, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(103, 232, 249, 0.035) 1px, transparent 1px),
+    radial-gradient(ellipse at 50% 36%, rgba(255, 176, 46, 0.22), transparent 34%),
+    linear-gradient(180deg, rgba(10, 18, 28, 0.05), rgba(2, 6, 12, 0.86));
+  background-size: 100% 56px, 98px 100%, auto, auto;
+  opacity: 0.5;
+}
+
+.habitat-hub-depth-layer.layer-a,
+.habitat-hub-depth-layer.layer-b,
+.habitat-hub-depth-layer.layer-c,
+.habitat-hub-window-bank {
+  opacity: 0.5;
+}
+
+.habitat-hub-service-rack {
+  opacity: 0.42;
+}
+
+.habitat-hub-runner {
+  bottom: 136px;
+  width: min(340px, 40%);
+  height: min(480px, calc(100% - 152px));
+}
+
+.habitat-hub-runner-plinth {
+  left: 36%;
+  right: 36%;
+  bottom: 31%;
+}
+
+.habitat-hub-console {
+  bottom: 18px;
+  width: min(500px, calc(100% - 76px));
+  padding: 13px;
+}
+
+.habitat-hub-console > strong {
+  font-size: clamp(20px, 1.65vw, 28px);
+}
+
+.habitat-hub-field-order {
+  padding: 11px;
+}
+
+.habitat-hub-field-order > strong {
+  font-size: clamp(18px, 1.35vw, 24px);
+}
+
+.habitat-hub-order-rows {
+  gap: 7px;
+}
+
+.habitat-hub-order-rows div {
+  min-height: 36px;
+}
+
+.habitat-hub-nav {
+  margin: 0 12px 10px;
+  padding: 7px;
+  border-radius: 5px;
+}
+
+.habitat-hub-nav-button {
+  min-height: 34px;
+}
+
+.main-menu-content:has(.habitat-hub-screen) + .debug-tools,
+.habitat-hub-screen + .debug-tools {
+  margin-top: 3px;
+  opacity: 0.72;
+}
+
+@media (max-width: 1366px), (max-height: 820px) {
+  .habitat-hub-screen {
+    height: min(752px, calc(100vh - 10px));
+    grid-template:
+      "chrome" 50px
+      "stage" minmax(0, 1fr)
+      "nav" 50px / minmax(0, 1fr);
+  }
+
+  .habitat-hub-stage {
+    grid-template-columns: minmax(216px, 0.44fr) minmax(470px, 1.44fr) minmax(230px, 0.52fr);
+    gap: 7px;
+    padding: 7px 8px;
+  }
+
+  .habitat-hub-console {
+    width: min(460px, calc(100% - 52px));
+  }
+
+  .habitat-hub-field-order > p,
+  .habitat-hub-order-rows div:nth-child(n+6) {
+    display: none;
+  }
+}
+
+@media (min-width: 1800px) and (min-height: 960px) {
+  .habitat-hub-screen {
+    width: min(1660px, calc(100vw - 72px));
+    height: min(930px, calc(100vh - 54px));
+  }
+}
+
+/* Phase 13.8P-B live viewport containment: keep Habitat inside practical browser widths. */
+.main-menu-content:has(.habitat-hub-screen) {
+  width: min(1512px, calc(100vw - 40px));
+  max-width: calc(100vw - 40px);
+  min-width: 0;
+  overflow-x: clip;
+}
+
+.habitat-hub-screen {
+  width: min(1500px, calc(100vw - 44px));
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.habitat-hub-chrome,
+.habitat-hub-stage,
+.habitat-hub-nav {
+  min-width: 0;
+}
+
+.habitat-hub-chrome {
+  grid-template-columns: minmax(190px, 0.34fr) minmax(0, 1fr);
+  gap: 10px;
+  padding-inline: 10px;
+}
+
+.habitat-hub-status-strip {
+  justify-content: end;
+  gap: 7px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.habitat-hub-status-strip span {
+  min-width: 0;
+  padding: 7px 9px;
+  white-space: nowrap;
+}
+
+.habitat-hub-stage {
+  grid-template-columns: minmax(232px, 0.42fr) minmax(560px, 1.22fr) minmax(298px, 0.54fr);
+  gap: 8px;
+  padding-inline: 10px;
+}
+
+.habitat-hub-left-rail,
+.habitat-hub-field-order {
+  min-width: 0;
+}
+
+.habitat-hub-field-order {
+  overflow: hidden;
+}
+
+.habitat-hub-order-rows div {
+  grid-template-columns: minmax(70px, 0.36fr) minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+}
+
+.habitat-hub-order-rows b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.habitat-hub-console {
+  width: min(470px, calc(100% - 64px));
+}
+
+.habitat-hub-nav {
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 6px;
+  margin-inline: 10px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.habitat-hub-nav-button {
+  min-width: 0;
+  padding-inline: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1500px), (max-height: 820px) {
+  .main-menu-content:has(.habitat-hub-screen) {
+    width: min(1348px, calc(100vw - 28px));
+    max-width: calc(100vw - 28px);
+  }
+
+  .habitat-hub-screen {
+    width: min(1336px, calc(100vw - 32px));
+  }
+
+  .habitat-hub-chrome {
+    grid-template-columns: minmax(178px, 0.34fr) minmax(0, 1fr);
+    gap: 8px;
+    padding-inline: 8px;
+  }
+
+  .habitat-hub-brand {
+    gap: 6px 9px;
+  }
+
+  .habitat-hub-brand strong {
+    font-size: clamp(16px, 1.35vw, 21px);
+  }
+
+  .habitat-hub-status-strip {
+    gap: 5px;
+  }
+
+  .habitat-hub-status-strip span {
+    padding: 6px 7px;
+    font-size: 10px;
+  }
+
+  .habitat-hub-stage {
+    grid-template-columns: minmax(210px, 0.42fr) minmax(450px, 1.12fr) minmax(286px, 0.58fr);
+    gap: 7px;
+    padding-inline: 8px;
+  }
+
+  .habitat-hub-left-rail,
+  .habitat-hub-field-order {
+    padding: 9px;
+  }
+
+  .habitat-hub-order-rows div {
+    grid-template-columns: minmax(64px, 0.34fr) minmax(0, 1fr);
+    min-height: 34px;
+  }
+
+  .habitat-hub-console {
+    width: min(430px, calc(100% - 46px));
+  }
+
+  .habitat-hub-nav {
+    gap: 5px;
+    margin-inline: 8px;
+    padding: 6px;
+  }
+
+  .habitat-hub-nav-button {
+    padding-inline: 6px;
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 1180px) {
+  .habitat-hub-screen {
+    height: auto;
+    min-height: min(760px, calc(100vh - 18px));
+    grid-template:
+      "chrome" auto
+      "stage" auto
+      "nav" auto / minmax(0, 1fr);
+  }
+
+  .habitat-hub-chrome {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .habitat-hub-status-strip {
+    justify-content: start;
+    flex-wrap: wrap;
+  }
+
+  .habitat-hub-stage {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .habitat-hub-environment {
+    min-height: 520px;
+  }
+
+  .habitat-hub-nav {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 }

@@ -13,6 +13,27 @@ export type DarkCratersScreenAuditEntry = Readonly<{
 
 export const darkCratersScreenAudit: readonly DarkCratersScreenAuditEntry[] = [
   {
+    screen: "initialPlayGate",
+    label: "Initial Play / Audio Gate",
+    priority: 1,
+    expectedArchetype: "play-gate",
+    reference: "public/design-reference/ui/reference-game-sequence.png panel 1 / PLAY / AUDIO GATE",
+    intendedComposition: [
+      "Cinematic lunar exterior using /ui/backgrounds/start-screen-background.png as the full-screen plate.",
+      "DARK CRATERS title and Play primary sit in the left negative space while the moon/outpost image detail remains visible.",
+      "Balanced terminal title/menu panel with refined spacing, subtle scanline treatment, and sparse warning/status atmosphere.",
+    ],
+    forbiddenRegression: "Generic dark blank menu, background-present-but-placeholder panel, hidden or weak Play button, oversized blunt title box, unreadable title, menu covering the right-side focal image, or changed Play/audio initialization behavior.",
+    validationChecklist: [
+      "00-start-screen.png exists and captures before Play is clicked.",
+      "The screen reads as a lunar hazard-zone title gate before reading small labels.",
+      "The title/menu panel feels finished and proportioned, not a first-pass overlay.",
+      "Play is the obvious primary action and remains wired to the existing audio/init flow.",
+      "Secondary/status copy is sparse and does not cover the moon or outpost focal detail.",
+      "No horizontal overflow or clipped Play button at 1600x900.",
+    ],
+  },
+  {
     screen: "craterRuns",
     label: "Crater Runs / Operation Selection",
     priority: 1,
@@ -44,14 +65,20 @@ export const darkCratersScreenAudit: readonly DarkCratersScreenAuditEntry[] = [
     expectedArchetype: "hub-stage",
     reference: "public/design-reference/ui/reference-game-sequence.png panel 2 / Habitat Hub",
     intendedComposition: [
-      "Unified environmental habitat bay with CSS-built depth, floor, wall silhouettes, and runner placed inside the space.",
-      "Left operator rail, center mission console, right field-order rail, compact top chrome, and stable bottom navigation.",
+      "Unified environmental habitat bay with visible /ui/backgrounds/habitat-hub-background.png plate, reduced grid weight, foreground deck shadow, runner plinth, and runner placed inside the space.",
+      "Left operator rail, center mission console, right field-order rail, compact top chrome, and stable bottom navigation use proportions related to the rebuilt Ship, Loadout, Crater Runs, and Campaign screens.",
+      "The full shell fits practical live browser viewports, with the right field-order terminal, top resource strip, and bottom nav contained inside the visible frame.",
       "Mission access is one center console with Review Assignment primary and Change Operation secondary.",
     ],
-    forbiddenRegression: "Floating runner preview in an empty void with disconnected command feed and field-order debug cards.",
+    forbiddenRegression: "Floating runner preview in an empty void, flat grid showroom, detached rails, dead black margin imbalance, buried background plate, background image hiding runner/mission console, text lost over a busy image, mission console floating, right field-order terminal clipped in live browser, resource/status strip forcing horizontal overflow, bottom nav off-shell, visually weak Review Assignment, or field-order debug cards.",
     validationChecklist: [
       "Screen reads as an orbital habitat command deck before any text is read.",
+      "01-habitat-hub.png feels proportionally related to 04-loadout.png, 06-ship.png, 08-crater-runs.png, and 09-campaign-contracts.png.",
+      "Center bay shows industrial depth behind and around the runner, not only a transparent grid floor.",
+      "If the Habitat background image is visible, overlays keep the runner, console, rails, and nav readable.",
+      "Mission console feels anchored to the bay lighting and staging area.",
       "Right field order has no overlapping rows and no dense paragraph wall.",
+      "Right field order, top resource strip, and bottom nav remain fully visible in practical browser widths, not only the 1600x900 capture.",
       "Bottom nav labels remain Crater Runs, Loadout, Arsenal, Ship, Class, Skills, Stash, Vendors, Style, Contracts.",
       "Class opens Class Selection; Review Assignment opens Deployment Assignment; Begin Descent remains the final deploy action.",
       "Primary action and bottom nav are visible without full-page scrolling at common desktop viewports.",
