@@ -3,6 +3,7 @@ export type DarkCratersScreenTarget =
   | "habitatHub"
   | "craterRuns"
   | "deploymentAssignment"
+  | "descentSequence"
   | "loadout"
   | "arsenal"
   | "shipSystems"
@@ -17,6 +18,7 @@ export type DarkCratersLayoutArchetype =
   | "hub-stage"
   | "operation-terminal"
   | "assignment-review"
+  | "descent-bridge"
   | "four-card-selection"
   | "catalog-grid"
   | "ship-overview"
@@ -71,6 +73,7 @@ export const darkCratersVisualContract: DarkCratersVisualContract = {
     "hub-stage": "Atmospheric habitat bay with command rail, dominant runner/stage, and field-order rail.",
     "operation-terminal": "Deployment terminal with compact tier rail, projected tactical route map, selected operation briefing, objective family strip, and command strip.",
     "assignment-review": "Mission confirmation with mission summary, runner readiness, loadout readiness, and one final descent action.",
+    "descent-bridge": "Third-person Kestrel-9 descent bridge with visible ship, game-rendered HUD/telemetry, and a fake lunar approach layer behind the ship.",
     "four-card-selection": "Four large class cards with bottom overview, stat bars, loadout hints, confirm/back actions.",
     "catalog-grid": "Left category/manufacturer rail, central compact weapon index cards, selected hero inspection panel, technical bench section, and compact command strip.",
     "ship-overview": "Kestrel-9 hangar hero with large active ship preview, left identity rail, right systems rail, module/cargo strip, and bottom mission readiness command strip.",
@@ -99,11 +102,12 @@ export const darkCratersVisualContract: DarkCratersVisualContract = {
     initialPlayGate: [
       "Reference: public/design-reference/ui/reference-game-sequence.png panel 1 / PLAY / AUDIO GATE.",
       "Required asset: /ui/backgrounds/start-screen-background.png.",
-      "Must read as the DARK CRATERS front door: cinematic lunar exterior, title/menu on the left negative space, obvious Play primary, sparse warning/status atmosphere.",
-      "Not accepted merely because the background is present; the title/menu panel must feel finished, balanced, and deliberately framed.",
+      "When the selected background asset already contains the DARK CRATERS title and quarantine signage, the Play Gate is image-first: app UI adds Play/action affordances only.",
+      "Do not duplicate baked title text, baked warning signage, or a separate tagline if the selected background does not include it.",
+      "Must read as the DARK CRATERS front door: cinematic lunar exterior, obvious Play primary, visible lunar base/signage art, and sparse access/status atmosphere.",
       "00-start-screen.png is the acceptance artifact and Play must remain the dominant action.",
       "Preserve the existing Play/audio initialization behavior; this screen is an audio gate, not a direct raid or Habitat route.",
-      "Forbidden regressions: generic dark blank menu, missing background asset, hidden or weak Play button, unreadable title, menu covering the strongest right-side image focal point, or skipping audio gate behavior.",
+      "Forbidden regressions: second DARK CRATERS title over baked title, second tagline over baked art, second warning card over baked warning sign, heavy overlay burying the background, large opaque menu card fighting the composition, hidden or weak Play button, or skipping audio gate behavior.",
     ],
     craterRuns: [
       "Reference: public/design-reference/ui/reference-game-sequence.png panel 4 plus public/design-reference/ui/reference-map.jpg.",
@@ -132,7 +136,25 @@ export const darkCratersVisualContract: DarkCratersVisualContract = {
     ],
     deploymentAssignment: [
       "Reference: projected gameplay sequence panels 4 and 5 bridge.",
-      "Ready check with final Begin Descent action, not full class selection.",
+      "Must read as launch authorization and descent bridge, not a generic ready-check database layout.",
+      "Required zones: compact assignment chrome, left TYCHOSTAR field-order rail, central runner deployment bay, right descent readiness rail, and bottom launch command strip.",
+      "Begin Descent must be visible, strongest, and reserved for this screen; Habitat Hub only reaches this screen through Review Assignment.",
+      "Class/model stage must read as a deployment bay, suit lock, or launch cradle, not a mannequin on a flat grid.",
+      "Future descent direction: third-person Kestrel-9 cinematic over a faked lunar approach video layer, using the flying/in-flight Kestrel-9 GLB as the visible ship asset when available.",
+      "Forbidden regressions: class selection cards reappearing, Begin Descent hidden, side rails clipped, repeated mission data walls, model floating on a flat grid, or direct raid bypass from Habitat Hub.",
+    ],
+    descentSequence: [
+      "Reference: public/design-reference/ui/reference-game-sequence.png panel 5 / DESCENT + LANDING.",
+      "Locked direction: Drift-Wave-like third-person exterior chase framing with the Kestrel-9 trailing below center, readable in rear three-quarter silhouette, and visibly banking into the approach corridor.",
+      "Phase 13.8R-A uses /models/ships/kestrel-9-inflight.glb as the visible descent ship; do not use the landed/gear-down variant while this flying asset exists.",
+      "The imported ship subtree, runtime hull material, light, and presentation nodes are descent-only; no ship material fix may sweep or mutate world, map structure, or proxy materials.",
+      "The procedural LandedShip remains the missing/failed-GLB fallback and resumes at touchdown so raid entry cannot be blocked by presentation loading.",
+      "Large-scale orbital-to-surface motion is faked with a background MP4, WebM, poster, CSS, or image-sequence layer behind/around the ship.",
+      "The fake background layer is not the whole experience: ship, HUD, telemetry, quality feedback, and final transition remain rendered and controlled by the game.",
+      "Final intended descent is not a procedural ground-only view, cockpit POV, first-person-only landing footage, a camera underneath the lander, a side-on static beauty render, a head-on blob, or hidden-ship moon-only footage.",
+      "Forbidden isolation regressions: map/proxy structures become invisible after ship import, scene-wide material/light sweeps, or direct structure GLBs being re-enabled.",
+      "Sequence bridges Deployment Assignment / Begin Descent into active raid gameplay without changing mission selection, landing quality authority, or raid launch behavior.",
+      "Future video paths remain documentation targets until ship isolation and chase framing are accepted and missing-safe fallback is implemented: public/video/descent/lunar-descent-approach.mp4, public/video/descent/lunar-descent-approach.webm, public/video/descent/lunar-descent-poster.png.",
     ],
     loadout: [
       "Reference: public/design-reference/ui/reference-player-custom.jpg plus projected gameplay sequence panel 3.",

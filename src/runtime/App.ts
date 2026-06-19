@@ -3,11 +3,16 @@ import {
   DirectionalLight,
   Engine,
   HemisphericLight,
+  PointLight,
   Scene,
+  SceneLoader,
+  StandardMaterial,
+  TransformNode,
   UniversalCamera,
   Vector3,
 } from "@babylonjs/core";
 import "@babylonjs/core/Collisions/collisionCoordinator";
+import "@babylonjs/loaders/glTF";
 import { EnemyDirector } from "../ai/EnemyDirector";
 import type { EnemyType } from "../ai/EnemyTypes";
 import { PlaceholderWeaponAudio } from "../audio/PlaceholderWeaponAudio";
@@ -129,7 +134,7 @@ import { TraversalController, type TraversalState } from "../traversal/Traversal
 import { PlayerCharacter } from "../world/PlayerCharacter";
 import { ThirdPersonCameraRig } from "../camera/ThirdPersonCameraRig";
 import { InputController, type InputMode, type InputSnapshot } from "../input/InputController";
-import { clamp, yawToBasis } from "../math/angles";
+import { yawToBasis } from "../math/angles";
 import { createWorld, type WorldMap } from "../world/createWorld";
 import { extractionZoneDefinitions, mapLayoutConfig, poiDefinitions, type ExtractionZoneDefinition } from "../world/MapLayout";
 import { CombatHud, type HudNavigationMarker, type RaidOutcome, type RaidScreen, type RevealSignalHudState, type TacticalMapData, type TacticalNavTarget, type TacticalRouteFeedback, type TacticalRouteHint } from "../ui/CombatHud";
@@ -291,6 +296,12 @@ export class App {
   private readonly shipLandingSequence = new OrbitalDeploymentSequence();
   private readonly orbitalDeploymentScene: OrbitalDeploymentScene;
   private readonly landedShip: LandedShip;
+  private readonly descentShipRoot: TransformNode;
+  private readonly descentShipKeyLight: PointLight;
+  private descentShipModelPivot: TransformNode | null = null;
+  private descentShipMaterial: StandardMaterial | null = null;
+  private descentShipLoaded = false;
+  private descentShipLoadFailed = false;
   private readonly settingsManager = new SettingsManager();
   private readonly loadout = new Loadout();
   private readonly loadoutManager = new LoadoutManager();
@@ -511,6 +522,15 @@ export class App {
     this.landedShip = new LandedShip(this.scene, mapLayoutConfig.shipLandingSitePosition.clone());
     this.landedShip.setEnabled(false);
     this.orbitalDeploymentScene = new OrbitalDeploymentScene(this.scene);
+    this.descentShipRoot = new TransformNode("descent-kestrel-9-inflight-root", this.scene);
+    this.descentShipRoot.setEnabled(false);
+    this.descentShipKeyLight = new PointLight("descent-kestrel-9-key-light", new Vector3(-5, 7, -6), this.scene);
+    this.descentShipKeyLight.parent = this.descentShipRoot;
+    this.descentShipKeyLight.diffuse = new Color3(0.72, 0.86, 1);
+    this.descentShipKeyLight.range = 28;
+    this.descentShipKeyLight.intensity = 2.4;
+    this.descentShipKeyLight.setEnabled(false);
+    void this.loadDescentShipModel();
     this.coverController = new CoverController(this.scene);
     this.traversalController = new TraversalController(this.scene);
 
@@ -848,6 +868,9 @@ export class App {
     this.shipDashboardPreview.dispose();
     this.weaponBenchPreview.dispose();
     this.environmentManager.dispose();
+    this.descentShipKeyLight.dispose();
+    this.descentShipMaterial?.dispose(true, true);
+    this.descentShipRoot.dispose(false, true);
     this.landedShip.dispose();
     this.orbitalDeploymentScene.dispose();
     this.heavyCargoManager.dispose();
@@ -3247,6 +3270,149 @@ export class App {
     return this.multiplayerMode ? this.multiplayerClient.enemyDebugStates : this.enemyDirector.debugStates;
   }
 
+  private async loadDescentShipModel(): Promise<void> {
+    const modelPath = "/models/ships/kestrel-9-inflight.glb";
+    let importedRoots: TransformNode[] = [];
+
+    try {
+      const result = await SceneLoader.ImportMeshAsync("", "", modelPath, this.scene);
+      const importedNodes = [...result.transformNodes, ...result.meshes];
+      const importedNodeSet = new Set<TransformNode>(importedNodes);
+      importedRoots = importedNodes.filter((node) => !node.parent || !importedNodeSet.has(node.parent as TransformNode));
+
+      for (const animationGroup of result.animationGroups) {
+        animationGroup.stop();
+        animationGroup.dispose();
+      }
+      for (const particleSystem of result.particleSystems) {
+        particleSystem.stop();
+        particleSystem.dispose();
+      }
+      for (const light of result.lights) {
+        light.setEnabled(false);
+        light.dispose();
+      }
+      for (const spriteManager of result.spriteManagers) {
+        spriteManager.dispose();
+      }
+
+      if (this.scene.isDisposed) {
+        for (const node of importedRoots) {
+          node.dispose(false, true);
+        }
+        return;
+      }
+
+      const renderableMeshes = result.meshes.filter((mesh) => mesh.getTotalVertices() > 0);
+      if (renderableMeshes.length === 0) {
+        throw new Error("Kestrel-9 inflight GLB did not contain renderable meshes.");
+      }
+
+      for (const mesh of result.meshes) {
+        mesh.setEnabled(true);
+        mesh.isVisible = true;
+        mesh.visibility = 1;
+        mesh.isPickable = false;
+        mesh.checkCollisions = false;
+        mesh.alwaysSelectAsActiveMesh = true;
+        mesh.computeWorldMatrix(true);
+      }
+      this.descentShipMaterial?.dispose(true, true);
+      this.descentShipMaterial = new StandardMaterial("descent-kestrel-9-hull-material", this.scene);
+      this.descentShipMaterial.diffuseColor = new Color3(0.38, 0.44, 0.52);
+      this.descentShipMaterial.emissiveColor = new Color3(0.055, 0.075, 0.1);
+      this.descentShipMaterial.specularColor = new Color3(0.5, 0.68, 0.82);
+      this.descentShipMaterial.backFaceCulling = false;
+      for (const mesh of renderableMeshes) {
+        mesh.material = this.descentShipMaterial;
+      }
+
+      const bounds = renderableMeshes.reduce((aggregate, mesh) => {
+        const box = mesh.getBoundingInfo().boundingBox;
+        return {
+          min: Vector3.Minimize(aggregate.min, box.minimumWorld),
+          max: Vector3.Maximize(aggregate.max, box.maximumWorld),
+        };
+      }, {
+        min: new Vector3(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY),
+        max: new Vector3(Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY),
+      });
+      const size = bounds.max.subtract(bounds.min);
+      const center = bounds.min.add(size.scale(0.5));
+      const largestAxis = Math.max(0.1, size.x, size.y, size.z);
+      const scale = 9.4 / largestAxis;
+
+      this.descentShipModelPivot = new TransformNode("descent-kestrel-9-model-pivot", this.scene);
+      this.descentShipModelPivot.parent = this.descentShipRoot;
+      for (const node of importedRoots) {
+        node.parent = this.descentShipModelPivot;
+      }
+      importedRoots = [];
+      this.descentShipModelPivot.scaling.setAll(scale);
+      this.descentShipModelPivot.position.subtractInPlace(center.scale(scale));
+      this.descentShipModelPivot.rotation.set(-0.035, -Math.PI * 0.38, 0);
+
+      this.descentShipLoaded = true;
+      this.descentShipLoadFailed = false;
+      this.updateDescentShipPresentation();
+      console.info(`[DescentShip] loaded ${modelPath}`);
+    } catch (error) {
+      if (this.descentShipModelPivot) {
+        this.descentShipModelPivot.dispose(false, true);
+      } else {
+        for (const node of importedRoots) {
+          node.dispose(false, true);
+        }
+      }
+      this.descentShipModelPivot = null;
+      this.descentShipMaterial?.dispose(true, true);
+      this.descentShipMaterial = null;
+      this.descentShipLoaded = false;
+      this.descentShipLoadFailed = true;
+      this.descentShipRoot.setEnabled(false);
+      this.descentShipKeyLight.setEnabled(false);
+      console.warn(`[DescentShip] ${modelPath} unavailable; procedural ship fallback remains active.`, error);
+    }
+  }
+
+  private updateDescentShipPresentation(): void {
+    if (!this.shipLandingState.active) {
+      this.descentShipRoot.setEnabled(false);
+      this.descentShipKeyLight.setEnabled(false);
+      return;
+    }
+
+    const useInflightModel = this.descentShipLoaded && !this.descentShipLoadFailed && !this.shipLandingState.touchdownApplied;
+    if (!useInflightModel) {
+      this.descentShipRoot.setEnabled(false);
+      this.descentShipKeyLight.setEnabled(false);
+      this.landedShip.setEnabled(true);
+      return;
+    }
+
+    const progress = this.shipLandingState.descentProgress;
+    const instability = 1 - this.shipLandingState.approachStability;
+    const altitude = (1 - progress) * 24;
+    const forwardOffset = -(1 - progress) * 68;
+    const lateralOffset = this.shipLandingState.alignmentOffset * 5.5 * (1 - progress);
+    const flightBob = Math.sin(this.shipLandingState.elapsedTotal * 1.35) * (0.06 + instability * 0.12);
+    const signalRoll = this.shipLandingState.signalInterferenceActive
+      ? Math.sin(this.shipLandingState.elapsedTotal * 4.4) * 0.035
+      : 0;
+
+    this.descentShipRoot.position.copyFrom(mapLayoutConfig.shipLandingSitePosition);
+    this.descentShipRoot.position.addInPlace(new Vector3(lateralOffset, 2.85 + altitude + flightBob, forwardOffset));
+    this.descentShipRoot.rotation.set(
+      -0.04 + Math.cos(this.shipLandingState.elapsedTotal * 1.1) * (0.008 + instability * 0.022),
+      this.shipLandingState.alignmentOffset * 0.13,
+      -this.shipLandingState.alignmentOffset * 0.14 + Math.sin(this.shipLandingState.elapsedTotal * 0.72) * 0.015 + signalRoll,
+    );
+    this.descentShipRoot.scaling.setAll(0.98 + progress * 0.04);
+    this.descentShipRoot.setEnabled(true);
+    this.descentShipKeyLight.setEnabled(true);
+    this.landedShip.setEnabled(false);
+  }
+
   private updateShipLandingSequence(dt: number): void {
     if (this.raidScreen !== "raid" || this.raidOutcome !== "active" || !this.shipLandingState.active) {
       return;
@@ -3262,6 +3428,7 @@ export class App {
     }
 
     this.orbitalDeploymentScene.update(this.shipLandingState, mapLayoutConfig.shipLandingSitePosition);
+    this.updateDescentShipPresentation();
     if (!this.shipLandingState.touchdownApplied) {
       this.landedShip.setDescentPose(
         this.shipLandingState.descentProgress,
@@ -3276,6 +3443,9 @@ export class App {
       !this.shipLandingState.touchdownApplied
     ) {
       this.shipState = this.shipManager.initializeForRaidWithQuality(this.shipLandingState.resolvedLandingQuality);
+      this.descentShipRoot.setEnabled(false);
+      this.descentShipKeyLight.setEnabled(false);
+      this.landedShip.setEnabled(true);
       this.landedShip.settleAfterDescent(this.shipState);
       this.shipLandingState = this.shipLandingSequence.markTouchdownApplied();
       this.shipAudio.playTouchdown(this.shipState.landingQuality);
@@ -3290,6 +3460,9 @@ export class App {
   private completeShipLandingDeployment(): void {
     this.shipLandingState = this.shipLandingSequence.state;
     this.shipLandingAudioPhase = "complete";
+    this.descentShipRoot.setEnabled(false);
+    this.descentShipKeyLight.setEnabled(false);
+    this.landedShip.setEnabled(true);
     this.orbitalDeploymentScene.setEnabled(false);
     this.player.reset(this.playerSpawn);
     this.input.releasePointerLock();
@@ -3341,39 +3514,42 @@ export class App {
     this.shipLandingState = this.shipLandingSequence.markTouchdownApplied();
     this.shipLandingState = this.shipLandingSequence.skipToComplete("K skip");
     this.shipLandingAudioPhase = "complete";
+    this.descentShipRoot.setEnabled(false);
+    this.descentShipKeyLight.setEnabled(false);
+    this.landedShip.setEnabled(true);
     this.orbitalDeploymentScene.setEnabled(false);
     this.completeShipLandingDeployment();
     this.combatHud.showLootNotification(`Deployment skipped | ${quality}`);
   }
 
   private applyShipLandingCamera(dt: number): void {
-    const input = this.input.snapshot;
     const descentProgress = this.shipLandingState.descentProgress;
-    if (!this.deploymentCameraInitialized) {
-      this.deploymentCameraYaw = 0;
-      this.deploymentCameraPitch = 0.32;
-      this.deploymentCameraDistance = 15;
-      this.deploymentCameraDistanceTarget = 15;
+    const shouldSnapCamera = !this.deploymentCameraInitialized;
+    const desiredYaw = -0.23 + this.shipLandingState.alignmentOffset * 0.08;
+    const desiredPitch = 0.3;
+    if (shouldSnapCamera) {
+      this.deploymentCameraYaw = desiredYaw;
+      this.deploymentCameraPitch = desiredPitch;
+      this.deploymentCameraDistance = 15.2;
+      this.deploymentCameraDistanceTarget = 15.2;
       this.deploymentCameraInitialized = true;
     }
 
-    this.deploymentCameraYaw += input.lookX * 0.0009;
-    this.deploymentCameraPitch = clamp(this.deploymentCameraPitch + input.lookY * 0.0008, -0.42, 0.82);
-    if (input.zoomDelta !== 0) {
-      this.deploymentCameraDistanceTarget = clamp(this.deploymentCameraDistanceTarget + input.zoomDelta * 0.9, 9.5, 23);
-    }
-    const zoomBlend = 1 - Math.exp(-9 * dt);
+    const orientationBlend = 1 - Math.exp(-2.8 * dt);
+    this.deploymentCameraYaw += (desiredYaw - this.deploymentCameraYaw) * orientationBlend;
+    this.deploymentCameraPitch += (desiredPitch - this.deploymentCameraPitch) * orientationBlend;
+    const zoomBlend = 1 - Math.exp(-4.5 * dt);
     this.deploymentCameraDistance += (this.deploymentCameraDistanceTarget - this.deploymentCameraDistance) * zoomBlend;
 
     const altitude = (1 - descentProgress) * 24;
     const forwardOffset = -(1 - descentProgress) * 68;
     const lateralOffset = this.shipLandingState.alignmentOffset * 5.5 * (1 - descentProgress);
-    const shipFocus = mapLayoutConfig.shipLandingSitePosition.add(new Vector3(lateralOffset, 2.2 + altitude, forwardOffset));
+    const shipFocus = mapLayoutConfig.shipLandingSitePosition.add(new Vector3(lateralOffset, 2.85 + altitude, forwardOffset));
     const { forward, right } = yawToBasis(this.deploymentCameraYaw);
     const pitchRise = Math.sin(this.deploymentCameraPitch) * this.deploymentCameraDistance;
     const flatDistance = Math.cos(this.deploymentCameraPitch) * this.deploymentCameraDistance;
     const orbitOffset = forward.scale(-flatDistance).addInPlace(new Vector3(0, pitchRise, 0));
-    const shoulderBias = right.scale(1.25);
+    const shoulderBias = right.scale(3.1);
     const desiredCamera = shipFocus.add(orbitOffset).addInPlace(shoulderBias);
     const qualityShake = this.shipState.landingQuality === "clean" ? 0.06 : this.shipState.landingQuality === "rough" ? 0.12 : 0.2;
     const shake = this.shipLandingState.phase === "touchdown"
@@ -3381,12 +3557,15 @@ export class App {
       : this.shipLandingState.signalInterferenceActive
         ? Math.sin(this.shipLandingState.phaseElapsed * 21) * 0.045
       : 0;
-    const cameraBlend = 1 - Math.exp(-18 * dt);
+    const cameraBlend = 1 - Math.exp(-5.5 * dt);
     const shakenDesired = desiredCamera.add(new Vector3(shake, Math.abs(shake) * 0.35, 0));
-    this.camera.position = Vector3.Lerp(this.camera.position, shakenDesired, cameraBlend);
-    const lookAhead = yawToBasis(0).forward.scale(5 + descentProgress * 5);
-    this.camera.setTarget(shipFocus.add(new Vector3(0, 0.4, 0)).addInPlace(lookAhead));
-    this.camera.fov = ((this.shipLandingState.phase === "clearance-burn" ? 72 : 68 - descentProgress * 5) * Math.PI) / 180;
+    this.camera.position = shouldSnapCamera
+      ? shakenDesired
+      : Vector3.Lerp(this.camera.position, shakenDesired, cameraBlend);
+    const lookAhead = yawToBasis(0).forward.scale(4.8 + descentProgress * 3.4);
+    const bankLead = right.scale(this.shipLandingState.alignmentOffset * 0.75);
+    this.camera.setTarget(shipFocus.add(new Vector3(0, 0.25, 0)).addInPlace(lookAhead).addInPlace(bankLead));
+    this.camera.fov = ((this.shipLandingState.phase === "clearance-burn" ? 67 : 64 - descentProgress * 2.5) * Math.PI) / 180;
   }
 
   private updatePlayerStatus(dt: number): void {
@@ -5040,6 +5219,7 @@ export class App {
     this.landedShip.applyShipState(this.shipState);
     this.landedShip.setDescentPose(0, this.shipLandingState.approachStability, this.shipLandingState.alignmentOffset);
     this.landedShip.setEnabled(true);
+    this.updateDescentShipPresentation();
     this.shipInRange = true;
     this.raidTimer.reset(this.selectedRaidDefinition.lengthSeconds);
     this.raidTimerState = this.raidTimer.state;
@@ -5362,6 +5542,8 @@ export class App {
     this.menuContent.classList.remove("class-deploy-content", "ship-dashboard-content", "arsenal-workbench-content");
     this.menuContent.classList.add("hq-command-content");
     this.cosmeticManager.setActiveClass(this.classManager.snapshot.selectedClassId);
+    this.descentShipRoot.setEnabled(false);
+    this.descentShipKeyLight.setEnabled(false);
     this.landedShip.setEnabled(false);
     this.orbitalDeploymentScene.setEnabled(false);
     this.shipLandingState = this.shipLandingSequence.reset();
@@ -5456,11 +5638,16 @@ export class App {
           </aside>
           <section class="habitat-hub-environment" aria-label="Habitat command deck">
             <div class="habitat-hub-backdrop" aria-hidden="true">
+              <i class="habitat-hub-bay-ceiling"></i>
+              <i class="habitat-hub-service-rack rack-left"></i>
+              <i class="habitat-hub-service-rack rack-right"></i>
               <i class="habitat-hub-depth-layer layer-a"></i>
               <i class="habitat-hub-depth-layer layer-b"></i>
               <i class="habitat-hub-depth-layer layer-c"></i>
+              <i class="habitat-hub-window-bank"></i>
               <i class="habitat-hub-light-cone"></i>
               <i class="habitat-hub-floor"></i>
+              <i class="habitat-hub-runner-plinth"></i>
               <i class="habitat-hub-console-glow"></i>
             </div>
             <div class="habitat-hub-runner" aria-label="Runner in habitat bay">
@@ -5956,18 +6143,25 @@ export class App {
     const deployAction = mode === "multiplayer" ? "class-deploy-multiplayer" : "class-deploy-solo";
     const deployLabel = mode === "multiplayer" ? "Deploy Multiplayer" : "Begin Descent";
     const mission = this.getMissionPresentation();
+    const gearReady = gearScore >= this.selectedRaidDefinition.recommendedGearScore ? "READY" : "REVIEW";
+    const evaPackReadiness = `${this.loadoutManager.raidBagUsedSlots}/${this.loadoutManager.raidBagCapacity}`;
+    const rewardTier = this.selectedRaidDefinition.bestFor.split(",")[0] ?? "Mission reward pending";
 
     // Phase 13.8C reference target: projected gameplay sequence panels 4/5 bridge, mission confirmation before descent.
     this.menuContent.innerHTML = `
       <div class="class-deploy-screen">
         <header class="class-deploy-topbar">
-          <div>
+          <div class="class-deploy-title">
             <span>${themeConfig.brand.title}</span>
             <strong>Deployment Assignment</strong>
+            <small>Launch authorization / Kestrel-9 descent bridge</small>
           </div>
-          <div>
-            <span>${modeLabel}</span>
-            <span>${this.selectedRaidDefinition.name}</span>
+          <div class="class-deploy-chips" aria-label="Assignment status">
+            <span>Run <b>T${this.selectedRaidDefinition.tier}</b></span>
+            <span>Family <b>${mission.familyName}</b></span>
+            <span>Route <b>${this.selectedRaidDefinition.craterZone}</b></span>
+            <span>Ship <b>Kestrel-9 nominal</b></span>
+            <span>Gear <b>${gearScore}/${this.selectedRaidDefinition.recommendedGearScore}</b></span>
           </div>
           <button type="button" data-action="menu">Back</button>
         </header>
@@ -5975,43 +6169,61 @@ export class App {
           <span>TYCHOSTAR FIELD ORDER</span>
           <strong>${mission.title}</strong>
           <p>${mission.briefing}</p>
-          <div>
+          <div class="class-field-order-grid">
             <span>Primary</span><b>${mission.primaryObjective}</b>
-            <span>Step</span><b>${mission.currentStep}</b>
             <span>Objective</span><b>${mission.objectiveFlavor}</b>
             <span>Risk</span><b>${mission.risk}</b>
             <span>Route</span><b>${mission.recommendedRoute}</b>
-            <span>Gear</span><b>${gearScore} / ${this.selectedRaidDefinition.recommendedGearScore}</b>
+            <span>Gear</span><b>${gearScore} / ${this.selectedRaidDefinition.recommendedGearScore} ${gearReady}</b>
+            <span>Win</span><b>${mission.winCondition}</b>
+            <span>Reward</span><b>${rewardTier}</b>
           </div>
         </section>
         <section class="class-deploy-stage">
+          <div class="class-launch-bay-frame" aria-hidden="true"></div>
+          <div class="class-launch-bay-brace brace-left" aria-hidden="true"></div>
+          <div class="class-launch-bay-brace brace-right" aria-hidden="true"></div>
           <div class="class-stage-light"></div>
+          <div class="class-launch-deck" aria-hidden="true"></div>
+          <div class="class-launch-warning warning-left" aria-hidden="true"></div>
+          <div class="class-launch-warning warning-right" aria-hidden="true"></div>
           <div class="class-runner-preview-host" aria-label="Class assignment runner preview">
             ${this.renderHQPlayerPreview()}
           </div>
           <div class="class-selected-copy">
-            <span>Selected Class</span>
+            <span>Runner Authorization</span>
             <strong>${selectedClass.displayName}</strong>
             <p>${selectedClass.shortDescription}</p>
             <small>${selectedClass.startingTendency}</small>
           </div>
+          <div class="class-descent-telemetry" aria-label="Descent bridge telemetry">
+            <span>Descent Window <b>${gearReady}</b></span>
+            <span>Kestrel-9 <b>Drop Vector</b></span>
+            <span>LZ Lock <b>${this.selectedRaidDefinition.craterZone}</b></span>
+            <span>Signal Lag <b>Nominal</b></span>
+            <span>Surface Risk <b>T${this.selectedRaidDefinition.tier}</b></span>
+            <span>Family <b>${mission.familyName}</b></span>
+          </div>
         </section>
         <section class="class-deploy-detail">
-          <span>Readiness</span>
+          <span>Descent Readiness</span>
           <strong>${selectedClass.roleLabel}</strong>
-          <p>${modeLabel} staged for ${this.selectedRaidDefinition.craterZone}.</p>
+          <p>${modeLabel} staged for ${this.selectedRaidDefinition.craterZone}. Awaiting launch authorization.</p>
           <div class="class-readiness-grid">
             <span>Primary</span><b>${primaryLabel}</b>
             <span>Sidearm</span><b>${sidearmLabel}</b>
-            <span>EVA Pack</span><b>${this.loadoutManager.raidBagUsedSlots}/${this.loadoutManager.raidBagCapacity}</b>
+            <span>EVA Pack</span><b>${evaPackReadiness}</b>
             <span>Route</span><b>${this.selectedRaidDefinition.craterZone}</b>
+            <span>Ship</span><b>Kestrel-9 / extraction craft</b>
             <span>Win</span><b>${mission.winCondition}</b>
+            <span>Status</span><b>${gearReady === "READY" ? "Descent window ready" : "Review gear before descent"}</b>
           </div>
         </section>
         <section class="class-action-rail">
           <button type="button" data-action="menu">Return to Habitat</button>
           <button type="button" data-action="raid-select">Change Operation</button>
           <button type="button" data-action="class-review-loadout">Review Loadout</button>
+          <button type="button" data-action="ship-systems">Ship Prep</button>
           <button type="button" class="class-primary-action" data-action="${deployAction}">${deployLabel}</button>
         </section>
         <section class="class-progression-strip" aria-label="Deployment steps">

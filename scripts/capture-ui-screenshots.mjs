@@ -6,6 +6,7 @@ import { chromium } from "playwright";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
 const baseUrl = process.env.UI_CAPTURE_URL ?? "http://127.0.0.1:5173/";
+const captureOnly = process.env.UI_CAPTURE_ONLY ?? "all";
 const outDir = path.join(projectRoot, "artifacts", "ui-screenshots");
 const viewport = { width: 1600, height: 900 };
 
@@ -122,7 +123,7 @@ async function ensureHome(page) {
     return;
   }
 
-  const menuButton = page.locator('[data-action="menu"]').filter({ hasText: /back|habitat|menu/i }).first();
+  const menuButton = page.locator('[data-action="menu"]').filter({ hasText: /return to habitat|back to habitat|habitat|menu|back/i }).last();
   if (await menuButton.isVisible({ timeout: 1200 }).catch(() => false)) {
     await menuButton.click();
     await settle(page);
@@ -211,6 +212,81 @@ async function captureHabitatSmallViewport(page) {
   report.screens.push(entry);
 }
 
+async function captureDeploymentSmallViewport(page) {
+  const outputPath = path.join(outDir, "02b-deployment-assignment-1366.png");
+  const entry = {
+    name: "02b-deployment-assignment-1366.png",
+    label: "Deployment Assignment 1366 Viewport",
+    path: outputPath,
+    status: "pending",
+    actionUsed: null,
+    error: null,
+  };
+
+  try {
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await ensureHome(page);
+    entry.actionUsed = await clickAction(page, "start");
+    await page.locator(".class-deploy-screen").first().waitFor({ state: "visible", timeout: 12000 });
+    await settle(page);
+    await page.screenshot({ path: outputPath, fullPage: false });
+    entry.status = "captured";
+    console.log(`Captured ${entry.label}: ${outputPath}`);
+  } catch (error) {
+    entry.status = "failed";
+    entry.error = formatError(error);
+    console.error(`Failed ${entry.label}: ${entry.error}`);
+  }
+
+  report.screens.push(entry);
+}
+
+async function captureDescentBridge(page) {
+  const outputPath = path.join(outDir, "12-descent-bridge.png");
+  const raidOutputPath = path.join(outDir, "12b-descent-active-raid-after-skip.png");
+  const entry = {
+    name: "12-descent-bridge.png",
+    label: "Descent Bridge",
+    path: outputPath,
+    status: "pending",
+    actionUsed: null,
+    error: null,
+  };
+
+  try {
+    await page.setViewportSize(viewport);
+    await ensureHome(page);
+    await clickAction(page, "start");
+    entry.actionUsed = await clickAction(page, "class-deploy-solo");
+    await page.locator(".landing-sequence-hud.active").waitFor({ state: "visible", timeout: 15000 });
+    await page.waitForTimeout(4200);
+    await page.screenshot({ path: outputPath, fullPage: false });
+
+    await page.keyboard.press("KeyK");
+    await page.locator(".landing-sequence-hud.active").waitFor({ state: "hidden", timeout: 12000 });
+    await page.locator(".hud:not(.deployment-hidden)").waitFor({ state: "visible", timeout: 12000 });
+    await page.waitForTimeout(1200);
+    await page.screenshot({ path: raidOutputPath, fullPage: false });
+    entry.status = "captured";
+    console.log(`Captured ${entry.label}: ${outputPath}`);
+    console.log(`Captured Active Raid After Descent Skip: ${raidOutputPath}`);
+  } catch (error) {
+    entry.status = "failed";
+    entry.error = formatError(error);
+    console.error(`Failed ${entry.label}: ${entry.error}`);
+  }
+
+  report.screens.push(entry);
+  report.screens.push({
+    name: "12b-descent-active-raid-after-skip.png",
+    label: "Active Raid After Descent Skip",
+    path: raidOutputPath,
+    status: entry.status,
+    actionUsed: "KeyK",
+    error: entry.error,
+  });
+}
+
 async function settle(page) {
   await page.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => {});
   await page.waitForTimeout(1200);
@@ -247,14 +323,27 @@ try {
   });
   const page = await context.newPage();
   page.setDefaultTimeout(15000);
-  await captureStartScreen(page);
-  await bootHome(page);
+  page.on("console", (message) => {
+    const value = message.text();
+    if (value.includes("[DescentShip]")) {
+      console.log(`[Browser] ${value}`);
+    }
+  });
+  if (captureOnly === "descent") {
+    await bootHome(page);
+    await captureDescentBridge(page);
+  } else {
+    await captureStartScreen(page);
+    await bootHome(page);
 
-  for (const screen of screens) {
-    await captureScreen(page, screen);
+    for (const screen of screens) {
+      await captureScreen(page, screen);
+    }
+
+    await captureHabitatSmallViewport(page);
+    await captureDeploymentSmallViewport(page);
+    await captureDescentBridge(page);
   }
-
-  await captureHabitatSmallViewport(page);
 
   await context.close();
 } catch (error) {
